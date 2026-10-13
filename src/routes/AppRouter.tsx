@@ -12,6 +12,7 @@ import { useTheme } from '../context/ThemeContext'
 const DashboardPage = lazy(() => import('../paginas/DashboardPage'))
 const CajaPage = lazy(() => import('../paginas/CajaPage'))
 const MaintenancePage = lazy(() => import('../paginas/MaintenancePage'))
+const PermisosPage = lazy(() => import('../paginas/PermisosPage'))
 const ModuloPage = lazy(() => import('../paginas/ModuloPage'))
 const ReportsPage = lazy(() => import('../paginas/ReportsPage'))
 const ProfilePage = lazy(() => import('../paginas/ProfilePage'))
@@ -59,6 +60,7 @@ export default function AppRouter() {
         <Route path="/facturacion" element={<Navigate to="/sales" replace />} />
         <Route path="/estado-cuenta" element={<Navigate to="/finance" replace />} />
         <Route path="/mantenimientos" element={<MaintenancePage />} />
+        <Route path="/permisos" element={<PermisosPage />} />
         <Route path="/caja" element={<CajaPage />} />
         <Route path="/settings" element={<Navigate to="/mantenimientos" replace />} />
         <Route path="/documents" element={<Navigate to="/dashboard" replace />} />

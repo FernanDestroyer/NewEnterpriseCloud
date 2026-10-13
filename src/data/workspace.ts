@@ -1,4 +1,4 @@
-import { Boxes, Building2, ClipboardList, LayoutDashboard, PackageCheck, ReceiptText, ShoppingCart, TrendingUp, Users, Wallet, ArrowLeftRight, Wrench, Banknote } from 'lucide-react'
+import { Boxes, Building2, ClipboardList, LayoutDashboard, PackageCheck, ReceiptText, ShoppingCart, TrendingUp, Users, Wallet, ArrowLeftRight, Wrench, Banknote, KeyRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
 
@@ -17,6 +17,7 @@ export const workspaceEntries: WorkspaceEntry[] = [
   { label: 'Caja', path: '/caja', page: 'finance', icon: Banknote, group: 'FINANZAS' },
   { label: 'Reportes', path: '/reports', page: 'reports', icon: TrendingUp, group: 'ADMINISTRACIÓN' },
   { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'ADMINISTRACIÓN' },
+  { label: 'Permisos', path: '/permisos', page: 'settings', icon: KeyRound, group: 'ADMINISTRACIÓN' },
 ]
 
 export const permissionModule: Record<DataPage, string> = {
