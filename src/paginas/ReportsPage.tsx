@@ -45,7 +45,6 @@ export default function ReportsPage() {
   const purchases = records.purchases.filter(item => inDateRange(item, range))
   const inventory = records.inventory.filter(item => inDateRange(item, range))
   const finance = records.finance.filter(item => inDateRange(item, range))
-  const documents = records.documents.filter(item => inDateRange(item, range))
   const valuationRows = useMemo(() => {
     if (!valuation) return []
     return [...valuation.entries()]
@@ -64,7 +63,6 @@ export default function ReportsPage() {
     { id: 'inventory', page: 'inventory', title: 'Valorización de inventario', detail: 'Existencias actuales × precio de venta', value: money(inventory.reduce((sum, item) => sum + (item.quantity ?? 0) * (item.precio ?? 0), 0)), icon: Boxes, color: 'violet' },
     { id: 'costo', page: 'inventory', title: 'Costo del inventario', detail: 'Existencias actuales × costo promedio de compra', value: valuation ? money(valuationTotal) : valuationError ? 'No disponible' : 'Consultando…', icon: Calculator, color: 'green' },
     { id: 'finance', page: 'finance', title: 'Cuentas por cobrar', detail: `${financialSnapshot(finance).receivables.length} cuentas abiertas`, value: money(financialSnapshot(finance).receivable), icon: Wallet, color: 'amber', view: 'accounts' },
-    { id: 'documents', page: 'documents', title: 'Documentos registrados', detail: 'Referencias y metadatos empresariales', value: `${documents.length} documentos`, icon: FileText, color: 'slate' },
     { id: 'kardex', page: 'inventory', title: 'Movimientos de Kardex', detail: 'Historial de entradas y salidas de stock', value: 'Consultar historial', icon: PackageCheck, color: 'blue', view: 'kardex' },
   ].filter(report => can(report.page as DataPage)) as typeof reports
   const active = reports.find(report => report.id === selected)

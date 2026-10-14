@@ -1,4 +1,5 @@
 import { requireSupabase } from '../lib/supabase'
+import { salePayableTotal } from '../data/payments'
 import { DATA_PAGES } from '../data/catalog'
 import { formatWhen, purchaseHasStock, totalWithIgv } from '../data/helpers'
 import type { SupplierImportReport, SupplierImportRow } from './import'
@@ -62,7 +63,7 @@ export const pageConfig: Record<DataPage, PageConfig> = {
   purchases: { table: 'compras', name: 'proveedor_nombre', amount: 'monto', relationColumn: 'proveedor_id', relationTarget: 'suppliers' },
   inventory: { table: 'productos', name: 'nombre', quantity: 'stock', price: 'precio' },
   customers: { table: 'clientes', name: 'razon_social', amount: 'linea_credito' },
-  suppliers: { table: 'proveedores', name: 'razon_social', amount: 'linea_credito', taxId: 'ruc' },
+  suppliers: { table: 'proveedores', name: 'razon_social', taxId: 'ruc' },
   finance: { table: 'pagos', name: 'contraparte', amount: 'monto' },
   documents: { table: 'documentos', name: 'nombre_archivo' },
   reports: { table: 'reportes', name: 'nombre' },
@@ -100,6 +101,10 @@ function toRecord(page: DataPage, row: Row): RecordItem {
     item.saleId = typeof row.venta_id === 'string' ? row.venta_id : null
     item.purchaseId = typeof row.compra_id === 'string' ? row.compra_id : null
     item.dueAt = typeof row.fecha_vencimiento === 'string' ? row.fecha_vencimiento : null
+    item.medio = typeof row.medio_pago === 'string' && row.medio_pago ? row.medio_pago : null
+  }
+  // Medio de pago de la venta (si su migración ya se ejecutó).
+  if (page === 'sales') {
     item.medio = typeof row.medio_pago === 'string' && row.medio_pago ? row.medio_pago : null
   }
   // Descuento de la venta (si su migración ya se ejecutó).
@@ -163,6 +168,8 @@ function toRow(page: DataPage, input: RecordInput): Row {
   const row: Row = { [config.name]: input.name, detalle: input.detail, estado: input.status }
   if (page === 'finance' && input.financeType !== undefined) row.tipo = input.financeType
   if (page === 'finance' && input.medio_pago !== undefined) row.medio_pago = input.medio_pago || null
+  // Medio de pago de la venta (solo ese módulo lo usa).
+  if (page === 'sales' && input.medio_pago !== undefined) row.medio_pago = input.medio_pago || null
   // Descuento de la venta (solo ese módulo lo usa).
   if (page === 'sales' && input.descuento !== undefined) row.descuento = Math.min(100, Math.max(0, Number(input.descuento) || 0))
   if (config.amount && input.amount !== undefined) row[config.amount] = input.amount
@@ -262,7 +269,7 @@ export function friendlyError(error: unknown): string {
     if (/\bruc\b/i.test(haystack)) return 'Falta la columna RUC en proveedores. Ejecuta en Supabase la migración 20261015000000_proveedor_ruc.sql y recarga.'
     if (/tipo_doc|documento/i.test(haystack)) return 'Falta la columna de documento en clientes. Ejecuta en Supabase la migración 20261017000000_cliente_documento.sql y recarga.'
     if (/direccion|correo|telefono|forma_pago/i.test(haystack)) return 'Faltan las columnas de contacto en proveedores. Ejecuta en Supabase la migración 20261018000000_proveedor_contacto.sql y recarga.'
-    if (/descuento|medio_pago/i.test(haystack)) return 'Faltan las columnas del centro de mantenimiento. Ejecuta en Supabase la migración 20261021000000_centro_mantenimiento.sql y recarga.'
+    if (/descuento|medio_pago/i.test(haystack)) return 'Faltan columnas nuevas en Supabase. Ejecuta en Supabase las migraciones 20261021000000_centro_mantenimiento.sql y 20261025000000_venta_medio_pago.sql y recarga.'
     return 'Falta una columna nueva en Supabase. Ejecuta las migraciones pendientes y recarga.'
   }
   if (err?.code === '23503') return 'El cliente o proveedor seleccionado ya no existe. Elige otro de la lista.'
@@ -390,52 +397,79 @@ export async function importSuppliersWithProducts(rows: SupplierImportRow[]): Pr
     seenFile.add(row.ruc)
     return true
   })
-  if (!fresh.length) return { created: 0, products: 0, omitted, failed, skippedProducts }
-  const { data: existing, error: existingError } = await client.from('proveedores').select('ruc')
+  if (!fresh.length) return { created: 0, updated: 0, products: 0, omitted, failed, skippedProducts }
+  const { data: existing, error: existingError } = await client.from('proveedores').select('id,ruc')
   if (existingError) throw existingError
-  const existingRucs = new Set(((existing ?? []) as Array<{ ruc: string | null }>).map((row) => row?.ruc).filter(Boolean))
-  const toCreate = fresh.filter((row) => {
-    if (existingRucs.has(row.ruc)) {
-      omitted.push({ line: row.line, ruc: row.ruc, reason: 'El RUC ya existe en proveedores' })
-      return false
+  const existingByRuc = new Map(((existing ?? []) as Array<{ id: string; ruc: string | null }>).filter((row) => row?.ruc).map((row) => [row.ruc as string, row.id]))
+  // RUC nuevo -> se crea el proveedor. RUC existente -> NO se omite:
+  // se le agregan los productos a su catálogo.
+  const toCreate = fresh.filter((row) => !existingByRuc.has(row.ruc))
+  const toUpdate = fresh.filter((row) => existingByRuc.has(row.ruc))
+  const createdIds = new Map<string, string>()
+  let createdList: Array<{ id: string; ruc: string }> = []
+  if (toCreate.length) {
+    const { data: created, error: insertError } = await client
+      .from('proveedores')
+      .insert(toCreate.map((row) => ({
+        razon_social: row.razonSocial,
+        detalle: '',
+        ruc: row.ruc,
+        direccion: row.direccion || null,
+        correo: row.correo || null,
+        telefono: row.telefono || null,
+        forma_pago: row.formaPago || null,
+        estado: row.estado,
+      })))
+      .select('id,ruc')
+    if (insertError) throw insertError
+    createdList = ((created ?? []) as Array<{ id: string; ruc: string }>)
+    for (const supplier of createdList) createdIds.set(supplier.ruc, supplier.id)
+  }
+  const byRuc = new Map(fresh.map((row) => [row.ruc, row]))
+  // Nombres ya ofrecidos por cada proveedor existente: se omiten duplicados.
+  const existingNames = new Set<string>()
+  const updateIds = toUpdate.map((row) => existingByRuc.get(row.ruc) as string).filter(Boolean)
+  if (updateIds.length) {
+    const { data: catalogExisting, error: catalogError } = await client
+      .from('proveedor_productos')
+      .select('proveedor_id,nombre')
+      .in('proveedor_id', updateIds)
+    if (catalogError) throw catalogError
+    for (const item of ((catalogExisting ?? []) as Array<{ proveedor_id: string; nombre: string }>)) {
+      existingNames.add(`${item.proveedor_id}::${String(item.nombre ?? '').trim().toLocaleLowerCase('es')}`)
     }
-    return true
-  })
-  if (!toCreate.length) return { created: 0, products: 0, omitted, failed, skippedProducts }
-  const { data: created, error: insertError } = await client
-    .from('proveedores')
-    .insert(toCreate.map((row) => ({
-      razon_social: row.razonSocial,
-      detalle: '',
-      ruc: row.ruc,
-      direccion: row.direccion || null,
-      correo: row.correo || null,
-      telefono: row.telefono || null,
-      forma_pago: row.formaPago || null,
-      linea_credito: row.lineaCredito,
-      estado: row.estado,
-    })))
-    .select('id,ruc')
-  if (insertError) throw insertError
-  const createdList = ((created ?? []) as Array<{ id: string; ruc: string }>)
-  const byRuc = new Map(toCreate.map((row) => [row.ruc, row]))
+  }
   const catalogRows: Row[] = []
-  for (const supplier of createdList) {
-    const row = byRuc.get(supplier.ruc)
-    if (!row) continue
+  const pushProducts = (ruc: string, supplierId: string, isNew: boolean) => {
+    const row = byRuc.get(ruc)
+    if (!row) return
+    const seenInFile = new Set<string>()
     for (const product of row.productos) {
-      if (product.nombre.trim().length < 2 || !Number.isFinite(product.costo) || product.costo < 0) {
+      const name = product.nombre.trim()
+      if (name.length < 2 || !Number.isFinite(product.costo) || product.costo < 0) {
         skippedProducts.push({ proveedor: row.razonSocial, producto: product.nombre || '(sin nombre)', reason: 'Producto inválido' })
         continue
       }
-      catalogRows.push({ proveedor_id: supplier.id, nombre: product.nombre.trim(), detalle: product.detalle.trim(), costo: product.costo })
+      const key = name.toLocaleLowerCase('es')
+      if (seenInFile.has(key)) {
+        skippedProducts.push({ proveedor: row.razonSocial, producto: name, reason: 'Producto duplicado dentro del archivo' })
+        continue
+      }
+      seenInFile.add(key)
+      if (!isNew && existingNames.has(`${supplierId}::${key}`)) {
+        skippedProducts.push({ proveedor: row.razonSocial, producto: name, reason: 'Ya existe en el catálogo del proveedor' })
+        continue
+      }
+      catalogRows.push({ proveedor_id: supplierId, nombre: name, detalle: product.detalle.trim(), costo: product.costo })
     }
   }
+  for (const supplier of createdList) pushProducts(supplier.ruc, supplier.id, true)
+  for (const row of toUpdate) pushProducts(row.ruc, existingByRuc.get(row.ruc) as string, false)
   if (catalogRows.length) {
     const { error: catalogError } = await client.from('proveedor_productos').insert(catalogRows).select('id')
     if (catalogError) throw catalogError
   }
-  return { created: createdList.length, products: catalogRows.length, omitted, failed, skippedProducts }
+  return { created: createdList.length, updated: toUpdate.length, products: catalogRows.length, omitted, failed, skippedProducts }
 }
 
 /** Enriquece ventas/compras/productos con el nombre del cliente/proveedor vinculado. */
@@ -863,11 +897,12 @@ async function createRelatedPago(kind: 'sale' | 'purchase', header: Row, total: 
     tipo: isSale ? 'cobrar' : 'pagar',
     venta_id: isSale ? String(header.id) : null,
     compra_id: isSale ? null : String(header.id),
+    ...(isSale && header.medio_pago !== undefined ? { medio_pago: header.medio_pago || null } : {}),
   })
   if (error) throw error
 }
 
-async function syncRelatedPago(kind: 'sale' | 'purchase', headerId: string, total: number, estado: RecordStatus): Promise<void> {
+async function syncRelatedPago(kind: 'sale' | 'purchase', headerId: string, total: number, estado: RecordStatus, medioPago?: string | null): Promise<void> {
   const client = requireSupabase()
   const column = kind === 'sale' ? 'venta_id' : 'compra_id'
   const { data, error } = await client.from('pagos').select('id, estado').eq(column, headerId).limit(1)
@@ -881,7 +916,12 @@ async function syncRelatedPago(kind: 'sale' | 'purchase', headerId: string, tota
     return
   }
   const nextEstado = estado === 'Completada' || estado === 'Pagada' ? 'Completada' : existing.estado
-  const result = await client.from('pagos').update({ monto: total, estado: nextEstado }).eq('id', existing.id).select('id').single()
+  const result = await client.from('pagos').update({
+    monto: total,
+    estado: nextEstado,
+    // Una cuenta ya cobrada conserva el medio real registrado en Tesorería.
+    ...(kind === 'sale' && medioPago !== undefined && existing.estado !== 'Completada' ? { medio_pago: medioPago || null } : {}),
+  }).eq('id', existing.id).select('id').single()
   if (result.error) throw result.error
 }
 
@@ -890,7 +930,7 @@ export async function insertSaleWithLines(input: RecordInput, lines: LineInput[]
   const client = requireSupabase()
   // Descuento % sobre el subtotal de productos (0-100). Sin líneas no aplica.
   const discount = lines.length ? Math.min(100, Math.max(0, Number(input.descuento) || 0)) : 0
-  const total = lines.length ? Math.round(lineTotal(lines) * (1 - discount / 100) * 100) / 100 : (input.amount ?? 0)
+  const total = salePayableTotal(lineTotal(lines), discount, input.amount ?? 0, lines.length > 0)
   const headerInput: RecordInput = { ...input, descuento: discount, amount: total }
 
   // 1. Valida stock antes de tocar nada (evita dejar la venta a medias).
@@ -1095,7 +1135,7 @@ export async function updateSaleWithLines(code: string, input: RecordInput, line
   }
 
   const discount = lines.length ? Math.min(100, Math.max(0, Number(input.descuento ?? (current as Row).descuento ?? 0) || 0)) : 0
-  const total = lines.length ? Math.round(lineTotal(lines) * (1 - discount / 100) * 100) / 100 : (input.amount ?? Number((current as Row).monto ?? 0))
+  const total = salePayableTotal(lineTotal(lines), discount, input.amount ?? Number((current as Row).monto ?? 0), lines.length > 0)
   const { data: updated, error: updateError } = await client
     .from('ventas')
     .update(toRow('sales', { ...input, descuento: discount, amount: total }))
@@ -1125,7 +1165,7 @@ export async function updateSaleWithLines(code: string, input: RecordInput, line
     )
     if (linesError) throw linesError
   }
-  await syncRelatedPago('sale', headerId, total, input.status)
+  await syncRelatedPago('sale', headerId, total, input.status, input.medio_pago)
   return toRecord('sales', updated as Row)
 }
 

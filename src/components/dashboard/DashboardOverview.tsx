@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, ArrowDownLeft, ArrowRight, ArrowUpRight, Boxes, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Download, Eye, PackageCheck, Plus, ReceiptText, Search, ShoppingCart, TrendingUp, Wallet } from 'lucide-react'
+import { AlertTriangle, ArrowDownLeft, ArrowRight, ArrowUpRight, Boxes, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Download, Eye, FileText, PackageCheck, Plus, ReceiptText, Search, ShoppingCart, TrendingUp, Wallet } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useRecords } from '../../context/RecordsContext'
 import { financialSnapshot, totalAmount } from '../../data/dashboard'
 import { isStockAlert, money, statusTone } from '../../data/helpers'
 import { businessDate, dailyOperations, displayDate, inDateRange, matchesSearch, periodRange, shiftDate, type Period } from '../../data/workspace'
-import type { DataPage, RecordItem } from '../../types'
+import { readCompanyProfile } from '../../services/company'
+import { exportExecutiveDashboard } from '../../services/dashboardReport'
+import type { DataPage, ExportFormat, RecordItem } from '../../types'
 
 function OperationsChart({ sales, purchases, period }: { sales: RecordItem[]; purchases: RecordItem[]; period: Period }) {
   const { can } = useAuth()
@@ -34,7 +36,7 @@ function OperationsChart({ sales, purchases, period }: { sales: RecordItem[]; pu
 
 export default function DashboardOverview() {
   const { profile, can } = useAuth()
-  const { records, loading, errors: queryErrors, openComposer, exportTable } = useRecords()
+  const { records, loading, errors: queryErrors, openComposer, exportTable, notify } = useRecords()
   const errors: Partial<Record<DataPage, string>> = { ...queryErrors }
   for (const page of ['sales', 'purchases', 'inventory'] as const) if (!can(page)) errors[page] = 'Tu rol no tiene permiso para consultar este módulo.'
   const navigate = useNavigate()
@@ -65,6 +67,47 @@ export default function DashboardOverview() {
   const visible = activities.slice(currentPage * 5, currentPage * 5 + 5)
   const periodLabel = period === 'all' ? 'Todos los registros' : `${displayDate(`${range.from}T12:00:00Z`)} – ${displayDate(`${range.to}T12:00:00Z`)}`
   useEffect(() => setPage(0), [period, activeActivity, query])
+  // Ventas del período ordenadas (recientes primero) para CSV y Excel.
+  const orderedSales = useMemo(
+    () => [...sales].sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')) || String(b.id).localeCompare(String(a.id), 'es', { numeric: true })),
+    [sales],
+  )
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+  useEffect(() => {
+    if (!exportOpen) return
+    const close = (event: MouseEvent) => { if (!(event.target as HTMLElement)?.closest('.export-wrap')) setExportOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setExportOpen(false) }
+    document.addEventListener('mousedown', close); document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) }
+  }, [exportOpen])
+  const chooseFormat = (format: ExportFormat) => {
+    setExportOpen(false)
+    if (exportingPdf) return
+    if (format !== 'pdf') {
+      exportTable('sales', format, orderedSales)
+      return
+    }
+    setExportingPdf(true)
+    const optionalSources = [
+      { page: 'purchases' as const, label: 'Compras' },
+      { page: 'inventory' as const, label: 'Inventario' },
+      { page: 'finance' as const, label: 'Finanzas' },
+    ]
+    void exportExecutiveDashboard({
+      sales: records.sales,
+      purchases: can('purchases') && !queryErrors.purchases ? records.purchases : undefined,
+      inventory: can('inventory') && !queryErrors.inventory ? records.inventory : undefined,
+      finance: can('finance') && !queryErrors.finance ? records.finance : undefined,
+      range,
+      periodLabel,
+      company: readCompanyProfile(records.settings),
+      author: profile?.nombre,
+      dataNotes: optionalSources.filter(source => can(source.page) && queryErrors[source.page]).map(source => source.label),
+    }).then(() => notify('Dashboard ejecutivo preparado. Selecciona Guardar como PDF en la ventana de impresión.'))
+      .catch(error => notify(error instanceof Error ? error.message : 'No se pudo preparar el informe ejecutivo.'))
+      .finally(() => setExportingPdf(false))
+  }
 
   const change = (items: RecordItem[]) => {
     if (!range.from || !range.to) return null
@@ -88,7 +131,20 @@ export default function DashboardOverview() {
   ].filter(action => can(action.page, 'crear'))
 
   return <div className="enterprise-dashboard">
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">VISIÓN GENERAL</span><h2>Panel de control</h2><p>{greeting}, {profile?.nombre.split(' ')[0]}. Este es el resumen de tu operación.</p></div><div className="ws-heading-actions"><label className="ws-period"><CalendarDays size={16} /><select value={period} onChange={event => setPeriod(event.target.value as Period)} aria-label="Período del resumen"><option value="all">Todos los registros</option><option value="month">Este mes</option><option value="30">Últimos 30 días</option><option value="7">Últimos 7 días</option><option value="today">Hoy</option></select></label>{can('sales') && <button className="ws-button ws-button-secondary" disabled={loading || Boolean(errors.sales)} onClick={() => exportTable('sales', 'csv', sales)}><Download size={16} />Exportar ventas</button>}</div></section>
+    <section className="ws-page-heading">
+      <div><span className="ws-eyebrow">VISIÓN GENERAL</span><h2>Panel de control</h2><p>{greeting}, {profile?.nombre.split(' ')[0]}. Este es el resumen de tu operación.</p></div>
+      <div className="ws-heading-actions">
+        <label className="ws-period"><CalendarDays size={16} /><select value={period} onChange={event => setPeriod(event.target.value as Period)} aria-label="Período del resumen"><option value="all">Todos los registros</option><option value="month">Este mes</option><option value="30">Últimos 30 días</option><option value="7">Últimos 7 días</option><option value="today">Hoy</option></select></label>
+        {can('sales') && <div className="export-wrap">
+          <button className="ws-button ws-button-secondary" aria-haspopup="menu" aria-expanded={exportOpen} disabled={loading || Boolean(errors.sales) || exportingPdf} onClick={() => setExportOpen(value => !value)}><Download size={16} />{exportingPdf ? 'Preparando PDF…' : 'Exportar'}<ChevronDown size={13} /></button>
+          {exportOpen && <div className="export-menu open" role="menu" aria-label="Formatos de exportación">
+            <button role="menuitem" onClick={() => chooseFormat('csv')}><FileText size={14} />CSV · datos ordenados</button>
+            <button role="menuitem" onClick={() => chooseFormat('excel')}><FileText size={14} />Excel · datos ordenados</button>
+            <button role="menuitem" onClick={() => chooseFormat('pdf')}><FileText size={14} />PDF · dashboard ejecutivo</button>
+          </div>}
+        </div>}
+      </div>
+    </section>
 
     <section className={`ws-metrics${loading ? ' is-loading' : ''}`} aria-label="Indicadores de Supabase">{metrics.map(metric => <button className="ws-metric" key={metric.label} onClick={() => navigate(`/${metric.page}`)}><div className="ws-metric-top"><span>{metric.label}</span><span className={`ws-soft-icon ${metric.color}`}><metric.icon size={19} /></span></div><strong>{metric.value}</strong><div className="ws-metric-foot">{metric.trend !== null && <span className={`ws-badge ${metric.trend < 0 ? 'amber' : 'green'}`}>{metric.trend > 0 ? '+' : ''}{metric.trend}% vs período anterior</span>}<span>{loading ? 'Consultando base de datos…' : metric.detail}</span></div></button>)}</section>
 

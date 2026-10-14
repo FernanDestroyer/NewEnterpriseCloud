@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { businessDate, dailyOperations, inDateRange, matchesSearch, periodRange } from '../src/data/workspace.ts'
+import { businessDate, customerCredit, dailyOperations, inDateRange, matchesSearch, periodRange } from '../src/data/workspace.ts'
 import { financialSnapshot, totalAmount } from '../src/data/dashboard.ts'
 import { csvContent } from '../src/data/exports.ts'
 
@@ -57,4 +57,34 @@ test('el CSV conserva encabezados y decimales, escapa comillas y neutraliza fór
   assert.ok(csv.includes('"Monitor ""Pro""","12.5"'))
   assert.ok(csv.includes('"\'=HYPERLINK(""url"")"'))
   assert.ok(csv.includes('"\' +SUM(1,2)","-5"'))
+})
+
+test('el crédito del cliente solo lo consume lo pagado con Tarjeta', () => {
+  const customer = { id: 'CLI-001', rowId: 'uuid-cli', name: 'Cliente Prueba', detail: '', date: '', status: 'Activo', amount: 1000 }
+  const sales = [
+    { id: 'V-001', rowId: 'uuid-v1', name: 'Cliente Prueba', detail: '', date: '', status: 'Pendiente', amount: 300, medio: 'Tarjeta', cliente_id: 'uuid-cli', createdAt: '2026-10-01T15:00:00Z' },
+    { id: 'V-002', rowId: 'uuid-v2', name: 'Cliente Prueba', detail: '', date: '', status: 'Completada', amount: 500, descuento: 10, medio: 'Efectivo', cliente_id: 'uuid-cli', createdAt: '2026-10-05T15:00:00Z' },
+    { id: 'V-003', rowId: 'uuid-v3', name: 'Cliente Prueba', detail: '', date: '', status: 'Completada', amount: 200, medio: 'Yape', cliente_id: 'uuid-cli', createdAt: '2026-10-06T15:00:00Z' },
+    { id: 'V-004', rowId: 'uuid-otro', name: 'Otro', detail: '', date: '', status: 'Pendiente', amount: 900, medio: 'Tarjeta', cliente_id: 'uuid-otro', createdAt: '2026-10-06T15:00:00Z' },
+  ]
+  const finance = [
+    { id: 'FIN-001', name: 'Cliente Prueba', detail: '', date: '', status: 'Pendiente', amount: 300, saleId: 'uuid-v1' },
+    { id: 'FIN-002', name: 'Cliente Prueba', detail: '', date: '', status: 'Completada', amount: 500, saleId: 'uuid-v2' },
+  ]
+  const credit = customerCredit(customer, sales, finance)
+  assert.equal(credit.linea, 1000)
+  assert.equal(credit.hasLimit, true)
+  // Solo la venta con Tarjeta consume; efectivo/Yape no descuentan.
+  assert.equal(credit.consumidoTarjeta, 300)
+  assert.equal(credit.disponible, 700)
+  assert.equal(credit.deuda, 300)
+  assert.equal(credit.compras.length, 3)
+  assert.equal(credit.totalComprado, 1000)
+  // Sin la venta que se edita, su propio consumo no cuenta dos veces.
+  const editing = customerCredit(customer, sales, finance, 'uuid-v1')
+  assert.equal(editing.consumidoTarjeta, 0)
+  assert.equal(editing.disponible, 1000)
+  // Línea en cero = sin tope.
+  const noLimit = customerCredit({ ...customer, amount: 0 }, sales, finance)
+  assert.equal(noLimit.hasLimit, false)
 })

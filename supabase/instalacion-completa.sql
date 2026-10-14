@@ -2,7 +2,7 @@
 -- ERP EnterpriseCloud · Instalación completa en UN SOLO PASO
 -- Cómo usarlo: abre este archivo en el Bloc de notas, Ctrl+A, Ctrl+C,
 -- pégalo en Supabase Dashboard -> SQL Editor -> New query y pulsa Run.
--- Contiene las 16 migraciones en orden. Es idempotente: si algo falla a la
+-- Contiene las 18 migraciones en orden. Es idempotente: si algo falla a la
 -- mitad, puedes volver a pegar y ejecutar todo de nuevo sin duplicar nada.
 -- =============================================================================
 
@@ -1436,3 +1436,31 @@ begin
   delete from public.roles
    where nombre in ('Almacenero', 'Auditor', 'Contador');
 end $$;
+
+-- >>> supabase/migrations/20261025000000_venta_medio_pago.sql
+-- =============================================================================
+-- ERP EnterpriseCloud · Medio de pago en ventas
+-- La venta guarda con qué medio pagará el cliente (del catálogo de métodos).
+-- Al cobrar en Tesorería se propone ese medio por defecto.
+--
+-- Cómo ejecutarlo: Supabase Dashboard -> SQL Editor -> New query -> pegar -> Run.
+-- Es idempotente: se puede volver a ejecutar sin duplicar ni borrar nada.
+-- =============================================================================
+
+alter table public.ventas add column if not exists medio_pago text;
+
+-- >>> supabase/migrations/20261026000000_yape_qr.sql
+-- QR de Yape: se guarda en configuracion (codigo YAPE_QR).
+-- Los usuarios de ventas/finanzas pueden leer exclusivamente esa configuración.
+-- La escritura conserva los permisos de configuración existentes.
+
+drop policy if exists configuracion_yape_select on public.configuracion;
+create policy configuracion_yape_select on public.configuracion
+  for select to authenticated
+  using (
+    codigo = 'YAPE_QR'
+    and (
+      (select public.tiene_permiso('ventas', 'ver'))
+      or (select public.tiene_permiso('finanzas', 'ver'))
+    )
+  );

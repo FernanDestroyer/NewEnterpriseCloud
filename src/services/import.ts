@@ -1,16 +1,18 @@
 // -----------------------------------------------------------------------------
 // Importación masiva de proveedores con su catálogo de productos (CSV).
 // Formato esperado (coma como separador, comillas estándar para celdas con coma):
-//   ruc,razon_social,direccion,correo,telefono,forma_pago,linea_credito,estado,productos
+//   ruc,razon_social,direccion,correo,telefono,forma_pago,estado,productos
 // La celda productos lista ofertas separadas por //, cada una como:
 //   nombre | costo | detalle(opcional)
 // Ejemplo:
-//   20123456786,Mi Empresa S.A.C.,Av. Lima 123,contacto@empresa.pe,987654321,Contado,15000,Activo,"Tubo PVC | 8.50 | Tuberías // Codo PVC | 16.75 | Conexiones"
+//   20123456786,Mi Empresa S.A.C.,Av. Lima 123,contacto@empresa.pe,987654321,Contado,Activo,"Tubo PVC | 8.50 | Tuberías // Codo PVC | 16.75 | Conexiones"
+// Nota: la columna linea_credito ya no se usa en proveedores (solo clientes).
+// Si un CSV antiguo la trae, se ignora.
 // -----------------------------------------------------------------------------
 
 import { isValidRuc } from './peru.ts'
 
-export const SUPPLIER_CSV_HEADER = ['ruc', 'razon_social', 'direccion', 'correo', 'telefono', 'forma_pago', 'linea_credito', 'estado', 'productos']
+export const SUPPLIER_CSV_HEADER = ['ruc', 'razon_social', 'direccion', 'correo', 'telefono', 'forma_pago', 'estado', 'productos']
 
 export const SUPPLIER_PAYMENT_TERMS = ['Contado', 'Transferencia bancaria', 'Yape / Plin', 'Crédito 30 días', 'Crédito 60 días']
 
@@ -21,7 +23,6 @@ export const SUPPLIER_CSV_EXAMPLE = [
   'contacto@ejemplo.pe',
   '987654321',
   'Contado',
-  '20000',
   'Activo',
   'Tubo Demo | 12.50 | Tuberías // Codo Demo | 16.75 | Conexiones',
 ]
@@ -36,7 +37,6 @@ export type SupplierImportRow = {
   correo: string
   telefono: string
   formaPago: string
-  lineaCredito: number
   estado: 'Activo' | 'En curso'
   productos: SupplierProductDraft[]
 }
@@ -51,6 +51,8 @@ export type SupplierImportParse = {
 
 export type SupplierImportReport = {
   created: number
+  /** Proveedores que ya existían y a los que se les agregaron productos. */
+  updated: number
   products: number
   omitted: SupplierImportIssue[]
   failed: SupplierImportIssue[]
@@ -156,12 +158,6 @@ export function parseSuppliersCsv(text: string): SupplierImportParse {
       fail('teléfono inválido: debe tener al menos 6 dígitos.')
       return
     }
-    const creditRaw = cell('linea_credito').trim()
-    const lineaCredito = creditRaw === '' ? 0 : Number(creditRaw.replace(',', '.'))
-    if (!Number.isFinite(lineaCredito) || lineaCredito < 0) {
-      fail('línea de crédito inválida: debe ser cero o mayor.')
-      return
-    }
     const estadoRaw = cell('estado').trim().toLowerCase()
     const estado: SupplierImportRow['estado'] = estadoRaw === 'en curso' ? 'En curso' : 'Activo'
     seen.add(ruc)
@@ -175,7 +171,6 @@ export function parseSuppliersCsv(text: string): SupplierImportParse {
       correo,
       telefono,
       formaPago: cell('forma_pago').trim(),
-      lineaCredito: Math.round(lineaCredito * 100) / 100,
       estado,
       productos: items,
     })

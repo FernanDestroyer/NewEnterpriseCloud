@@ -4,9 +4,13 @@ import { pageMeta } from '../data/catalog'
 import { defaultStatus, LOW_STOCK_THRESHOLD, money, statusesForPage, totalWithIgv } from '../data/helpers'
 import { useRecords } from '../context/RecordsContext'
 import { useAuth } from '../context/AuthContext'
-import { fetchDocumentLines, friendlyError } from '../services/records'
+import { fetchDocumentLines, fetchPaymentMethods, friendlyError } from '../services/records'
+import { customerCredit } from '../data/workspace'
 import { isPeruLookupConfigured, lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
+import { isYapeMethod, salePayableTotal, type YapeSettings } from '../data/payments'
+import { fetchYapeSettings } from '../services/yape'
+import YapePaymentPanel from './YapePaymentPanel'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 import { useDialog } from './useDialog'
 
@@ -57,10 +61,52 @@ type LineDraft = { selected: boolean; qty: number; price: number }
 export default function RecordModal({ page, record, saving = false, onClose, onSave }: { page: DataPage; record: RecordItem | null; saving?: boolean; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void }) {
   const meta = pageMeta[page]
   const editing = Boolean(record)
-  const { records, catalog } = useRecords()
+  const { records, catalog, lastSyncedAt } = useRecords()
   const { can } = useAuth()
   // Descuento % en ventas (solo roles con finanzas; se aplica al subtotal).
   const [discountPct, setDiscountPct] = useState(record?.descuento ?? 0)
+  // Medios de pago para elegir cómo pagará el cliente (llega solo).
+  const [saleMethods, setSaleMethods] = useState<string[]>(['Efectivo'])
+  const [saleMethod, setSaleMethod] = useState(record?.medio || 'Efectivo')
+  const [manualAmount, setManualAmount] = useState(record?.amount === undefined ? '' : String(record.amount))
+  const [yapeSettings, setYapeSettings] = useState<YapeSettings | null>(null)
+  const [yapeLoading, setYapeLoading] = useState(false)
+  const [yapeError, setYapeError] = useState('')
+  const [yapeReload, setYapeReload] = useState(0)
+  useEffect(() => {
+    if (page !== 'sales') return
+    let active = true
+    fetchPaymentMethods()
+      .then((methods) => {
+        if (!active) return
+        const names = methods.map(method => method.nombre)
+        // Conserva el medio de una venta antigua aunque haya sido desactivado.
+        if (record?.medio && !names.includes(record.medio)) names.unshift(record.medio)
+        if (!names.length) names.push('Efectivo')
+        setSaleMethods(names)
+        setSaleMethod(current => names.includes(current) ? current : names[0])
+      })
+      .catch(() => active && setSaleMethods(['Efectivo']))
+    return () => {
+      active = false
+    }
+  }, [page, record?.medio])
+  useEffect(() => {
+    if (page !== 'sales' || !isYapeMethod(saleMethod)) {
+      setYapeSettings(null)
+      setYapeError('')
+      setYapeLoading(false)
+      return
+    }
+    let active = true
+    setYapeSettings(null)
+    setYapeLoading(true)
+    setYapeError('')
+    fetchYapeSettings().then(settings => { if (active) setYapeSettings(settings) })
+      .catch(error => { if (active) setYapeError(friendlyError(error)) })
+      .finally(() => { if (active) setYapeLoading(false) })
+    return () => { active = false }
+  }, [page, saleMethod, lastSyncedAt, yapeReload])
   const dialogRef = useDialog<HTMLFormElement>(onClose, saving)
 
   const hasClientRelation = page === 'sales' || page === 'quotes'
@@ -105,6 +151,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   const [lineError, setLineError] = useState('')
   const [lineReload, setLineReload] = useState(0)
   const [originalQuantities, setOriginalQuantities] = useState<Record<string, number>>({})
+  const [originalLineTotals, setOriginalLineTotals] = useState({ count: 0, subtotal: 0 })
   // Buscador del proveedor (compras) o del cliente (ventas): filtra la lista.
   const [supplierQuery, setSupplierQuery] = useState('')
   const [customerQuery, setCustomerQuery] = useState('')
@@ -292,6 +339,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
         }
         setLines(draft)
         setOriginalQuantities(quantities)
+        setOriginalLineTotals({ count: previous.length, subtotal: previous.reduce((sum, line) => sum + line.cantidad * line.precio, 0) })
       })
       .catch(error => { if (active) { setLines({}); setLineError(friendlyError(error)) } })
       .finally(() => active && setLinesLoading(false))
@@ -438,6 +486,10 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
     [visibleProducts, lines],
   )
   const linesTotal = selectedLines.reduce((sum, line) => sum + line.subtotal, 0)
+  // El guardado conserva las líneas anteriores si una edición no marca ninguna.
+  const saleHasLines = selectedLines.length > 0 || Boolean(record?.rowId && originalLineTotals.count)
+  const saleSubtotal = selectedLines.length ? linesTotal : originalLineTotals.subtotal
+  const saleTotal = salePayableTotal(saleSubtotal, discountPct, Number(manualAmount), saleHasLines)
 
   // Completada en cotizaciones solo se alcanza con «Convertir en venta».
   // Si el registro trae un estado antiguo (En curso), se conserva en la lista.
@@ -555,6 +607,16 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     <GoogleIcon name="link" className="small" />
                     Vinculado a {linkedTarget.name} ({linkedTarget.id}). Datos del cliente agregados a la {page === 'sales' ? 'venta' : 'cotización'}.
                   </small>
+                  {page === 'sales' && Number(linkedTarget.amount ?? 0) > 0 && (() => {
+                    const credit = customerCredit(linkedTarget, records.sales, records.finance, record?.rowId ?? null)
+                    return (
+                      <small className={`relation-hint${credit.disponible > 0 ? ' linked' : ''}`}>
+                        <GoogleIcon name="payments" className="small" />
+                        Línea {money(credit.linea)} · Consumido con tarjeta {money(credit.consumidoTarjeta)} · Disponible {money(credit.disponible)}
+                        {credit.disponible <= 0 ? ' · Sin cupo en tarjeta: solo efectivo/Yape.' : ' · Solo Tarjeta descuenta de la línea.'}
+                      </small>
+                    )
+                  })()}
                 </>
               ) : !options.length ? (
                 <small className="relation-hint">
@@ -647,6 +709,16 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                   Comprobante manual heredado: se conserva como está.
                 </small>
               )}
+            </div>
+          )}
+          {page === 'sales' && (
+            <div className="relation-field yape-method-field">
+              <label>Medio de pago
+                <select name="medio_pago" value={saleMethod} onChange={event => setSaleMethod(event.target.value)}>
+                  {saleMethods.map((method) => <option key={method} value={method}>{method}</option>)}
+                </select>
+              </label>
+              {isYapeMethod(saleMethod) && <YapePaymentPanel settings={yapeSettings} total={saleTotal} loading={yapeLoading} totalLoading={linesLoading} error={yapeError} onRetry={() => setYapeReload(value => value + 1)} />}
             </div>
           )}
           {page === 'sales' ? (
@@ -853,7 +925,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                 )
               })() : (() => {
                 const totalUnits = selectedLines.reduce((sum, line) => sum + line.qty, 0)
-                const discounted = page === 'sales' && discountPct > 0 ? Math.round(linesTotal * (1 - discountPct / 100) * 100) / 100 : linesTotal
+                const discounted = page === 'sales' ? saleTotal : linesTotal
                 return (
                   <div className="lines-summary">
                     <span className="lines-summary-title"><GoogleIcon name="receipt_long" className="small" /> Resumen</span>
@@ -881,7 +953,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
               </p>
               )}
               {!selectedLines.length && (
-                <label>{meta.amountLabel}<input name="amount" min="0" step="0.01" type="number" defaultValue={record?.amount} placeholder="0.00" /></label>
+                <label>{meta.amountLabel}<input name="amount" min="0" step="0.01" type="number" value={manualAmount} onChange={event => setManualAmount(event.target.value)} placeholder="0.00" /></label>
               )}
             </div>
           ) : (

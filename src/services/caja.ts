@@ -35,8 +35,20 @@ function toShift(row: CashRow): CashShift {
   }
 }
 
-export async function fetchCashShifts(limit = 20): Promise<CashShift[]> {
+/** Turno abierto actual, o null si la caja está cerrada. */
+export async function getOpenCashShift(): Promise<CashShift | null> {
   const { data, error } = await requireSupabase()
+    .from('caja_turnos')
+    .select('id, abierto_por_email, abierto_en, monto_inicial, estado, cerrado_en, conteo, notas')
+    .eq('estado', 'Abierto')
+    .order('abierto_en', { ascending: false })
+    .limit(1)
+  if (error) throw error
+  const row = ((data ?? []) as CashRow[])[0]
+  return row ? toShift(row) : null
+}
+
+export async function fetchCashShifts(limit = 20): Promise<CashShift[]> {  const { data, error } = await requireSupabase()
     .from('caja_turnos')
     .select('id, abierto_por_email, abierto_en, monto_inicial, estado, cerrado_en, conteo, notas')
     .order('abierto_en', { ascending: false })

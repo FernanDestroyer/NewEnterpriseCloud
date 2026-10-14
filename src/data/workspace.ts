@@ -90,3 +90,73 @@ export function displayDate(iso?: string) {
   if (Number.isNaN(value.getTime())) return '—'
   return value.toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric' })
 }
+
+export type CustomerCredit = {
+  /** Línea de crédito del cliente (clientes.linea_credito): cupo de su tarjeta. 0 = sin tope. */
+  linea: number
+  /** true si el cliente tiene tope (línea mayor a cero). */
+  hasLimit: boolean
+  /** Suma de compras pagadas con Tarjeta: es lo que consume la línea. */
+  consumidoTarjeta: number
+  /** Suma de cuentas por cobrar abiertas vinculadas a sus ventas (cobranza). */
+  deuda: number
+  /** Cupo disponible para una nueva compra con Tarjeta. */
+  disponible: number
+  /** Ventas vinculadas (por cliente_id). */
+  compras: RecordItem[]
+  /** Total comprado (suma de montos de sus ventas). */
+  totalComprado: number
+  /** Descuento acumulado otorgado en sus ventas. */
+  descuentoOtorgado: number
+  /** Fecha de creación de su última compra (ISO) o undefined. */
+  ultimaCompra?: string
+}
+
+/** true si el medio de pago consume la línea de crédito (solo Tarjeta). */
+export function consumesCreditLine(medio?: string | null): boolean {
+  return (medio ?? '').trim().toLocaleLowerCase('es') === 'tarjeta'
+}
+
+// Ventas del cliente + consumo de su línea (solo lo pagado con Tarjeta).
+// excludeSaleRowId descuenta la venta que se está editando para no contarla dos veces.
+export function customerCredit(
+  customer: RecordItem,
+  sales: RecordItem[],
+  finance: RecordItem[],
+  excludeSaleRowId?: string | null,
+): CustomerCredit {
+  const linea = Number(customer.amount ?? 0) || 0
+  const mine = sales.filter((sale) => customer.rowId
+    && sale.cliente_id === customer.rowId
+    && sale.rowId !== (excludeSaleRowId ?? ''))
+  const ids = new Set(mine.filter((sale) => sale.rowId).map((sale) => sale.rowId as string))
+  const consumidoTarjeta = mine
+    .filter((sale) => consumesCreditLine(sale.medio))
+    .reduce((sum, sale) => sum + (Number(sale.amount) || 0), 0)
+  const deuda = finance
+    .filter((item) => item.saleId && ids.has(item.saleId) && item.status !== 'Completada')
+    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+  const totalComprado = mine.reduce((sum, sale) => sum + (Number(sale.amount) || 0), 0)
+  const descuentoOtorgado = mine.reduce((sum, sale) => {
+    const total = Number(sale.amount) || 0
+    const pct = Number(sale.descuento) || 0
+    if (!(pct > 0) || !(total > 0) || pct >= 100) return sum
+    return sum + Math.round(total * pct / (100 - pct) * 100) / 100
+  }, 0)
+  const ultimaCompra = mine
+    .map((sale) => sale.createdAt ?? '')
+    .filter(Boolean)
+    .sort()
+    .pop()
+  return {
+    linea: Math.round(linea * 100) / 100,
+    hasLimit: linea > 0,
+    consumidoTarjeta: Math.round(consumidoTarjeta * 100) / 100,
+    deuda: Math.round(deuda * 100) / 100,
+    disponible: Math.round((linea - consumidoTarjeta) * 100) / 100,
+    compras: [...mine].sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))),
+    totalComprado: Math.round(totalComprado * 100) / 100,
+    descuentoOtorgado: Math.round(descuentoOtorgado * 100) / 100,
+    ultimaCompra,
+  }
+}

@@ -28,6 +28,14 @@ En PowerShell con restricciones de ejecución puedes utilizar `npm.cmd`.
 - Clientes y proveedores con documento: DNI (RENIEC) o RUC (SUNAT) con autocompletado de nombre y dirección desde el formulario.
 - Perfil: nombre persistente, correo de la cuenta y permisos del rol.
 
+## QR de Yape en ventas
+
+1. Ejecuta `supabase/migrations/20261026000000_yape_qr.sql` para que los usuarios de ventas/finanzas puedan leer el QR del comercio.
+2. En **Mantenimiento → Otros catálogos → QR de Yape**, sube tu QR original (PNG, JPG o WebP de hasta 1 MB), escribe el titular y guarda. El celular es opcional.
+3. En **Nueva venta**, selecciona **Yape**: se muestra el QR junto al total actualizado de productos y descuentos. También funciona con el monto manual de una venta sin líneas.
+
+La imagen se guarda en `configuracion` con código `YAPE_QR`. El cliente ingresa el monto en su app; este QR habitual no recibe un monto dinámico ni confirma el abono automáticamente. Registra el estado Completada después de revisar el pago en Yape.
+
 ## Consulta RENIEC/SUNAT
 
 1. Configura en `.env` tu `VITE_PERU_API_TOKEN` (y `VITE_PERU_API_URL`, por defecto `https://dniruc.apisperu.com/api/v1`; también compatible con `https://api.apis.net.pe/v1`). Reinicia el servidor.

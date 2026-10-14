@@ -1,0 +1,3 @@
+ruc,razon_social,direccion,correo,telefono,forma_pago,estado,productos
+20123456786,Libreria Central S.A.C.,Jr. Azangaro 123 Lima,ventas@libreriacentral.pe,015432100,Contado,Activo,"Diccionario Esencial | 32.00 | Libros // Cuaderno A4 100h | 8.50 | Papeleria // Plumones gruesos x12 | 14.90 | Utiles"
+20334455662,Distribuidora del Saber S.A.C.,Av. Los Precursores 456 Lima,contacto@delsaber.pe,987654321,Credito 30 dias,Activo,"Marcadores de pizarra x4 | 16.00 | Utiles // Libro de lectura | 25.00 | Libros"

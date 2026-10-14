@@ -369,6 +369,38 @@
 .workspace-shell.erp-shell .supplier-product-copy small { color: var(--ws-muted); }
 .workspace-shell.erp-shell :is(.supplier-link-bar input, .supplier-product-row.editing input) { color: var(--ws-text); background: var(--ws-surface); border-color: var(--ws-border); }
 .workspace-shell.erp-shell .supplier-link-bar { flex-wrap: wrap; }
+/* QR de Yape: imagen original y monto vivo de la venta. */
+.yape-method-field > label { display: grid; gap: 7px; }
+.yape-payment-panel { margin-top: 12px; padding: 14px; border: 1px solid color-mix(in srgb, var(--ws-violet) 40%, var(--ws-border)); border-radius: 12px; background: linear-gradient(135deg, var(--ws-violet-soft), var(--ws-surface) 85%); }
+.yape-payment-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.yape-payment-brand { display: inline-flex; align-items: center; gap: 7px; color: var(--ws-violet); font-size: 15px; font-weight: 800; }
+.yape-payment-tag { color: var(--ws-muted); font-size: 9px; }
+.yape-payment-body { display: grid; grid-template-columns: minmax(110px, 150px) minmax(0, 1fr); align-items: center; gap: 15px; margin-top: 13px; }
+.yape-payment-qr { display: grid; place-items: center; aspect-ratio: 1; padding: 8px; border-radius: 9px; background: #fff; border: 1px solid #e8e2f0; }
+.yape-payment-qr img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.yape-payment-qr.is-empty { color: var(--ws-violet); background: var(--ws-surface); border: 1px dashed var(--ws-violet); }
+.yape-payment-detail { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; gap: 5px; }
+.yape-payment-label { color: var(--ws-muted); font-size: 9px; }
+.yape-payment-total { color: var(--ws-violet); font-size: clamp(18px, 1.8vw, 26px); font-weight: 800; letter-spacing: -.7px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; margin: 0 0 6px; }
+.yape-payment-owner { color: var(--ws-text); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.yape-payment-phone { color: var(--ws-muted); font-size: 11px; letter-spacing: .5px; }
+.yape-payment-detail > small { color: var(--ws-muted); font-size: 10px; line-height: 1.5; }
+.yape-payment-note { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ws-border); color: var(--ws-muted); font-size: 10px; line-height: 1.6; }
+.yape-payment-note strong { color: var(--ws-text); font-weight: 650; }
+.yape-payment-error { display: grid; gap: 5px; margin-top: 10px; color: var(--ws-red); font-size: 10px; }
+.workspace-shell .yape-settings-form { padding: 8px 0 18px; gap: 13px; }
+.yape-settings-preview { display: grid; place-items: center; width: 190px; height: 190px; margin-inline: auto; padding: 10px; background: #fff; border: 1px solid #e8e2f0; border-radius: 12px; }
+.yape-settings-preview > img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.yape-qr-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px; color: #7654ad; text-align: center; font-size: 11px; }
+.yape-help { color: var(--ws-muted); font-size: 10px; line-height: 1.6; }
+.workspace-shell .yape-enabled { display: flex; flex-direction: row; align-items: center; gap: 9px; line-height: 1.5; }
+.workspace-shell .yape-enabled input[type='checkbox'] { flex: 0 0 16px; width: 16px; height: 16px; padding: 0; accent-color: var(--ws-violet); }
+.yape-settings-note { padding: 10px 12px; border-radius: 8px; background: var(--ws-violet-soft); color: var(--ws-violet); font-size: 11px; line-height: 1.6; }
+@media (max-width: 420px) {
+  .yape-payment-body { grid-template-columns: 1fr; }
+  .yape-payment-qr { width: 180px; margin-inline: auto; }
+  .yape-payment-detail { align-items: center; text-align: center; }
+}
 .workspace-shell.erp-shell .kardex-note, .workspace-shell.erp-shell .kardex-count { color: var(--ws-muted); }
 .workspace-shell.erp-shell .kardex-chip.in { color: var(--ws-green); background: var(--ws-green-soft); border-color: transparent; }
 .workspace-shell.erp-shell .kardex-chip.out { color: var(--ws-amber); background: var(--ws-amber-soft); border-color: transparent; }
@@ -575,6 +607,27 @@
   .ws-orbital-actions { gap: 15px; margin-top: 21px; }
 }
 @media (prefers-reduced-motion: reduce) { .workspace-shell *, .workspace-shell *::before, .workspace-shell *::after { animation: none !important; transition: none !important; } }
+/* Caja moderna: métodos separados por tarjetas de color + barra de totales. */
+.cash-section { margin-top: 18px; }
+.cash-methods { display: grid; gap: 10px; }
+.cash-method { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--ws-raised); border: 1px solid var(--ws-border); border-radius: 12px; }
+.cash-method-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cash-method-copy strong { color: var(--ws-text); font-size: 12px; }
+.cash-method-copy small { color: var(--ws-muted); font-size: 10px; }
+.cash-count { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.cash-count small { color: var(--ws-subtle); font-size: 9px; text-transform: uppercase; letter-spacing: .6px; }
+.cash-count input { width: 140px; max-width: 38vw; text-align: right; color: var(--ws-text); background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-weight: 700; }
+.cash-count input:focus { border-color: var(--ws-primary); outline: none; }
+.cash-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; padding: 14px; background: linear-gradient(120deg, var(--ws-primary-soft), transparent 70%); border: 1px solid var(--ws-border); border-radius: 12px; }
+.cash-totals div { display: flex; flex-direction: column; gap: 3px; }
+.cash-totals small { color: var(--ws-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .8px; }
+.cash-totals strong { color: var(--ws-text); font-size: 16px; }
+.cash-totals strong.ok { color: var(--ws-green); }
+.cash-totals strong.bad { color: var(--ws-red); }
+@media (max-width: 640px) {
+  .cash-method { flex-wrap: wrap; }
+  .cash-totals { grid-template-columns: 1fr; }
+}
 @media print {
   .workspace-shell .ws-sidebar, .workspace-shell .ws-topbar, .workspace-shell .ws-heading-actions, .workspace-shell .ws-footer, .workspace-shell .row-actions { display: none !important; }
   .workspace-shell .ws-main { width: 100%; margin: 0; }

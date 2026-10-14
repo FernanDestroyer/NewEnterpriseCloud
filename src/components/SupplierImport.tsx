@@ -70,7 +70,10 @@ export default function SupplierImport() {
       setReport(result)
       setPreview(null)
       await reload()
-      notify(`Importación lista: ${result.created} ${result.created === 1 ? 'proveedor creado' : 'proveedores creados'} con ${result.products} ${result.products === 1 ? 'producto' : 'productos'}.`)
+      const parts = [`${result.created} ${result.created === 1 ? 'proveedor creado' : 'proveedores creados'}`]
+      if (result.updated) parts.push(`${result.updated} ${result.updated === 1 ? 'actualizado' : 'actualizados'}`)
+      parts.push(`${result.products} ${result.products === 1 ? 'producto' : 'productos'}`)
+      notify(`Importación lista: ${parts.join(', ')}.`)
     } catch (error) {
       notify(friendlyError(error))
     } finally {
@@ -109,7 +112,7 @@ export default function SupplierImport() {
               </div>
               <p className="relation-hint">
                 <GoogleIcon name="info" className="small" />
-                Columnas: ruc, razon_social, direccion, correo, telefono, forma_pago, linea_credito, estado, productos.
+                Columnas: ruc, razon_social, direccion, correo, telefono, forma_pago, estado, productos.
                 Los productos van como "nombre | costo | detalle" separados por //.
               </p>
               {preview && (
@@ -135,12 +138,13 @@ export default function SupplierImport() {
                 <section className="ws-import-preview" aria-live="polite">
                   <div className="ws-import-summary">
                     <span className="ws-badge green">{report.created} {report.created === 1 ? 'creado' : 'creados'}</span>
+                    {(report.updated ?? 0) > 0 && <span className="ws-badge green">{report.updated} {report.updated === 1 ? 'actualizado' : 'actualizados'}</span>}
                     <span className="ws-badge green">{report.products} {report.products === 1 ? 'producto' : 'productos'}</span>
                     {(report.omitted.length + report.failed.length + report.skippedProducts.length) > 0 && (
                       <span className="ws-badge amber">con observaciones</span>
                     )}
                   </div>
-                  <p className="relation-hint linked"><GoogleIcon name="check_circle" className="small" />Se crearon {report.created} {report.created === 1 ? 'proveedor' : 'proveedores'} con {report.products} {report.products === 1 ? 'producto' : 'productos'} en sus catálogos.</p>
+                  <p className="relation-hint linked"><GoogleIcon name="check_circle" className="small" />Se crearon {report.created} {report.created === 1 ? 'proveedor' : 'proveedores'}{report.updated ? ` y se actualizaron ${report.updated}` : ''} con {report.products} {report.products === 1 ? 'producto' : 'productos'} en sus catálogos.</p>
                   {[...report.omitted.map((item) => `${item.ruc}: ${item.reason}`),
                     ...report.failed.map((item) => `${item.ruc}: ${item.reason}`),
                     ...report.skippedProducts.map((item) => `${item.proveedor} · ${item.producto}: ${item.reason}`)].slice(0, 8).map((issue, index) => (

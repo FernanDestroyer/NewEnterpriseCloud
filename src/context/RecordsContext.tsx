@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { pageMeta } from '../data/catalog'
-import { brandLogoUrl, defaultStatus, escapeCell, isStockAlert, stockStatus } from '../data/helpers'
+import { brandLogoUrl, defaultStatus, escapeCell, isStockAlert, money, stockStatus } from '../data/helpers'
+import { customerCredit, consumesCreditLine } from '../data/workspace'
 import { readCompanyProfile } from '../services/company'
-import { convertQuoteToSale, completeLinkedDocument, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertPurchaseWithLines, insertQuoteWithLines, insertRecord, insertSaleWithLines, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput } from '../services/records'
+import { convertQuoteToSale, completeLinkedDocument, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertPurchaseWithLines, insertQuoteWithLines, insertRecord, insertSaleWithLines, isMissingTableError, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput } from '../services/records'
+import { getOpenCashShift } from '../services/caja'
 import { DATA_PAGES } from '../data/catalog'
 import { csvContent } from '../data/exports'
 import { purchaseHasStock } from '../data/helpers'
@@ -153,11 +155,26 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
   }
   const closeRecordModal = () => { if (!saving) setRecordModal(null) }
 
+  // Ventas y compras nuevas exigen turno de caja abierto (las ediciones no).
+  // Si la tabla de caja aún no existe (migración pendiente), no se bloquea.
+  const requireOpenShift = async (): Promise<boolean> => {
+    try {
+      if (await getOpenCashShift()) return true
+    } catch (error) {
+      if (isMissingTableError(error)) return true
+      notify(friendlyError(error))
+      return false
+    }
+    notify('Abre un turno en Caja antes de registrar ventas o compras.')
+    return false
+  }
+
   const saveRecord = async (page: DataPage, record: RecordItem | null, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (saving) return
     if (!can(page, record ? 'editar' : 'crear')) return notify('Tu rol no tiene permiso para guardar este registro.')
     const form = new FormData(event.currentTarget)
+    if (!record && (page === 'sales' || page === 'purchases') && !(await requireOpenShift())) return
     const meta = pageMeta[page]
     const amountInput = String(form.get('amount') ?? '')
     const quantityInput = String(form.get('quantity') ?? '')
@@ -311,6 +328,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       ...(page === 'inventory' && savedPrecio !== undefined ? { precio: savedPrecio } : {}),
       ...(page === 'purchases' && savedFechaLimite !== undefined ? { fecha_limite: savedFechaLimite } : {}),
       ...(page === 'sales' ? { descuento: discount } : {}),
+      ...(page === 'sales' ? { medio_pago: String(form.get('medio_pago') ?? '').trim() || null } : {}),
       ...(page === 'suppliers' ? {
         ruc: rucDigits,
         direccion: direccionInput || null,
@@ -334,17 +352,34 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       if (page === 'sales') {
         // En ventas siempre se usa la ruta con líneas para recalcular stock/cobranza.
         // Si se edita sin marcar líneas, se conservan las anteriores.
-        if (!lines.length && record?.rowId) {
+        let effective: LineInput[] = lines
+        if (!effective.length && record?.rowId) {
           const previous = await fetchDocumentLines('sales', record.rowId)
-          const previousInput: LineInput[] = previous.map((line) => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio }))
-          saved = record
-            ? await updateSaleWithLines(record.id, input, previousInput)
-            : await insertSaleWithLines(input, [])
-        } else {
-          saved = record
-            ? await updateSaleWithLines(record.id, input, lines)
-            : await insertSaleWithLines(input, lines)
+          effective = previous.map((line) => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio }))
         }
+        // Tope de tarjeta: si paga con Tarjeta, la compra consume la línea de
+        // crédito del cliente. Efectivo/Yape no descuentan (solo se registran).
+        // Línea en cero o sin vincular = sin tope. Aplica en cualquier estado.
+        const saleMedio = ((input as { medio_pago?: string | null }).medio_pago ?? record?.medio ?? null) as string | null
+        if (consumesCreditLine(saleMedio)) {
+          const customerId = relatedId ?? record?.cliente_id ?? null
+          const customer = customerId ? records.customers.find((item) => item.rowId === customerId) : undefined
+          const linea = Number(customer?.amount ?? 0) || 0
+          if (customer && linea > 0) {
+            const subtotal = effective.reduce((sum, line) => sum + line.cantidad * line.precio, 0)
+            const newTotal = effective.length
+              ? Math.round(subtotal * (1 - discount / 100) * 100) / 100
+              : (savedAmount ?? record?.amount ?? 0)
+            const credit = customerCredit(customer, records.sales, records.finance, record?.rowId ?? null)
+            if (newTotal > credit.disponible) {
+              notify(`Sin crédito suficiente para ${customer.name}: paga con Tarjeta y su disponible es ${money(credit.disponible)} (línea ${money(linea)} − consumido ${money(credit.consumidoTarjeta)}). Esta compra es ${money(newTotal)}. Cobra en efectivo/Yape o amplía su línea.`)
+              return
+            }
+          }
+        }
+        saved = record
+          ? await updateSaleWithLines(record.id, input, effective)
+          : await insertSaleWithLines(input, effective)
       } else if (page === 'quotes') {
         if (!lines.length && record?.rowId) {
           const previous = await fetchDocumentLines('quotes', record.rowId)
@@ -438,6 +473,8 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
   const convertQuote = async (code: string) => {
     if (saving) return
     if (!can('sales', 'crear') || !can('quotes', 'editar') || !can('inventory', 'editar') || !can('finance', 'crear')) return notify('Convertir una cotización requiere crear ventas y cuentas financieras, editar cotizaciones y mover inventario.')
+    if (!(await requireOpenShift())) return
+    // La conversión genera una venta sin medio de pago (no consume tarjeta).
     setSaving(true)
     try {
       const { sale } = await convertQuoteToSale(code)
@@ -464,15 +501,26 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
   const exportTable = async (page: DataPage, format: ExportFormat, items = records[page]) => {
     const title = pageMeta[page].title
     const baseName = `${title.toLocaleLowerCase()}-enterprisecloud`
-    const header = ['Referencia', 'Nombre', 'Detalle', 'Fecha', page === 'inventory' ? 'Existencias' : 'Importe', 'Estado', ...(page === 'inventory' ? ['Precio de venta'] : [])]
-    const rows = items.map((item) => [
+    const header = page === 'suppliers'
+      ? ['Referencia', 'Nombre', 'Fecha', 'RUC', 'Estado']
+      : ['Referencia', 'Nombre', 'Detalle', 'Fecha', page === 'inventory' ? 'Existencias' : page === 'customers' ? 'Disponible' : 'Importe', 'Estado', ...(page === 'inventory' ? ['Precio de venta'] : []), ...(page === 'customers' ? ['Línea de crédito'] : [])]
+    const rows = items.map((item) => page === 'suppliers'
+      ? [
+        item.id,
+        item.name,
+        item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-PE', { timeZone: 'America/Lima' }) : item.date,
+        (item.ruc ?? ''),
+        item.status,
+      ]
+      : [
       item.id,
       item.name,
       item.detail,
       item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-PE', { timeZone: 'America/Lima' }) : item.date,
-      page === 'inventory' ? `${item.quantity ?? 0} unidades` : item.amount !== undefined ? String(item.amount) : '',
+      page === 'inventory' ? `${item.quantity ?? 0} unidades` : page === 'customers' ? String(customerCredit(item, records.sales, records.finance).disponible) : item.amount !== undefined ? String(item.amount) : '',
       page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status,
       ...(page === 'inventory' ? [item.precio !== undefined ? String(item.precio) : ''] : []),
+      ...(page === 'customers' ? [item.amount !== undefined ? String(item.amount) : ''] : []),
     ])
 
     if (format === 'csv') {
