@@ -1464,3 +1464,15 @@ create policy configuracion_yape_select on public.configuracion
       or (select public.tiene_permiso('finanzas', 'ver'))
     )
   );
+
+-- >>> supabase/migrations/20261027000000_vendedor_caja.sql
+-- Vendedor con acceso a Caja: sin turno abierto no hay ventas ni compras.
+insert into public.rol_permisos (rol_id, permiso_id)
+select r.id, p.id
+from public.roles r
+join public.permisos p
+  on ((p.modulo = 'finanzas' and p.accion in ('ver', 'crear', 'editar'))
+   or (p.modulo = 'inventario' and p.accion = 'editar')
+   or (p.modulo = 'compras' and p.accion in ('ver', 'crear', 'editar')))
+where r.nombre = 'Vendedor'
+on conflict do nothing;

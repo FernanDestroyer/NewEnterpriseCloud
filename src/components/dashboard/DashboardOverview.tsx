@@ -8,6 +8,7 @@ import { isStockAlert, money, statusTone } from '../../data/helpers'
 import { businessDate, dailyOperations, displayDate, inDateRange, matchesSearch, periodRange, shiftDate, type Period } from '../../data/workspace'
 import { readCompanyProfile } from '../../services/company'
 import { exportExecutiveDashboard } from '../../services/dashboardReport'
+import SystemGuideButton from '../SystemGuideButton'
 import type { DataPage, ExportFormat, RecordItem } from '../../types'
 
 function OperationsChart({ sales, purchases, period }: { sales: RecordItem[]; purchases: RecordItem[]; period: Period }) {
@@ -134,6 +135,7 @@ export default function DashboardOverview() {
     <section className="ws-page-heading">
       <div><span className="ws-eyebrow">VISIÓN GENERAL</span><h2>Panel de control</h2><p>{greeting}, {profile?.nombre.split(' ')[0]}. Este es el resumen de tu operación.</p></div>
       <div className="ws-heading-actions">
+        <SystemGuideButton variant="heading" />
         <label className="ws-period"><CalendarDays size={16} /><select value={period} onChange={event => setPeriod(event.target.value as Period)} aria-label="Período del resumen"><option value="all">Todos los registros</option><option value="month">Este mes</option><option value="30">Últimos 30 días</option><option value="7">Últimos 7 días</option><option value="today">Hoy</option></select></label>
         {can('sales') && <div className="export-wrap">
           <button className="ws-button ws-button-secondary" aria-haspopup="menu" aria-expanded={exportOpen} disabled={loading || Boolean(errors.sales) || exportingPdf} onClick={() => setExportOpen(value => !value)}><Download size={16} />{exportingPdf ? 'Preparando PDF…' : 'Exportar'}<ChevronDown size={13} /></button>
