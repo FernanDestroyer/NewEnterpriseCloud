@@ -4,18 +4,18 @@ import AppLayout from '../components/layout/AppLayout'
 import LoadingScreen from '../components/LoadingScreen'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
-import LandingPage from '../paginas/LandingPage'
-import LoginPage from '../paginas/LoginPage'
+import LandingPage from '../components/LandingPage'
+import LoginPage from '../components/LoginPage'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 
-const DashboardPage = lazy(() => import('../paginas/DashboardPage'))
-const CajaPage = lazy(() => import('../paginas/CajaPage'))
-const MaintenancePage = lazy(() => import('../paginas/MaintenancePage'))
-const PermisosPage = lazy(() => import('../paginas/PermisosPage'))
-const ModuloPage = lazy(() => import('../paginas/ModuloPage'))
-const ReportsPage = lazy(() => import('../paginas/ReportsPage'))
-const ProfilePage = lazy(() => import('../paginas/ProfilePage'))
+const DashboardPage = lazy(() => import('../components/DashboardPage'))
+const CajaPage = lazy(() => import('../components/CajaPage'))
+const MaintenancePage = lazy(() => import('../components/MaintenancePage'))
+const PermisosPage = lazy(() => import('../components/PermisosPage'))
+const ModuloPage = lazy(() => import('../components/ModuloPage'))
+const ReportsPage = lazy(() => import('../components/ReportsPage'))
+const ProfilePage = lazy(() => import('../components/ProfilePage'))
 
 // Solo deja pasar a quien tenga una sesión de Supabase activa.
 // Tras iniciar sesión se muestra "Preparando tu panel" un tiempo mínimo

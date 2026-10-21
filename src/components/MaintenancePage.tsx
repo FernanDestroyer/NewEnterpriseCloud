@@ -9,7 +9,7 @@ import {
 } from '../services/records'
 
 import ModuloPage from './ModuloPage'
-import YapeSettingsForm from '../components/YapeSettingsForm'
+import YapeSettingsForm from './YapeSettingsForm'
 import { readYapeSettings } from '../data/payments'
 import type { DataPage } from '../types'
 

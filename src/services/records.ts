@@ -2,7 +2,7 @@ import { requireSupabase } from '../lib/supabase'
 import { salePayableTotal } from '../data/payments'
 import { DATA_PAGES } from '../data/catalog'
 import { formatWhen, purchaseHasStock, totalWithIgv } from '../data/helpers'
-import type { SupplierImportReport, SupplierImportRow } from './import'
+import type { CustomerImportReport, CustomerImportRow, SupplierImportReport, SupplierImportRow } from './import'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 
 type Row = Record<string, unknown>
@@ -470,6 +470,71 @@ export async function importSuppliersWithProducts(rows: SupplierImportRow[]): Pr
     if (catalogError) throw catalogError
   }
   return { created: createdList.length, updated: toUpdate.length, products: catalogRows.length, omitted, failed, skippedProducts }
+}
+
+/**
+ * Alta masiva de clientes (importación CSV).
+ * Omite los documentos repetidos en el archivo o que ya están registrados y
+ * reporta cada caso sin abortar el resto. Si un lote es rechazado por la base
+ * de datos, reintenta fila por fila para saber exactamente cuáles fallaron.
+ */
+export async function importCustomers(rows: CustomerImportRow[]): Promise<CustomerImportReport> {
+  const client = requireSupabase()
+  const omitted: CustomerImportReport['omitted'] = []
+  const failed: CustomerImportReport['failed'] = []
+  const seenFile = new Set<string>()
+  const fresh = rows.filter((row) => {
+    if (seenFile.has(row.documento)) {
+      omitted.push({ line: row.line, documento: row.documento, reason: 'Documento duplicado dentro del archivo' })
+      return false
+    }
+    seenFile.add(row.documento)
+    return true
+  })
+  if (!fresh.length) return { created: 0, omitted, failed }
+
+  // Documentos que ya existen en la base (se consulta por tandas para no
+  // exceder el largo de la URL ni el límite de filas por respuesta).
+  const existingDocs = new Set<string>()
+  const documents = fresh.map((row) => row.documento)
+  for (let start = 0; start < documents.length; start += 100) {
+    const { data, error } = await client.from('clientes').select('documento').in('documento', documents.slice(start, start + 100))
+    if (error) throw error
+    for (const item of ((data ?? []) as Array<{ documento: string | null }>)) {
+      if (item.documento) existingDocs.add(item.documento)
+    }
+  }
+  const toInsert = fresh.filter((row) => {
+    if (!existingDocs.has(row.documento)) return true
+    omitted.push({ line: row.line, documento: row.documento, reason: 'Ya existe un cliente con este documento' })
+    return false
+  })
+
+  const toPayload = (row: CustomerImportRow): Row => ({
+    razon_social: row.razonSocial,
+    detalle: row.detalle,
+    linea_credito: row.lineaCredito,
+    estado: row.estado,
+    tipo_doc: row.tipoDoc,
+    documento: row.documento,
+  })
+
+  let created = 0
+  for (let start = 0; start < toInsert.length; start += 100) {
+    const chunk = toInsert.slice(start, start + 100)
+    const batch = await client.from('clientes').insert(chunk.map(toPayload)).select('id')
+    if (!batch.error) {
+      created += chunk.length
+      continue
+    }
+    // El lote completo se revierte: se prueba cada fila para aislar la que falla.
+    for (const row of chunk) {
+      const single = await client.from('clientes').insert(toPayload(row)).select('id')
+      if (single.error) failed.push({ line: row.line, documento: row.documento, reason: friendlyError(single.error) })
+      else created += 1
+    }
+  }
+  return { created, omitted, failed }
 }
 
 /** Enriquece ventas/compras/productos con el nombre del cliente/proveedor vinculado. */

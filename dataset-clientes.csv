@@ -1,0 +1,19 @@
+tipo_doc,documento,razon_social,detalle,linea_credito,estado
+DNI,45678912,María Torres Quispe,Contacto: 987654321 · maria.torres@correo.pe,500.00,Activo
+DNI,40123456,Luis Fernando Rojas Salas,Contacto: 986112233 · lrojas@correo.pe,300.00,Activo
+DNI,41234567,Carmen Rosa Huamán Díaz,Contacto: 975334455 · Docente,150.00,Activo
+DNI,42345678,José Antonio Paredes León,Contacto: 964223344 · Cliente frecuente,800.00,Activo
+DNI,43456789,Ana Lucía Vargas Mendoza,Contacto: 953112299 · Padre/madre de familia,0,Activo
+DNI,44567890,Pedro Pablo Cárdenas Ruiz,Contacto: 942887766 · Pago contra entrega,200.00,En curso
+DNI,46789123,Rosa Elena Campos Vela,Contacto: 931554433 · Estudiante,0,Activo
+DNI,47891234,Miguel Ángel Soto Chávez,Contacto: 920776655 · Revendedor,1200.00,Activo
+DNI,48912345,Julia Marisol Ramos Tapia,Contacto: 918223311 · Docente,250.00,Activo
+DNI,49123456,Diego Alonso Flores Cueva,Contacto: 907665544,100.00,En curso
+RUC,20100000017,Librería Escolar San Martín S.A.C.,"Contacto: Av. Arequipa 1520, Lima · compras@sanmartin.pe",5000.00,Activo
+RUC,20100000025,Colegio Nuevo Horizonte E.I.R.L.,Contacto: 014567890 · logistica@nuevohorizonte.pe,3500.00,Activo
+RUC,20100000033,Academia Preuniversitaria Cima S.A.C.,Contacto: 013221100 · administracion@cima.pe,2500.00,Activo
+RUC,20100000041,Bazar y Útiles El Estudiante S.R.L.,Contacto: 012998877 · ventas@elestudiante.pe,4000.00,Activo
+RUC,20100000050,Instituto Superior Tecnológico Andino,Contacto: 014556677 · abastecimiento@andino.pe,6000.00,Activo
+RUC,10100000062,Comercial Quispe Importaciones,Contacto: 987001122 · Persona natural con negocio,1800.00,Activo
+RUC,20100000076,Centro de Copiado Express S.A.C.,Contacto: 015667788 · pedidos@copiadoexpress.pe,900.00,En curso
+RUC,20100000084,Distribuidora Útiles del Sur E.I.R.L.,"Contacto: Jr. Cusco 340, Arequipa · gerencia@utilesdelsur.pe",7500.00,Activo
