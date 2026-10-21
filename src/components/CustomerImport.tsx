@@ -35,7 +35,7 @@ export default function CustomerImport() {
   const fileRef = useRef<HTMLInputElement>(null)
   const dialogRef = useDialog<HTMLDivElement>(() => { if (!busy) setOpen(false) }, busy)
 
-  if (!can('customers', 'crear')) return null
+  if (!can('customers', 'importar')) return null
 
   const close = () => {
     if (busy) return
@@ -63,7 +63,7 @@ export default function CustomerImport() {
   }
 
   const confirm = async () => {
-    if (!preview || !preview.rows.length || busy) return
+    if (!can('customers', 'importar') || !preview || !preview.rows.length || busy) return
     setBusy(true)
     try {
       const result = await importCustomers(preview.rows)
