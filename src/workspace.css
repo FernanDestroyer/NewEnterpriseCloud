@@ -668,3 +668,74 @@
 /* La guía usa ::before para el texto porque ::after es el punto pulsante. */
 .workspace-shell .ws-icon-button.ws-guide-topbar:hover::before, .workspace-shell .ws-icon-button.ws-guide-topbar:focus-visible::before { content: attr(data-tip); position: absolute; top: calc(100% + 9px); left: 50%; transform: translateX(-50%); z-index: 120; max-width: 240px; width: max-content; padding: 7px 10px; white-space: normal; text-align: center; font-size: 10px; font-weight: 800; line-height: 1.35; color: #4a3205; background: linear-gradient(140deg, #fffdf4, #ffe6a8); border: 1px solid #b27c28; border-radius: 8px; box-shadow: 0 8px 24px #13264230; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .workspace-shell [data-tip]:hover::after, .workspace-shell .ws-icon-button.ws-guide-topbar:hover::before { transition: none; } }
+
+/* ---- Pago con tarjeta: tarjetas del cliente con el color de su marca ---- */
+.bank-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin: 12px 0; }
+.bank-card { --bc-from: #4b4f7a; --bc-to: #20223d; position: relative; border-radius: 16px; color: #fff; background: linear-gradient(135deg, var(--bc-from), var(--bc-to)); box-shadow: 0 6px 16px rgba(10, 20, 40, .28); border: 2px solid transparent; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.bank-card::after { content: ''; position: absolute; inset: 0; border-radius: 14px; pointer-events: none; background: radial-gradient(circle at 85% -10%, rgba(255,255,255,.28), transparent 55%), radial-gradient(circle at -10% 110%, rgba(255,255,255,.14), transparent 50%); }
+.bank-card:hover { transform: translateY(-2px); }
+.bank-card.is-selected { border-color: #fff; box-shadow: 0 0 0 3px var(--ws-violet), 0 8px 20px rgba(10, 20, 40, .35); }
+.bank-card.is-expired { filter: grayscale(.85); opacity: .6; }
+.bank-card.brand-visa { --bc-from: #1a4bd8; --bc-to: #0a1f6b; }
+.bank-card.brand-mastercard { --bc-from: #ff6a1a; --bc-to: #8c1d1d; }
+.bank-card.brand-amex { --bc-from: #1fa5a0; --bc-to: #0c4f6e; }
+.bank-card.brand-diners { --bc-from: #6c7a89; --bc-to: #2b3440; }
+.bank-card.brand-other { --bc-from: #7a4bd8; --bc-to: #2a1b5e; }
+.workspace-shell.erp-shell .bank-card .bank-card-radio { position: absolute; z-index: 2; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.bank-card-face { position: relative; z-index: 1; display: grid; gap: 16px; min-height: 150px; padding: 16px 18px; cursor: pointer; }
+.bank-card.is-expired .bank-card-face { cursor: not-allowed; }
+.bank-card-top { display: flex; align-items: center; justify-content: space-between; }
+.bank-card-chip { width: 36px; height: 27px; border-radius: 6px; background: linear-gradient(135deg, #f5dd8f, #c79a3a); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.bank-card-brand { font-size: 15px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.bank-card-number { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 17px; letter-spacing: .12em; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.bank-card-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.bank-card-bottom > span { display: grid; gap: 1px; min-width: 0; }
+.bank-card-bottom small { font-size: 8px; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+.bank-card-bottom strong { overflow: hidden; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.bank-card-expired { position: absolute; right: 14px; top: 44px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,.55); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.bank-card-remove { position: absolute; z-index: 3; right: 8px; bottom: 8px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: rgba(0,0,0,.28); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.bank-card:hover .bank-card-remove, .bank-card:focus-within .bank-card-remove { opacity: 1; }
+.bank-card-remove:hover { background: #d14343; }
+.bank-card-radio:focus-visible + .bank-card-face { outline: 3px solid #fff; outline-offset: -6px; border-radius: 14px; }
+@media (hover: none) { .bank-card-remove { opacity: 1; } }
+
+/* Texto siempre claro sobre el degradado de la tarjeta. */
+.workspace-shell.erp-shell .bank-card, .workspace-shell.erp-shell .bank-card label, .workspace-shell.erp-shell .bank-card strong, .workspace-shell.erp-shell .bank-card small, .workspace-shell.erp-shell .bank-card span { color: #fff; }
+.bank-card-bottom small { opacity: .8; }
+
+/* Con 3 o más tarjetas: filas compactas de una sola línea. */
+.bank-cards.is-compact { grid-template-columns: 1fr; gap: 6px; }
+.bank-cards.is-compact .bank-card { border-radius: 10px; box-shadow: 0 2px 6px rgba(10, 20, 40, .22); }
+.bank-cards.is-compact .bank-card::after { border-radius: 8px; }
+.bank-cards.is-compact .bank-card:hover { transform: none; }
+.bank-cards.is-compact .bank-card-face { display: flex; align-items: center; gap: 12px; min-height: 0; padding: 8px 44px 8px 12px; }
+.bank-cards.is-compact .bank-card-top { display: contents; }
+.bank-cards.is-compact .bank-card-chip { order: 0; width: 24px; height: 18px; border-radius: 4px; flex: 0 0 auto; }
+.bank-cards.is-compact .bank-card-brand { order: 1; flex: 0 0 auto; min-width: 84px; font-size: 11px; }
+.bank-cards.is-compact .bank-card-number { order: 2; flex: 1; font-size: 13px; letter-spacing: .08em; white-space: nowrap; }
+.bank-cards.is-compact .bank-card-bottom { order: 3; flex: 0 0 auto; }
+.bank-cards.is-compact .bank-card-bottom > span:first-child { display: none; }
+.bank-cards.is-compact .bank-card-bottom small { display: none; }
+.bank-cards.is-compact .bank-card-bottom strong { font-size: 11px; }
+.bank-cards.is-compact .bank-card-expired { position: static; order: 4; }
+.bank-cards.is-compact .bank-card-remove { top: 50%; bottom: auto; right: 8px; transform: translateY(-50%); width: 26px; height: 26px; }
+
+/* Confirmación para quitar una tarjeta. */
+.bank-card-confirm { position: absolute; z-index: 3; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.bank-cards.is-compact .bank-card-confirm { top: 50%; bottom: auto; transform: translateY(-50%); }
+.bank-card-confirm button { padding: 5px 10px; border: 0; border-radius: 7px; background: rgba(0,0,0,.45); color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
+.bank-card-confirm button.is-danger { background: #d14343; }
+
+/* Ajuste del modo compacto: todo se encoge en lugar de desbordarse. */
+.bank-cards.is-compact .bank-card-face { overflow: hidden; gap: 10px; padding: 8px 40px 8px 10px; }
+.bank-cards.is-compact .bank-card-dots { display: none; }
+.bank-cards.is-compact .bank-card-chip { width: 22px; height: 16px; }
+.bank-cards.is-compact .bank-card-brand { flex: 1 1 0; min-width: 0; overflow: hidden; font-size: 11px; letter-spacing: .03em; text-overflow: ellipsis; white-space: nowrap; }
+.bank-cards.is-compact .bank-card-number { flex: 0 0 auto; min-width: 0; font-size: 12px; letter-spacing: .05em; }
+.bank-cards.is-compact .bank-card-bottom { flex: 0 0 auto; }
+.bank-cards.is-compact .bank-card-bottom strong { font-size: 11px; letter-spacing: .02em; }
+.bank-cards.is-compact .bank-card-remove { right: 6px; width: 24px; height: 24px; }
+
+/* El vencimiento no se muestra en la tarjeta (se sigue guardando y validando). */
+.bank-cards.is-compact .bank-card-bottom { display: none; }
+.bank-card-bottom { justify-content: flex-start; }

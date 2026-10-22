@@ -36,6 +36,10 @@ export type RecordInput = {
   descuento?: number
   /** Finanzas: medio con que se canceló la cuenta. undefined = no tocar. */
   medio_pago?: string | null
+  /** Ventas: tarjeta del cliente usada (id + marca/últimos 4 al momento de la venta). undefined = no tocar. */
+  tarjeta_id?: string | null
+  tarjeta_marca?: string | null
+  tarjeta_ultimos4?: string | null
   /** Compras: comprobante de recepción (Factura, Boleta, Guía de Remisión, Nota de Venta). */
   comprobante_tipo?: string | null
   /** Compras: número del comprobante de recepción. */
@@ -106,6 +110,9 @@ function toRecord(page: DataPage, row: Row): RecordItem {
   // Medio de pago de la venta (si su migración ya se ejecutó).
   if (page === 'sales') {
     item.medio = typeof row.medio_pago === 'string' && row.medio_pago ? row.medio_pago : null
+    item.tarjetaId = typeof row.tarjeta_id === 'string' && row.tarjeta_id ? row.tarjeta_id : null
+    item.tarjetaMarca = typeof row.tarjeta_marca === 'string' && row.tarjeta_marca ? row.tarjeta_marca : null
+    item.tarjetaUltimos4 = typeof row.tarjeta_ultimos4 === 'string' && row.tarjeta_ultimos4 ? row.tarjeta_ultimos4 : null
   }
   // Descuento de la venta (si su migración ya se ejecutó).
   if (page === 'sales') {
@@ -170,6 +177,12 @@ function toRow(page: DataPage, input: RecordInput): Row {
   if (page === 'finance' && input.medio_pago !== undefined) row.medio_pago = input.medio_pago || null
   // Medio de pago de la venta (solo ese módulo lo usa).
   if (page === 'sales' && input.medio_pago !== undefined) row.medio_pago = input.medio_pago || null
+  // Tarjeta del cliente usada: solo se escribe cuando existe (nunca se borra al editar).
+  if (page === 'sales' && input.tarjeta_id) {
+    row.tarjeta_id = input.tarjeta_id
+    row.tarjeta_marca = input.tarjeta_marca || null
+    row.tarjeta_ultimos4 = input.tarjeta_ultimos4 || null
+  }
   // Descuento de la venta (solo ese módulo lo usa).
   if (page === 'sales' && input.descuento !== undefined) row.descuento = Math.min(100, Math.max(0, Number(input.descuento) || 0))
   if (config.amount && input.amount !== undefined) row[config.amount] = input.amount
@@ -223,7 +236,7 @@ function withoutColumn(row: Row, column: string): Row {
 }
 
 /** Columnas nuevas que pueden faltar si su migración aún no se ejecutó. */
-const PENDING_COLUMNS = ['ruc', 'precio', 'proveedor_id', 'tipo_doc', 'documento', 'direccion', 'correo', 'telefono', 'forma_pago', 'descuento', 'medio_pago']
+const PENDING_COLUMNS = ['ruc', 'precio', 'proveedor_id', 'tipo_doc', 'documento', 'direccion', 'correo', 'telefono', 'forma_pago', 'descuento', 'medio_pago', 'tarjeta_id', 'tarjeta_marca', 'tarjeta_ultimos4']
 
 async function insertWithColumnFallback(table: string, payload: Row, required: string[] = []) {
   const client = requireSupabase()
@@ -264,11 +277,12 @@ export function friendlyError(error: unknown): string {
   if (err?.code === '42501' || err?.code === 'PGRST116') return 'Tu rol no tiene permiso para realizar esta acción.'
   if (err?.code === '23505') return 'Ya existe un registro con esos datos.'
   if (err?.code === '23514') return 'Alguno de los valores no es válido (revisa montos y estado).'
-  if (err?.code === '42703' || err?.code === 'PGRST204' || (/proveedor_id|precio|\bruc\b|tipo_doc|documento|direccion|correo|telefono|forma_pago|descuento|medio_pago/i.test(haystack) && /column|schema cache/i.test(haystack))) {
+  if (err?.code === '42703' || err?.code === 'PGRST204' || (/proveedor_id|precio|\bruc\b|tipo_doc|documento|direccion|correo|telefono|forma_pago|descuento|medio_pago|tarjeta_id|tarjeta_marca|tarjeta_ultimos4/i.test(haystack) && /column|schema cache/i.test(haystack))) {
     if (/precio/i.test(haystack)) return 'Falta la columna precio en productos. Ejecuta en Supabase la migración 20261011000000_producto_precio.sql y recarga.'
     if (/\bruc\b/i.test(haystack)) return 'Falta la columna RUC en proveedores. Ejecuta en Supabase la migración 20261015000000_proveedor_ruc.sql y recarga.'
     if (/tipo_doc|documento/i.test(haystack)) return 'Falta la columna de documento en clientes. Ejecuta en Supabase la migración 20261017000000_cliente_documento.sql y recarga.'
     if (/direccion|correo|telefono|forma_pago/i.test(haystack)) return 'Faltan las columnas de contacto en proveedores. Ejecuta en Supabase la migración 20261018000000_proveedor_contacto.sql y recarga.'
+    if (/tarjeta_id|tarjeta_marca|tarjeta_ultimos4/i.test(haystack)) return 'Faltan las columnas de tarjeta en ventas. Ejecuta en Supabase la migración 20261030000000_tarjetas_cliente.sql y recarga.'
     if (/descuento|medio_pago/i.test(haystack)) return 'Faltan columnas nuevas en Supabase. Ejecuta en Supabase las migraciones 20261021000000_centro_mantenimiento.sql y 20261025000000_venta_medio_pago.sql y recarga.'
     return 'Falta una columna nueva en Supabase. Ejecuta las migraciones pendientes y recarga.'
   }

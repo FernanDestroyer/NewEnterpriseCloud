@@ -329,6 +329,11 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       ...(page === 'purchases' && savedFechaLimite !== undefined ? { fecha_limite: savedFechaLimite } : {}),
       ...(page === 'sales' ? { descuento: discount } : {}),
       ...(page === 'sales' ? { medio_pago: String(form.get('medio_pago') ?? '').trim() || null } : {}),
+      ...(page === 'sales' && String(form.get('tarjeta_id') ?? '').trim() ? {
+        tarjeta_id: String(form.get('tarjeta_id')).trim(),
+        tarjeta_marca: String(form.get('tarjeta_marca') ?? '').trim() || null,
+        tarjeta_ultimos4: String(form.get('tarjeta_ultimos4') ?? '').trim() || null,
+      } : {}),
       ...(page === 'suppliers' ? {
         ruc: rucDigits,
         direccion: direccionInput || null,
@@ -376,6 +381,15 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
               return
             }
           }
+        }
+        // Pago con tarjeta: exige un cliente vinculado y una de las tarjetas agregadas a su cuenta
+        // (las ventas antiguas con Tarjeta sin tarjeta registrada se pueden seguir editando).
+        const chosenMedio = (input as { medio_pago?: string | null }).medio_pago ?? null
+        const chosenCard = (input as { tarjeta_id?: string | null }).tarjeta_id ?? null
+        const legacyCardSale = Boolean(record && consumesCreditLine(record.medio) && !record.tarjetaId)
+        if (consumesCreditLine(chosenMedio) && !chosenCard && !legacyCardSale) {
+          notify(!(relatedId ?? record?.cliente_id) ? 'Vincula un cliente a la venta para pagar con tarjeta: la tarjeta se agrega a su cuenta.' : 'Agrega o elige una tarjeta de la cuenta del cliente para pagar con tarjeta.')
+          return
         }
         saved = record
           ? await updateSaleWithLines(record.id, input, effective)

@@ -85,7 +85,7 @@ export default function VoucherModal({ page, record, onClose }: { page: 'sales' 
       + `<style>body{font-family:Arial,sans-serif;color:#111;margin:0;padding:24px}h1{font-size:22px;margin:0}p{margin:4px 0;font-size:12px}.head{display:flex;justify-content:space-between;gap:16px;border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:14px}.brand{display:flex;align-items:center;gap:12px}.logo{height:100px;width:auto}.doc{border:2px solid #111;padding:10px 14px;text-align:center}.doc strong{font-size:18px}.meta{display:grid;gap:2px;margin-bottom:14px}.meta small{color:#555}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border:1px solid #999;text-align:left}th{background:#eee}td:nth-child(1),td:nth-child(3),td:nth-child(4){text-align:right}.totals{margin-left:auto;width:240px;margin-top:12px}.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:12px}.totals .grand{font-size:15px;font-weight:bold;border-top:2px solid #111;margin-top:4px;padding-top:8px}.foot{margin-top:18px;color:#555;font-size:10px}</style></head><body>`
       + `<div class="head"><div class="brand"><img class="logo" src="${logoUrl}" alt="Logotipo de EnterpriseCloud"><div><h1>${escapeCell(emitterName)}</h1><p>${escapeCell(emitterDetail)}</p></div></div><div class="doc"><strong>${escapeCell(docTitle)}</strong><p>${escapeCell(docNumber)}</p><p>${escapeCell(record.date)} · ${escapeCell(record.status)}</p></div></div>`
       + `<div class="meta"><p><strong>${counterLabel}:</strong> ${escapeCell(counterName)}${counterCode ? ` · ${escapeCell(counterCode)}` : ''}</p>`
-      + (isSale && record.medio ? `<p><strong>Medio de pago:</strong> ${escapeCell(record.medio)}</p>` : '')
+      + (isSale && record.medio ? `<p><strong>Medio de pago:</strong> ${escapeCell(record.medio)}${record.tarjetaMarca && record.tarjetaUltimos4 ? ` · ${escapeCell(record.tarjetaMarca)} •••• ${escapeCell(record.tarjetaUltimos4)}` : ''}</p>` : '')
       + (!isSale ? `<p><strong>Fase:</strong> ${escapeCell(record.status)}${record.fechaLimite ? ` · <strong>Límite:</strong> ${escapeCell(record.fechaLimite)}` : ''}${record.comprobanteTipo ? ` · <strong>Recepción:</strong> ${escapeCell(record.comprobanteTipo)}${record.comprobanteNumero ? ` ${escapeCell(record.comprobanteNumero)}` : ''}` : ''}</p>` : '')
       + `</div>`
       + `<table><thead><tr><th>Cant.</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead><tbody>${rows}</tbody></table>`
@@ -113,7 +113,7 @@ export default function VoucherModal({ page, record, onClose }: { page: 'sales' 
           </div>
           <div className="voucher-meta">
             <p><strong>{counterLabel}:</strong> {counterName}{counterCode ? ` · ${counterCode}` : ''}</p>
-            {isSale && record.medio && <p><strong>Medio de pago:</strong> {record.medio}</p>}
+            {isSale && record.medio && <p><strong>Medio de pago:</strong> {record.medio}{record.tarjetaMarca && record.tarjetaUltimos4 ? ` · ${record.tarjetaMarca} •••• ${record.tarjetaUltimos4}` : ''}</p>}
             {!isSale && <p><strong>Fase:</strong> {record.status}{record.fechaLimite ? ` · Límite: ${record.fechaLimite}` : ''}{record.comprobanteTipo ? ` · Recepción: ${record.comprobanteTipo}${record.comprobanteNumero ? ` ${record.comprobanteNumero}` : ''}` : ''}</p>}
           </div>
           {loading ? (

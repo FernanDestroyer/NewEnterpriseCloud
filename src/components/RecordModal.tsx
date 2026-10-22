@@ -5,12 +5,13 @@ import { defaultStatus, LOW_STOCK_THRESHOLD, money, statusesForPage, totalWithIg
 import { useRecords } from '../context/RecordsContext'
 import { useAuth } from '../context/AuthContext'
 import { fetchDocumentLines, fetchPaymentMethods, friendlyError } from '../services/records'
-import { customerCredit } from '../data/workspace'
+import { consumesCreditLine, customerCredit } from '../data/workspace'
 import { isPeruLookupConfigured, lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
-import { salePayableTotal, walletForMethod, type YapeSettings } from '../data/payments'
+import { salePayableTotal, walletForMethod, type CustomerCard, type YapeSettings } from '../data/payments'
 import { fetchWalletSettings } from '../services/yape'
 import YapePaymentPanel from './YapePaymentPanel'
+import CardPaymentPanel from './CardPaymentPanel'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 import { useDialog } from './useDialog'
 
@@ -73,6 +74,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   const [yapeLoading, setYapeLoading] = useState(false)
   const [yapeError, setYapeError] = useState('')
   const [yapeReload, setYapeReload] = useState(0)
+  const [pickedCard, setPickedCard] = useState<{ id: string; marca: string; ultimos4: string } | null>(record?.tarjetaId ? { id: record.tarjetaId, marca: record.tarjetaMarca ?? '', ultimos4: record.tarjetaUltimos4 ?? '' } : null)
   useEffect(() => {
     if (page !== 'sales') return
     let active = true
@@ -718,6 +720,14 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                   {saleMethods.map((method) => <option key={method} value={method}>{method}</option>)}
                 </select>
               </label>
+              {consumesCreditLine(saleMethod) && <>
+                <CardPaymentPanel clienteId={relatedId || null} clienteName={linkedTarget?.name} total={saleTotal} selectedId={pickedCard?.id ?? ''} onSelect={(card: CustomerCard | null) => setPickedCard(card ? { id: card.id, marca: card.marca, ultimos4: card.ultimos4 } : null)} />
+                {pickedCard && <>
+                  <input type="hidden" name="tarjeta_id" value={pickedCard.id} />
+                  <input type="hidden" name="tarjeta_marca" value={pickedCard.marca} />
+                  <input type="hidden" name="tarjeta_ultimos4" value={pickedCard.ultimos4} />
+                </>}
+              </>}
               {walletForMethod(saleMethod) && <YapePaymentPanel wallet={walletForMethod(saleMethod)!} settings={yapeSettings} total={saleTotal} loading={yapeLoading} totalLoading={linesLoading} error={yapeError} onRetry={() => setYapeReload(value => value + 1)} />}
             </div>
           )}

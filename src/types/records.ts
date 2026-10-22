@@ -85,6 +85,10 @@ export type RecordItem = {
   medio?: string | null
   /** Ventas: descuento % aplicado al subtotal (0-100). */
   descuento?: number
+  /** Ventas: tarjeta del cliente con la que se pagó (solo marca y últimos 4). */
+  tarjetaId?: string | null
+  tarjetaMarca?: string | null
+  tarjetaUltimos4?: string | null
 }
 
 /** Línea de venta/compra: un producto del inventario en X cantidad y precio. */

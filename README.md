@@ -40,6 +40,16 @@ La imagen se guarda en `configuracion` con código `YAPE_QR`. El cliente ingresa
 
 Funciona igual que Yape. Ejecuta `supabase/migrations/20261029000000_plin_qr.sql`, sube tu QR en **Mantenimiento → Otros catálogos → QR de Plin** (titular y celular opcional) y en **Nueva venta** elige **Plin**: se muestra el QR con el total. Se guarda en `configuracion` con código `PLIN_QR`. El pago no se confirma automáticamente.
 
+## Pago con tarjeta en ventas
+
+En **Nueva venta**, el medio **Tarjeta** exige una tarjeta agregada a la cuenta del cliente:
+
+1. Ejecuta `supabase/migrations/20261030000000_tarjetas_cliente.sql`.
+2. Vincula un cliente a la venta, elige **Tarjeta** y pulsa **Agregar tarjeta** (marca, últimos 4 dígitos, titular y vencimiento). Las tarjetas guardadas del cliente aparecen para elegir en sus próximas ventas; las vencidas se bloquean.
+3. Sin cliente o sin tarjeta elegida no se puede guardar la venta. La venta guarda la marca y los últimos 4 de la tarjeta usada, y el comprobante los muestra.
+
+Solo se guardan datos no sensibles: nunca el número completo ni el CVV. El sistema **registra** el pago con tarjeta; no cobra. El cobro se hace en tu POS o pasarela. Las ventas antiguas con Tarjeta se pueden seguir editando sin tarjeta. Sigue aplicando la línea de crédito del cliente.
+
 ## Importar clientes desde un dataset CSV
 
 1. Asegúrate de haber ejecutado `supabase/migrations/20261017000000_cliente_documento.sql` (guarda el documento del cliente).

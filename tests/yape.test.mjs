@@ -81,3 +81,30 @@ test('la configuración de Plin se lee de su propio registro y usa su nombre en 
   assert.throws(() => validateYapeSettings({ ...plin, titular: '' }, 'Plin'), /Plin/)
   assert.throws(() => parseYapeSettings('no es json', 'Plin'), /Plin/)
 })
+
+import { cardLabel, isCardExpired, validateCardInput } from '../src/data/payments.ts'
+
+const card = { marca: 'Visa', ultimos4: '4242', titular: '  Ana  Pérez ', venceMes: 8, venceAnio: 28 }
+const now = new Date('2026-10-22T12:00:00Z')
+
+test('una tarjeta vence al final del mes indicado', () => {
+  assert.equal(isCardExpired(10, 26, now), false)
+  assert.equal(isCardExpired(9, 26, now), true)
+  assert.equal(isCardExpired(12, 2026, now), false)
+  assert.equal(isCardExpired(1, 2025, now), true)
+})
+
+test('la tarjeta se normaliza y solo conserva datos no sensibles', () => {
+  const ok = validateCardInput(card, now)
+  assert.deepEqual(ok, { marca: 'Visa', ultimos4: '4242', titular: 'Ana Pérez', venceMes: 8, venceAnio: 2028 })
+  assert.equal(cardLabel(ok), 'Visa •••• 4242')
+})
+
+test('rechaza tarjetas inválidas o vencidas', () => {
+  assert.throws(() => validateCardInput({ ...card, marca: 'Otra marca' }, now), /marca/i)
+  assert.throws(() => validateCardInput({ ...card, ultimos4: '4111111111111111' }, now), /4 dígitos/)
+  assert.throws(() => validateCardInput({ ...card, ultimos4: '12a4' }, now), /4 dígitos/)
+  assert.throws(() => validateCardInput({ ...card, titular: 'A' }, now), /titular/i)
+  assert.throws(() => validateCardInput({ ...card, venceMes: 13 }, now), /mes/i)
+  assert.throws(() => validateCardInput({ ...card, venceMes: 3, venceAnio: 26 }, now), /vencida/i)
+})

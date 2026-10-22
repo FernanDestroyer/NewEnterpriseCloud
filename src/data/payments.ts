@@ -98,3 +98,36 @@ export function readYapeSettings(records: RecordItem[]): YapeSettings | null {
 export function readPlinSettings(records: RecordItem[]): WalletSettings | null {
   return readWalletSettings(records, 'plin')
 }
+
+/** Tarjetas de crédito/débito registradas en la cuenta del cliente. Solo se guarda lo no sensible: nunca el número completo ni el CVV. */
+export const CARD_BRANDS = ['Visa', 'Mastercard', 'American Express', 'Diners Club', 'Otra'] as const
+
+export type CustomerCard = { id: string; clienteId: string; marca: string; ultimos4: string; titular: string; venceMes: number; venceAnio: number }
+export type CardInput = { marca: string; ultimos4: string; titular: string; venceMes: number; venceAnio: number }
+
+/** Una tarjeta vence al final del mes indicado. */
+export function isCardExpired(venceMes: number, venceAnio: number, now = new Date()): boolean {
+  const year = venceAnio < 100 ? 2000 + venceAnio : venceAnio
+  return year < now.getFullYear() || (year === now.getFullYear() && venceMes < now.getMonth() + 1)
+}
+
+export function validateCardInput(input: CardInput, now = new Date()): CardInput {
+  const card = {
+    marca: input.marca.trim(),
+    ultimos4: input.ultimos4.trim(),
+    titular: input.titular.trim().replace(/\s+/g, ' '),
+    venceMes: Math.trunc(Number(input.venceMes)),
+    venceAnio: Math.trunc(Number(input.venceAnio)),
+  }
+  if (!(CARD_BRANDS as readonly string[]).includes(card.marca)) throw new Error('Elige la marca de la tarjeta.')
+  if (!/^\d{4}$/.test(card.ultimos4)) throw new Error('Escribe los últimos 4 dígitos de la tarjeta.')
+  if (card.titular.length < 3) throw new Error('Escribe el nombre del titular como aparece en la tarjeta.')
+  if (!(card.venceMes >= 1 && card.venceMes <= 12)) throw new Error('El mes de vencimiento debe estar entre 01 y 12.')
+  if (card.venceAnio < 0 || card.venceAnio > 2999) throw new Error('El año de vencimiento no es válido.')
+  if (isCardExpired(card.venceMes, card.venceAnio, now)) throw new Error('La tarjeta está vencida.')
+  return { ...card, venceAnio: card.venceAnio < 100 ? 2000 + card.venceAnio : card.venceAnio }
+}
+
+export function cardLabel(card: { marca: string; ultimos4: string }): string {
+  return `${card.marca} •••• ${card.ultimos4}`
+}
