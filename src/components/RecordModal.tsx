@@ -8,8 +8,8 @@ import { fetchDocumentLines, fetchPaymentMethods, friendlyError } from '../servi
 import { customerCredit } from '../data/workspace'
 import { isPeruLookupConfigured, lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
-import { isYapeMethod, salePayableTotal, type YapeSettings } from '../data/payments'
-import { fetchYapeSettings } from '../services/yape'
+import { salePayableTotal, walletForMethod, type YapeSettings } from '../data/payments'
+import { fetchWalletSettings } from '../services/yape'
 import YapePaymentPanel from './YapePaymentPanel'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 import { useDialog } from './useDialog'
@@ -92,7 +92,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
     }
   }, [page, record?.medio])
   useEffect(() => {
-    if (page !== 'sales' || !isYapeMethod(saleMethod)) {
+    if (page !== 'sales' || !walletForMethod(saleMethod)) {
       setYapeSettings(null)
       setYapeError('')
       setYapeLoading(false)
@@ -102,7 +102,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
     setYapeSettings(null)
     setYapeLoading(true)
     setYapeError('')
-    fetchYapeSettings().then(settings => { if (active) setYapeSettings(settings) })
+    fetchWalletSettings(walletForMethod(saleMethod)!).then(settings => { if (active) setYapeSettings(settings) })
       .catch(error => { if (active) setYapeError(friendlyError(error)) })
       .finally(() => { if (active) setYapeLoading(false) })
     return () => { active = false }
@@ -718,7 +718,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                   {saleMethods.map((method) => <option key={method} value={method}>{method}</option>)}
                 </select>
               </label>
-              {isYapeMethod(saleMethod) && <YapePaymentPanel settings={yapeSettings} total={saleTotal} loading={yapeLoading} totalLoading={linesLoading} error={yapeError} onRetry={() => setYapeReload(value => value + 1)} />}
+              {walletForMethod(saleMethod) && <YapePaymentPanel wallet={walletForMethod(saleMethod)!} settings={yapeSettings} total={saleTotal} loading={yapeLoading} totalLoading={linesLoading} error={yapeError} onRetry={() => setYapeReload(value => value + 1)} />}
             </div>
           )}
           {page === 'sales' ? (

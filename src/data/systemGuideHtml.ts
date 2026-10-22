@@ -123,7 +123,7 @@ export function renderSystemGuide(brand: SystemGuideBrand): string {
       <p>EnterpriseCloud centraliza la operación comercial: cada venta, compra, movimiento de stock y cobro queda registrado una sola vez y se refleja automáticamente en panel, tesorería, Kardex y reportes. No existe modo de demostración: lo que ves es tu operación real.</p>
       <div class="cards">
         ${card('Lo que el sistema hace por ti', ['Unifica ventas, compras, inventario y finanzas en un solo panel.', 'Descuenta o ingresa stock automáticamente al guardar el documento.', 'Genera cuentas por cobrar y por pagar sin digitación doble.', 'Audita altas, cambios y bajas de cada registro.'])}
-        ${card('Lo que el sistema no hace', ['No duplica el stock al imprimir un comprobante.', 'No permite stock negativo ni borrar documentos con líneas o pagos.', 'No confirma pagos de Yape automáticamente: se verifica en la app.', 'No guarda archivos físicos: Documentos conserva referencias y metadatos.'], 'gold')}
+        ${card('Lo que el sistema no hace', ['No duplica el stock al imprimir un comprobante.', 'No permite stock negativo ni borrar documentos con líneas o pagos.', 'No confirma pagos de Yape/Plin automáticamente: se verifica en la app.', 'No guarda archivos físicos: Documentos conserva referencias y metadatos.'], 'gold')}
       </div>
       <div class="tip"><span>◆</span><p><strong>Principio de oro:</strong> el documento manda. Si la venta está registrada, el stock, la cuenta por cobrar y el comprobante ya existen. No vuelvas a digitarlos.</p></div>
     </div>
@@ -139,7 +139,7 @@ export function renderSystemGuide(brand: SystemGuideBrand): string {
         ${card('Comercial', ['Panel de control: resumen, gráfico y alertas.', 'Ventas + comprobantes imprimibles (Factura, Boleta, N. de venta).', 'Cotizaciones convertibles en venta con un clic.', 'Clientes con DNI / RUC, línea de crédito y historial.'])}
         ${card('Abastecimiento', ['Órdenes de compra con seguimiento Solicitud → Pagada.', 'Catálogo por proveedor independiente del inventario.', 'Importación masiva de proveedores por CSV.', 'Ingreso al Kardex solo desde Recepción.'], 'gold')}
         ${card('Operación y finanzas', ['Stock global + Kardex con entradas, salidas y ajustes.', 'Tesorería: cuentas por cobrar / pagar y cancelación total.', 'Caja por turnos con conteo y descuadre por medio.', 'Reportes ejecutivos con exportación a PDF.'], 'navy')}
-        ${card('Administración', ['Mantenimiento: clientes, productos, proveedores y empresa.', 'Métodos de pago, monedas y QR de Yape.', 'Permisos: cuentas, roles y estados.', 'Perfil: nombre, foto y permisos de tu rol.'], '')}
+        ${card('Administración', ['Mantenimiento: clientes, productos, proveedores y empresa.', 'Métodos de pago, monedas y QR de Yape y Plin.', 'Permisos: cuentas, roles y estados.', 'Perfil: nombre, foto y permisos de tu rol.'], '')}
       </div>
     </div>
     <div class="footer"><div><strong>${company}</strong> · Guía del sistema · Fundamentos y seguridad</div><div class="page-no">02 / 04</div></div>
@@ -168,7 +168,7 @@ export function renderSystemGuide(brand: SystemGuideBrand): string {
   const page4 = `<section class="sheet" aria-label="Integraciones y cierre">
     <div class="section"><div class="kicker">08 · Integraciones peruanas</div><h2>Yape, RENIEC / SUNAT e importación masiva</h2>
       <div class="cards">
-        ${card('Yape con QR del negocio', ['Sube tu QR en Mantenimiento → QR de Yape (PNG/JPG/WebP ≤1MB).', 'En Nueva venta elige Yape: se muestra el QR con el total vivo.', 'El cliente digita el monto en su app; verifica y marca Completada.'])}
+        ${card('Yape y Plin con QR del negocio', ['Sube tu QR en Mantenimiento → QR de Yape o QR de Plin (PNG/JPG/WebP ≤1MB).', 'En Nueva venta elige Yape o Plin: se muestra el QR con el total vivo.', 'El cliente digita el monto en su app; verifica y marca Completada.'])}
         ${card('DNI y RUC verificados', ['Clientes: DNI 8 dígitos o RUC 11 con dígito verificador.', 'Botón de búsqueda autocompleta nombre y dirección.', 'Proveedores: botón SUNAT con RUC; sin token, digitación manual.'], 'gold')}
         ${card('Importación por CSV', ['Plantilla: ruc, razon_social, direccion, correo, telefono, forma_pago, estado, productos.', 'Productos: “Nombre | costo | detalle // …” entrecomillado.', 'El sistema valida RUC, duplicados y costos sin abortar la carga.'], 'navy')}
         ${card('Comprobantes formales', ['Series automáticas: F001, B001, COT y NV con correlativo.', 'El voucher desglosa base e IGV (total / 1.18) solo en presentación.', 'Imprime desde la tabla; reimprimir no mueve stock.'], '')}

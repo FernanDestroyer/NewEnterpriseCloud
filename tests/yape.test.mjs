@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { EMPTY_YAPE_SETTINGS, MAX_YAPE_QR_BYTES, isValidYapeQrImage, isYapeMethod, parseYapeSettings, readYapeSettings, salePayableTotal, validateYapeSettings, YAPE_CONFIG_CODE } from '../src/data/payments.ts'
+import { PLIN_CONFIG_CODE, isPlinMethod, readPlinSettings, walletForMethod, EMPTY_YAPE_SETTINGS, MAX_YAPE_QR_BYTES, isValidYapeQrImage, isYapeMethod, parseYapeSettings, readYapeSettings, salePayableTotal, validateYapeSettings, YAPE_CONFIG_CODE } from '../src/data/payments.ts'
 
 const qr = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9GQAAAAASUVORK5CYII='
 const settings = { titular: 'Comercio de prueba', celular: '987654321', qrImage: qr, enabled: true }
@@ -59,4 +59,25 @@ test('el QR del comercio se lee solo desde su registro de configuración', () =>
   assert.throws(() => parseYapeSettings('no-json'), /configuración de Yape/)
   assert.throws(() => parseYapeSettings('null'), /configuración de Yape/)
   assert.throws(() => parseYapeSettings('[]'), /configuración de Yape/)
+})
+
+test('Plin tiene su propio medio de pago y no se confunde con Yape', () => {
+  assert.equal(isPlinMethod(' PLIN '), true)
+  assert.equal(isPlinMethod('Yape'), false)
+  assert.equal(walletForMethod('Yape'), 'yape')
+  assert.equal(walletForMethod('plin'), 'plin')
+  assert.equal(walletForMethod('Efectivo'), null)
+  assert.equal(walletForMethod('Yape / Plin'), null)
+})
+
+test('la configuración de Plin se lee de su propio registro y usa su nombre en los errores', () => {
+  const plin = { ...settings, titular: 'Titular Plin' }
+  const records = [
+    { id: YAPE_CONFIG_CODE, detail: JSON.stringify(settings) },
+    { id: PLIN_CONFIG_CODE, detail: JSON.stringify(plin) },
+  ]
+  assert.deepEqual(readPlinSettings(records), plin)
+  assert.equal(readPlinSettings([records[0]]), null)
+  assert.throws(() => validateYapeSettings({ ...plin, titular: '' }, 'Plin'), /Plin/)
+  assert.throws(() => parseYapeSettings('no es json', 'Plin'), /Plin/)
 })

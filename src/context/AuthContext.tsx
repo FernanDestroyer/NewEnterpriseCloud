@@ -14,7 +14,7 @@ export type Profile = {
 }
 
 type SignUpResult = { error: string | null; needsConfirmation: boolean }
-type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar'
+type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar' | 'importar'
 
 type AuthContextValue = {
   session: Session | null
