@@ -14,7 +14,7 @@ export type Profile = {
 }
 
 type SignUpResult = { error: string | null; needsConfirmation: boolean }
-type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar'
+export type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar' | 'importar'
 
 type AuthContextValue = {
   session: Session | null
@@ -91,6 +91,23 @@ async function loadProfile(session: Session): Promise<{ profile: Profile; permis
       const values = Array.isArray(entry.permisos) ? entry.permisos : entry.permisos ? [entry.permisos] : []
       for (const permission of values) permissions.push(`${permission.modulo}:${permission.accion}`)
     }
+  }
+  // Overrides are optional until the permissions-customization migration is installed.
+  const overrides = await supabase.from('usuario_permisos').select('permitido, permisos(modulo, accion)').eq('usuario_id', session.user.id)
+  if (!overrides.error) {
+    for (const entry of overrides.data as unknown as Array<{ permitido: boolean; permisos: { modulo: string; accion: string } | { modulo: string; accion: string }[] | null }>) {
+      const values = Array.isArray(entry.permisos) ? entry.permisos : entry.permisos ? [entry.permisos] : []
+      for (const permission of values) {
+        const key = `${permission.modulo}:${permission.accion}`
+        if (entry.permitido) permissions.push(key)
+        else {
+          const index = permissions.indexOf(key)
+          if (index >= 0) permissions.splice(index, 1)
+        }
+      }
+    }
+  } else if (!['42P01', 'PGRST205'].includes(String((overrides.error as { code?: string }).code ?? ''))) {
+    throw new Error(`No se pudieron cargar tus permisos personalizados: ${overrides.error.message}`)
   }
   return { profile: { id: row.id, nombre: row.nombre, email: row.email ?? session.user.email ?? '', rol: role?.nombre ?? 'Sin rol', activo: row.activo, avatarUrl: row.avatar_url ?? null }, permissions }
 }

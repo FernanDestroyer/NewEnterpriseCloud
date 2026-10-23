@@ -8,9 +8,11 @@ import { fetchDocumentLines, fetchPaymentMethods, friendlyError } from '../servi
 import { customerCredit } from '../data/workspace'
 import { isPeruLookupConfigured, lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
-import { isYapeMethod, salePayableTotal, type YapeSettings } from '../data/payments'
+import { isYapeMethod, isPlinMethod, isBankTransferMethod, salePayableTotal, type YapeSettings, type PlinSettings, type BankTransferSettings } from '../data/payments'
 import { fetchYapeSettings } from '../services/yape'
+import { fetchPlinSettings, fetchBankTransferSettings } from '../services/paymentSettings'
 import YapePaymentPanel from './YapePaymentPanel'
+import { BankTransferPaymentPanel, WalletPaymentPanel } from './AdditionalPaymentPanels'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 import { useDialog } from './useDialog'
 
@@ -73,6 +75,14 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   const [yapeLoading, setYapeLoading] = useState(false)
   const [yapeError, setYapeError] = useState('')
   const [yapeReload, setYapeReload] = useState(0)
+  const [plinSettings, setPlinSettings] = useState<PlinSettings | null>(null)
+  const [plinLoading, setPlinLoading] = useState(false)
+  const [plinError, setPlinError] = useState('')
+  const [plinReload, setPlinReload] = useState(0)
+  const [bankSettings, setBankSettings] = useState<BankTransferSettings | null>(null)
+  const [bankLoading, setBankLoading] = useState(false)
+  const [bankError, setBankError] = useState('')
+  const [bankReload, setBankReload] = useState(0)
   useEffect(() => {
     if (page !== 'sales') return
     let active = true
@@ -107,6 +117,18 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
       .finally(() => { if (active) setYapeLoading(false) })
     return () => { active = false }
   }, [page, saleMethod, lastSyncedAt, yapeReload])
+  useEffect(() => {
+    if (page !== 'sales' || !isPlinMethod(saleMethod)) { setPlinSettings(null); setPlinError(''); setPlinLoading(false); return }
+    let active = true; setPlinSettings(null); setPlinLoading(true); setPlinError('')
+    fetchPlinSettings().then(settings => { if (active) setPlinSettings(settings) }).catch(error => { if (active) setPlinError(friendlyError(error)) }).finally(() => { if (active) setPlinLoading(false) })
+    return () => { active = false }
+  }, [page, saleMethod, lastSyncedAt, plinReload])
+  useEffect(() => {
+    if (page !== 'sales' || !isBankTransferMethod(saleMethod)) { setBankSettings(null); setBankError(''); setBankLoading(false); return }
+    let active = true; setBankSettings(null); setBankLoading(true); setBankError('')
+    fetchBankTransferSettings().then(settings => { if (active) setBankSettings(settings) }).catch(error => { if (active) setBankError(friendlyError(error)) }).finally(() => { if (active) setBankLoading(false) })
+    return () => { active = false }
+  }, [page, saleMethod, lastSyncedAt, bankReload])
   const dialogRef = useDialog<HTMLFormElement>(onClose, saving)
 
   const hasClientRelation = page === 'sales' || page === 'quotes'
@@ -719,6 +741,8 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                 </select>
               </label>
               {isYapeMethod(saleMethod) && <YapePaymentPanel settings={yapeSettings} total={saleTotal} loading={yapeLoading} totalLoading={linesLoading} error={yapeError} onRetry={() => setYapeReload(value => value + 1)} />}
+              {isPlinMethod(saleMethod) && <WalletPaymentPanel brand="Plin" settings={plinSettings} total={saleTotal} loading={plinLoading} totalLoading={linesLoading} error={plinError} onRetry={() => setPlinReload(value => value + 1)} />}
+              {isBankTransferMethod(saleMethod) && <BankTransferPaymentPanel settings={bankSettings} total={saleTotal} loading={bankLoading} error={bankError} onRetry={() => setBankReload(value => value + 1)} />}
             </div>
           )}
           {page === 'sales' ? (

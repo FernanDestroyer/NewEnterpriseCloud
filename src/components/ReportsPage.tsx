@@ -7,7 +7,7 @@ import { fetchInventoryValuation } from '../services/records'
 import { inDateRange } from '../data/workspace'
 import { money } from '../data/helpers'
 import { financialSnapshot, totalAmount } from '../data/dashboard'
-import ModuloPage, { type ModuleView } from './ModuloPage'
+import ModuloPage, { type ModuleView } from '../pages/ModuloPage'
 import type { DataPage } from '../types'
 
 function ValuationDetail({ rows, total, pending, errorText }: {

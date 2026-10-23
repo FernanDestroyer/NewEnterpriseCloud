@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Download, RefreshCw, Wallet, Wrench, Coins, QrCode } from 'lucide-react'
+import { Download, RefreshCw, Wallet, Wrench, Coins, QrCode, Landmark } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import {
@@ -8,13 +8,15 @@ import {
   type Currency, type PaymentMethod,
 } from '../services/records'
 
-import ModuloPage from './ModuloPage'
-import YapeSettingsForm from '../components/YapeSettingsForm'
-import { readYapeSettings } from '../data/payments'
+import ModuloPage from '../pages/ModuloPage'
+import YapeSettingsForm from './YapeSettingsForm'
+import PlinSettingsForm from './PlinSettingsForm'
+import BankTransferSettingsForm from './BankTransferSettingsForm'
+import { readYapeSettings, parsePlinSettings, parseBankTransferSettings, PLIN_CONFIG_CODE, BANK_TRANSFER_CONFIG_CODE } from '../data/payments'
 import type { DataPage } from '../types'
 
 type CatalogTab = { page: 'customers' | 'inventory' | 'suppliers'; label: string }
-type PanelId = 'metodos' | 'moneda' | 'yape' | null
+type PanelId = 'metodos' | 'moneda' | 'yape' | 'plin' | 'transferencia' | null
 
 function CatalogModal({ title, description, onClose, children }: { title: string; description: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
@@ -90,6 +92,8 @@ export default function MaintenancePage() {
     try { const settings = readYapeSettings(records.settings); return Boolean(settings?.enabled && settings.qrImage) }
     catch { return false }
   })()
+  const plinConfigured = (() => { try { const row = records.settings.find(item => item.id === PLIN_CONFIG_CODE); const settings = row ? parsePlinSettings(row.detail) : null; return Boolean(settings?.enabled && settings.qrImage) } catch { return false } })()
+  const bankConfigured = (() => { try { const row = records.settings.find(item => item.id === BANK_TRANSFER_CONFIG_CODE); const settings = row ? parseBankTransferSettings(row.detail) : null; return Boolean(settings?.enabled && settings.numeroCuenta) } catch { return false } })()
 
 
   const addMethod = async (event: FormEvent<HTMLFormElement>) => {
@@ -177,9 +181,13 @@ export default function MaintenancePage() {
       <article className="ws-card ws-report-card"><span className="ws-soft-icon green"><Wallet size={21} /></span><h2>Métodos de pago</h2><p>{methods.filter(item => item.activo).length} aceptados en cobranza y pagos.</p><span><button className="ws-text-button" aria-expanded={expanded === 'metodos'} onClick={() => setExpanded(current => (current === 'metodos' ? null : 'metodos'))}>{expanded === 'metodos' ? 'Ocultar' : 'Administrar'}</button></span></article>
       <article className="ws-card ws-report-card"><span className="ws-soft-icon amber"><Coins size={21} /></span><h2>Tipos de moneda</h2><p>{currencies.filter(item => item.activo).length} monedas configuradas.</p><span><button className="ws-text-button" aria-expanded={expanded === 'moneda'} onClick={() => setExpanded(current => (current === 'moneda' ? null : 'moneda'))}>{expanded === 'moneda' ? 'Ocultar' : 'Administrar'}</button></span></article>
       <article className="ws-card ws-report-card"><span className="ws-soft-icon violet"><QrCode size={21} /></span><h2>QR de Yape</h2><p>{yapeConfigured ? 'Tu QR se muestra junto al total al seleccionar Yape en ventas.' : 'Carga tu QR de Yape y los datos del titular para cobrar.'}</p><span><button className="ws-text-button" aria-expanded={expanded === 'yape'} onClick={() => setExpanded(current => current === 'yape' ? null : 'yape')}>{expanded === 'yape' ? 'Ocultar' : 'Configurar QR'}</button></span></article>
+      <article className="ws-card ws-report-card"><span className="ws-soft-icon violet"><QrCode size={21} /></span><h2>QR de Plin</h2><p>{plinConfigured ? 'Tu QR se muestra al seleccionar Plin en ventas.' : 'Configura el QR y titular de Plin.'}</p><span><button className="ws-text-button" aria-expanded={expanded === 'plin'} onClick={() => setExpanded(current => current === 'plin' ? null : 'plin')}>{expanded === 'plin' ? 'Ocultar' : 'Configurar QR'}</button></span></article>
+      <article className="ws-card ws-report-card"><span className="ws-soft-icon green"><Landmark size={21} /></span><h2>Transferencia bancaria</h2><p>{bankConfigured ? 'La cuenta configurada se muestra al registrar ventas.' : 'Agrega los datos de la cuenta que recibirá los pagos.'}</p><span><button className="ws-text-button" aria-expanded={expanded === 'transferencia'} onClick={() => setExpanded(current => current === 'transferencia' ? null : 'transferencia')}>{expanded === 'transferencia' ? 'Ocultar' : 'Configurar cuenta'}</button></span></article>
     </div></section>
     {expanded === 'metodos' && <CatalogModal title="Métodos de pago" description="Medios aceptados al cobrar y pagar. Desactiva el que falle." onClose={() => setExpanded(null)}><div className="supplier-product-list">{methods.map(method => <div className="supplier-product-row" key={method.id}><span className="supplier-product-copy"><strong>{method.nombre}</strong><small>{method.activo ? 'Aceptado en cobranza y pagos' : 'Desactivado: no se ofrece'}</small></span><span className="supplier-product-actions">{method.activo ? (can('finance', 'editar') && <button className="export-button" type="button" disabled={methodBusy} onClick={() => void toggleMethod(method)}>Desactivar</button>) : (can('finance', 'editar') && <button className="export-button" type="button" disabled={methodBusy} onClick={() => void toggleMethod(method)}>Activar</button>)}</span></div>)}</div>{can('finance', 'crear') && <form className="supplier-link-bar" onSubmit={addMethod}><input aria-label="Nombre del método de pago" name="nombre" required minLength={2} placeholder="Nuevo método (ej. Billetera X)" /><button className="primary-button" type="submit" disabled={methodBusy}>{methodBusy ? 'Guardando…' : 'Agregar'}</button></form>}{methodMsg && <div className="ws-notice ws-notice-warning" role="alert">{methodMsg}</div>}</CatalogModal>}
     {expanded === 'moneda' && <CatalogModal title="Tipos de moneda" description="La base es el sol peruano (PEN). Activa o desactiva las demás." onClose={() => setExpanded(null)}>{currenciesLoading ? <div className="ws-empty-compact"><RefreshCw size={26} className="ws-spin" /><strong>Cargando monedas…</strong></div> : <><div className="supplier-product-list">{currencies.map(currency => <div className="supplier-product-row" key={currency.id}><span className="supplier-product-copy"><strong>{currency.nombre}</strong><small>{currency.codigo} · {currency.simbolo} · {currency.activo ? 'Activa' : 'Desactivada'}</small></span><span className="supplier-product-actions">{can('finance', 'editar') && <button className="export-button" type="button" disabled={currencyBusy} onClick={() => void toggleCurrency(currency)}>{currency.activo ? 'Desactivar' : 'Activar'}</button>}</span></div>)}</div>{can('finance', 'crear') && <form className="supplier-link-bar" onSubmit={addCurrency}><input aria-label="Nombre de la moneda" name="nombre" required minLength={2} placeholder="Ej. Dólar" /><input aria-label="Código de la moneda" name="codigo" required minLength={3} maxLength={3} placeholder="USD" /><input aria-label="Símbolo de la moneda" name="simbolo" required placeholder="$" /><button className="primary-button" type="submit" disabled={currencyBusy}>{currencyBusy ? 'Guardando…' : 'Agregar'}</button></form>}{currencyMsg && <div className="ws-notice ws-notice-warning" role="alert">{currencyMsg}</div>}</>}</CatalogModal>}
     {expanded === 'yape' && <CatalogModal title="QR de Yape" description="Guarda tu QR original y el nombre de quien recibe el yapeo." onClose={() => setExpanded(null)}><YapeSettingsForm canCreate={can('settings', 'crear')} canEdit={can('settings', 'editar')} onSaved={async () => { await reload(); notify('Configuración de Yape guardada en Supabase.') }} /></CatalogModal>}
+    {expanded === 'plin' && <CatalogModal title="QR de Plin" description="Guarda el QR original y los datos del titular que recibe el pago." onClose={() => setExpanded(null)}><PlinSettingsForm canCreate={can('settings', 'crear')} canEdit={can('settings', 'editar')} onSaved={async () => { await reload(); notify('Configuración de Plin guardada en Supabase.') }} /></CatalogModal>}
+    {expanded === 'transferencia' && <CatalogModal title="Transferencia bancaria" description="Configura la cuenta a la que tus clientes enviarán sus pagos." onClose={() => setExpanded(null)}><BankTransferSettingsForm canCreate={can('settings', 'crear')} canEdit={can('settings', 'editar')} onSaved={async () => { await reload(); notify('Cuenta bancaria guardada en Supabase.') }} /></CatalogModal>}
   </>
 }

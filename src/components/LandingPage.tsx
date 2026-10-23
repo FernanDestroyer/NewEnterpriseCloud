@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import Landing from '../components/landing/Landing'
+import Landing from './landing/Landing'
 import { useRecords } from '../context/RecordsContext'
 import { useTheme } from '../context/ThemeContext'
 

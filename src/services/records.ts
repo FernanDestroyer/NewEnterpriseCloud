@@ -2,13 +2,17 @@ import { requireSupabase } from '../lib/supabase'
 import { salePayableTotal } from '../data/payments'
 import { DATA_PAGES } from '../data/catalog'
 import { formatWhen, purchaseHasStock, totalWithIgv } from '../data/helpers'
-import type { SupplierImportReport, SupplierImportRow } from './import'
+import type { CustomerImportRow, PurchaseImportRow, SalesImportRow, SupplierImportReport, SupplierImportRow } from './import'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 
 type Row = Record<string, unknown>
 
 // Datos que captura el formulario (RecordModal).
 export type RecordInput = {
+  /** Código de origen conservado en importaciones; se prefija para no colisionar con códigos internos. */
+  reference?: string
+  /** Fecha de origen para importación de registros históricos. */
+  created_at?: string
   name: string
   detail: string
   status: RecordStatus
@@ -166,6 +170,8 @@ function toRecord(page: DataPage, row: Row): RecordItem {
 function toRow(page: DataPage, input: RecordInput): Row {
   const config = pageConfig[page]
   const row: Row = { [config.name]: input.name, detalle: input.detail, estado: input.status }
+  if ((page === 'sales' || page === 'purchases') && input.reference) row.codigo = `IMP-${input.reference.trim()}`
+  if ((page === 'sales' || page === 'purchases') && input.created_at) row.created_at = input.created_at
   if (page === 'finance' && input.financeType !== undefined) row.tipo = input.financeType
   if (page === 'finance' && input.medio_pago !== undefined) row.medio_pago = input.medio_pago || null
   // Medio de pago de la venta (solo ese módulo lo usa).
@@ -541,6 +547,90 @@ export async function insertRecord(page: DataPage, input: RecordInput): Promise<
   return toRecord(page, attempt.data as Row)
 }
 
+export type ModuleImportIssue = { line: number; reference: string; reason: string }
+export type ModuleImportReport = { created: number; skipped: ModuleImportIssue[]; failed: ModuleImportIssue[] }
+
+/** Importa clientes en modo append-only y evita duplicar documentos existentes. */
+export async function importCustomers(rows: CustomerImportRow[]): Promise<ModuleImportReport> {
+  const client = requireSupabase()
+  const report: ModuleImportReport = { created: 0, skipped: [], failed: [] }
+  const documents = [...new Set(rows.map(row => row.documento).filter(Boolean))]
+  const existingDocuments = new Set<string>()
+  if (documents.length) {
+    const { data, error } = await client.from('clientes').select('documento').in('documento', documents)
+    if (error) throw error
+    for (const row of (data ?? []) as Array<{ documento: string | null }>) if (row.documento) existingDocuments.add(row.documento)
+  }
+  for (const row of rows) {
+    if (row.documento && existingDocuments.has(row.documento)) {
+      report.skipped.push({ line: row.line, reference: row.documento, reason: 'El documento ya está registrado.' })
+      continue
+    }
+    try {
+      await insertRecord('customers', { name: row.razonSocial, detail: row.detalle, status: row.estado, tipo_doc: row.tipoDoc, documento: row.documento || null, amount: row.lineaCredito })
+      if (row.documento) existingDocuments.add(row.documento)
+      report.created++
+    } catch (error) { report.failed.push({ line: row.line, reference: row.documento || row.razonSocial, reason: friendlyError(error) }) }
+  }
+  return report
+}
+
+/** Importa ventas históricas de cabecera; los códigos de origen se conservan como IMP-<código>. */
+export async function importSales(rows: SalesImportRow[]): Promise<ModuleImportReport> {
+  const client = requireSupabase()
+  const report: ModuleImportReport = { created: 0, skipped: [], failed: [] }
+  const codes = [...new Set(rows.map(row => `IMP-${row.codigo.trim()}`))]
+  const { data: existing, error: existingError } = await client.from('ventas').select('codigo').in('codigo', codes)
+  if (existingError) throw existingError
+  const existingCodes = new Set(((existing ?? []) as Array<{ codigo: string }>).map(row => row.codigo))
+  const relationCodes = [...new Set(rows.map(row => row.clienteCodigo).filter(Boolean))]
+  const clientIds = new Map<string, string>()
+  if (relationCodes.length) {
+    const { data, error } = await client.from('clientes').select('id,codigo').in('codigo', relationCodes)
+    if (error) throw error
+    for (const row of (data ?? []) as Array<{ id: string; codigo: string }>) clientIds.set(row.codigo, row.id)
+  }
+  for (const row of rows) {
+    const reference = `IMP-${row.codigo.trim()}`
+    if (existingCodes.has(reference)) { report.skipped.push({ line: row.line, reference: row.codigo, reason: 'El código ya fue importado.' }); continue }
+    if (row.clienteCodigo && !clientIds.has(row.clienteCodigo)) { report.failed.push({ line: row.line, reference: row.codigo, reason: `No existe el cliente ${row.clienteCodigo}.` }); continue }
+    try {
+      await insertSaleWithLines({ reference: row.codigo, created_at: row.fecha ? `${row.fecha}T12:00:00.000Z` : undefined, name: row.clienteNombre, detail: row.detalle, status: row.estado, amount: row.monto, medio_pago: row.medioPago || null, cliente_id: row.clienteCodigo ? clientIds.get(row.clienteCodigo) : null }, [])
+      existingCodes.add(reference)
+      report.created++
+    } catch (error) { report.failed.push({ line: row.line, reference: row.codigo, reason: friendlyError(error) }) }
+  }
+  return report
+}
+
+/** Importa compras históricas de cabecera; no genera movimientos de stock sin líneas de producto. */
+export async function importPurchases(rows: PurchaseImportRow[]): Promise<ModuleImportReport> {
+  const client = requireSupabase()
+  const report: ModuleImportReport = { created: 0, skipped: [], failed: [] }
+  const codes = [...new Set(rows.map(row => `IMP-${row.codigo.trim()}`))]
+  const { data: existing, error: existingError } = await client.from('compras').select('codigo').in('codigo', codes)
+  if (existingError) throw existingError
+  const existingCodes = new Set(((existing ?? []) as Array<{ codigo: string }>).map(row => row.codigo))
+  const relationCodes = [...new Set(rows.map(row => row.proveedorCodigo).filter(Boolean))]
+  const supplierIds = new Map<string, string>()
+  if (relationCodes.length) {
+    const { data, error } = await client.from('proveedores').select('id,codigo').in('codigo', relationCodes)
+    if (error) throw error
+    for (const row of (data ?? []) as Array<{ id: string; codigo: string }>) supplierIds.set(row.codigo, row.id)
+  }
+  for (const row of rows) {
+    const reference = `IMP-${row.codigo.trim()}`
+    if (existingCodes.has(reference)) { report.skipped.push({ line: row.line, reference: row.codigo, reason: 'El código ya fue importado.' }); continue }
+    if (row.proveedorCodigo && !supplierIds.has(row.proveedorCodigo)) { report.failed.push({ line: row.line, reference: row.codigo, reason: `No existe el proveedor ${row.proveedorCodigo}.` }); continue }
+    try {
+      await insertPurchaseWithLines({ reference: row.codigo, created_at: row.fecha ? `${row.fecha}T12:00:00.000Z` : undefined, name: row.proveedorNombre, detail: row.detalle, status: row.estado, amount: row.monto, proveedor_id: row.proveedorCodigo ? supplierIds.get(row.proveedorCodigo) : null, fecha_limite: row.fechaLimite || null, comprobante_tipo: row.comprobanteTipo || null, comprobante_numero: row.comprobanteNumero || null }, [])
+      existingCodes.add(reference)
+      report.created++
+    } catch (error) { report.failed.push({ line: row.line, reference: row.codigo, reason: friendlyError(error) }) }
+  }
+  return report
+}
+
 export async function updateRecord(page: DataPage, code: string, input: RecordInput): Promise<RecordItem> {
   const payload = toRow(page, input)
   // La edición siempre refresca updated_at (trazabilidad y ventanas de caja).
@@ -897,6 +987,7 @@ async function createRelatedPago(kind: 'sale' | 'purchase', header: Row, total: 
     tipo: isSale ? 'cobrar' : 'pagar',
     venta_id: isSale ? String(header.id) : null,
     compra_id: isSale ? null : String(header.id),
+    ...(typeof header.created_at === 'string' ? { created_at: header.created_at } : {}),
     ...(isSale && header.medio_pago !== undefined ? { medio_pago: header.medio_pago || null } : {}),
   })
   if (error) throw error

@@ -14,6 +14,10 @@ export type AppUser = {
 }
 
 export type AppRole = { id: string; nombre: string }
+export type PermissionCatalogEntry = { id: string; modulo: string; accion: PermissionAction }
+export type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar' | 'importar'
+export type UserPermissionOverride = { permiso_id: string; permitido: boolean }
+export type RolePermissionLink = { rol_id: string; permiso_id: string }
 
 type UserRow = {
   id: string
@@ -55,6 +59,33 @@ export async function fetchRoles(): Promise<AppRole[]> {
   return ((data ?? []) as Array<{ id: string; nombre: string }>)
     .filter((row) => row.nombre.trim())
     .map((row) => ({ id: String(row.id), nombre: row.nombre }))
+}
+
+export async function fetchPermissionCatalog(): Promise<PermissionCatalogEntry[]> {
+  const { data, error } = await requireSupabase().from('permisos').select('id, modulo, accion').order('modulo').order('accion')
+  if (error) throw error
+  return ((data ?? []) as Array<{ id: string; modulo: string; accion: PermissionAction }>).map(row => ({ ...row, id: String(row.id) }))
+}
+
+export async function fetchRolePermissionLinks(): Promise<RolePermissionLink[]> {
+  const { data, error } = await requireSupabase().from('rol_permisos').select('rol_id, permiso_id')
+  if (error) throw error
+  return ((data ?? []) as RolePermissionLink[]).map(row => ({ rol_id: String(row.rol_id), permiso_id: String(row.permiso_id) }))
+}
+
+export async function fetchUserPermissionOverrides(userId: string): Promise<UserPermissionOverride[]> {
+  const { data, error } = await requireSupabase().from('usuario_permisos').select('permiso_id, permitido').eq('usuario_id', userId)
+  if (error) throw error
+  return ((data ?? []) as UserPermissionOverride[]).map(row => ({ permiso_id: String(row.permiso_id), permitido: Boolean(row.permitido) }))
+}
+
+/** Reemplaza las excepciones del usuario de forma atómica en la base de datos. */
+export async function saveUserPermissionOverrides(userId: string, overrides: UserPermissionOverride[]): Promise<void> {
+  const { error } = await requireSupabase().rpc('guardar_permisos_usuario', {
+    p_usuario_id: userId,
+    p_overrides: overrides.map(({ permiso_id, permitido }) => ({ permiso_id, permitido })),
+  })
+  if (error) throw error
 }
 
 /** Otorga un rol a una cuenta (solo administradores; la BD lo exige). */

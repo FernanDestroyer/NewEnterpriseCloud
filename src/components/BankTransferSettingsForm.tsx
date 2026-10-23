@@ -1,0 +1,24 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { RefreshCw, Save } from 'lucide-react'
+import { EMPTY_BANK_TRANSFER_SETTINGS, type BankTransferSettings } from '../data/payments'
+import { fetchBankTransferSettings, saveBankTransferSettings } from '../services/paymentSettings'
+import { friendlyError } from '../services/records'
+
+export default function BankTransferSettingsForm({ canCreate, canEdit, onSaved }: { canCreate: boolean; canEdit: boolean; onSaved: () => Promise<void> }) {
+  const [settings, setSettings] = useState<BankTransferSettings>({ ...EMPTY_BANK_TRANSFER_SETTINGS }); const [exists, setExists] = useState(false); const [loading, setLoading] = useState(true); const [failed, setFailed] = useState(false); const [reload, setReload] = useState(0); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [success, setSuccess] = useState(false)
+  const editable = exists ? canEdit : canCreate
+  useEffect(() => { let active = true; setLoading(true); setFailed(false); setMessage(''); fetchBankTransferSettings().then(saved => { if (active) { setExists(Boolean(saved)); setSettings(saved ?? { ...EMPTY_BANK_TRANSFER_SETTINGS }) } }).catch(error => { if (active) { setMessage(friendlyError(error)); setFailed(true) } }).finally(() => active && setLoading(false)); return () => { active = false } }, [reload])
+  const save = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!editable || loading || busy) return; setBusy(true); setMessage(''); setSuccess(false); try { await saveBankTransferSettings(settings); setExists(true); await onSaved(); setSuccess(true); setMessage('Datos de la cuenta bancaria guardados.') } catch (error) { setMessage(friendlyError(error)) } finally { setBusy(false) } }
+  if (loading) return <div className="ws-empty-compact"><RefreshCw size={24} className="ws-spin" /><strong>Cargando cuenta bancaria…</strong></div>
+  if (failed) return <div className="ws-notice ws-notice-warning" role="alert"><span>{message}</span><button className="ws-text-button" type="button" onClick={() => setReload(value => value + 1)}>Reintentar</button></div>
+  const field = (key: keyof BankTransferSettings, label: string, placeholder: string, required = false) => <label>{label}<input value={String(settings[key])} required={required && settings.enabled} disabled={!editable || busy} placeholder={placeholder} onChange={event => setSettings(value => ({ ...value, [key]: event.target.value }))} /></label>
+  return <form className="ws-form" onSubmit={save}>
+    <div className="ws-form-grid">{field('titular', 'Titular de la cuenta', 'Nombre de la persona o empresa', true)}{field('banco', 'Banco', 'Ej. BCP, BBVA, Interbank', true)}
+      <label>Tipo de cuenta<select value={settings.tipoCuenta} disabled={!editable || busy} onChange={event => setSettings(value => ({ ...value, tipoCuenta: event.target.value }))}><option>Ahorros</option><option>Corriente</option></select></label>
+      {field('numeroCuenta', 'Número de cuenta', 'Número de cuenta bancaria', true)}{field('cci', 'CCI (opcional)', '20 dígitos')}
+      <label>Moneda<select value={settings.moneda} disabled={!editable || busy} onChange={event => setSettings(value => ({ ...value, moneda: event.target.value }))}><option value="PEN">Soles (PEN)</option><option value="USD">Dólares (USD)</option></select></label></div>
+    <label className="yape-enabled"><input type="checkbox" checked={settings.enabled} disabled={!editable || busy} onChange={event => setSettings(value => ({ ...value, enabled: event.target.checked }))} /><span>Mostrar estos datos al seleccionar transferencia bancaria en ventas</span></label>
+    <div className="yape-settings-note">Los datos se mostrarán al vendedor para que los comparta con el cliente. Verifica el abono antes de completar la venta.</div>
+    {message && <div className={`ws-notice${success ? '' : ' ws-notice-warning'}`} role={success ? 'status' : 'alert'}>{message}</div>}{editable && <button className="ws-button" type="submit" disabled={busy}><Save size={16} />{busy ? 'Guardando…' : 'Guardar configuración'}</button>}
+  </form>
+}
