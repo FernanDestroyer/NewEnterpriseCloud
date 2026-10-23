@@ -4,7 +4,8 @@ import type { PlinSettings, BankTransferSettings } from '../data/payments'
 
 export function WalletPaymentPanel({ brand, settings, total, loading, totalLoading, error, onRetry }: { brand: string; settings: PlinSettings | null; total: number; loading: boolean; totalLoading: boolean; error: string; onRetry: () => void }) {
   const ready = !loading && settings?.enabled && settings.qrImage
-  return <section className="yape-payment-panel" aria-label={`Cobrar con ${brand}`}>
+  const brandClass = brand.toLocaleLowerCase('es') === 'plin' ? ' plin-payment-panel' : ''
+  return <section className={`yape-payment-panel${brandClass}`} aria-label={`Cobrar con ${brand}`}>
     <div className="yape-payment-heading"><span className="yape-payment-brand"><Smartphone size={16} />{brand}</span><span className="yape-payment-tag">Escanea y paga</span></div>
     <div className="yape-payment-body"><div className={`yape-payment-qr${ready ? '' : ' is-empty'}`}>{loading ? <RefreshCw size={26} className="ws-spin" /> : ready ? <img src={settings!.qrImage} alt={`QR de ${brand} de ${settings!.titular}`} /> : <QrCode size={38} />}</div>
       <div className="yape-payment-detail"><span className="yape-payment-label">Monto a pagar</span><strong className="yape-payment-total" aria-live="polite">{totalLoading ? 'Calculando…' : money(total)}</strong>{ready && <><span className="yape-payment-label">Titular</span><strong className="yape-payment-owner">{settings!.titular}</strong>{settings!.celular && <span className="yape-payment-phone">{settings!.celular}</span>}</>}{!totalLoading && total <= 0 && <small>Agrega productos o ingresa el monto de la venta.</small>}{!loading && !ready && !error && <small>Configura el QR y titular en Mantenimiento → QR de {brand}.</small>}</div></div>

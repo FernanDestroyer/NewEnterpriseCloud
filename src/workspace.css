@@ -388,6 +388,13 @@
 .yape-payment-note { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ws-border); color: var(--ws-muted); font-size: 10px; line-height: 1.6; }
 .yape-payment-note strong { color: var(--ws-text); font-weight: 650; }
 .yape-payment-error { display: grid; gap: 5px; margin-top: 10px; color: var(--ws-red); font-size: 10px; }
+/* Plin uses its turquoise identity independently from Yape's violet styling. */
+.plin-payment-panel { --plin-accent: #007c75; --plin-soft: #e7f9f6; border-color: color-mix(in srgb, var(--plin-accent) 42%, var(--ws-border)); background: linear-gradient(135deg, var(--plin-soft), var(--ws-surface) 85%); }
+.workspace-shell.erp-shell[data-theme='dark'] .plin-payment-panel { --plin-accent: #01e0cd; --plin-soft: #102d31; }
+.plin-payment-panel .yape-payment-brand, .plin-payment-panel .yape-payment-total { color: var(--plin-accent); }
+.plin-payment-panel .yape-payment-tag { padding: 4px 8px; border-radius: 999px; background: var(--plin-soft); color: var(--plin-accent); }
+.plin-payment-panel .yape-payment-qr.is-empty { border-color: var(--plin-accent); color: var(--plin-accent); background: var(--plin-soft); }
+.plin-payment-panel .yape-payment-note { border-color: color-mix(in srgb, var(--plin-accent) 25%, var(--ws-border)); }
 .workspace-shell .yape-settings-form { padding: 8px 0 18px; gap: 13px; }
 .yape-settings-preview { display: grid; place-items: center; width: 190px; height: 190px; margin-inline: auto; padding: 10px; background: #fff; border: 1px solid #e8e2f0; border-radius: 12px; }
 .yape-settings-preview > img { max-width: 100%; max-height: 100%; object-fit: contain; }
