@@ -15,8 +15,10 @@ export function WalletPaymentPanel({ brand, settings, total, loading, totalLoadi
 
 export function BankTransferPaymentPanel({ settings, total, loading, error, onRetry }: { settings: BankTransferSettings | null; total: number; loading: boolean; error: string; onRetry: () => void }) {
   const ready = !loading && settings?.enabled
-  return <section className="yape-payment-panel bank-transfer-panel" aria-label="Datos para transferencia bancaria">
-    <div className="yape-payment-heading"><span className="yape-payment-brand"><Landmark size={16} />Transferencia bancaria</span><span className="yape-payment-tag">Datos de abono</span></div>
+  const bank = settings?.banco.trim().toLocaleLowerCase('es') ?? ''
+  const bankClass = bank.includes('scotia') ? 'bank-transfer-panel--scotiabank' : bank.includes('interbank') ? 'bank-transfer-panel--interbank' : bank.includes('bcp') || bank.includes('credito') ? 'bank-transfer-panel--bcp' : 'bank-transfer-panel--other'
+  return <section className={`yape-payment-panel bank-transfer-panel ${bankClass}`} aria-label={`Datos para transferencia bancaria${settings?.banco ? ` · ${settings.banco}` : ''}`}>
+    <div className="yape-payment-heading"><span className="yape-payment-brand"><Landmark size={16} />Transferencia bancaria</span><span className="yape-payment-tag">{settings?.banco || 'Datos de abono'}</span></div>
     {loading ? <div className="ws-empty-compact"><RefreshCw size={22} className="ws-spin" /><span>Cargando cuenta bancaria…</span></div> : ready ? <div className="bank-transfer-details">
       <div><span>Titular</span><strong>{settings!.titular}</strong></div><div><span>Banco</span><strong>{settings!.banco}</strong></div><div><span>Tipo de cuenta</span><strong>{settings!.tipoCuenta}</strong></div><div><span>Cuenta</span><strong>{settings!.numeroCuenta}</strong></div>{settings!.cci && <div><span>CCI</span><strong>{settings!.cci}</strong></div>}<div><span>Moneda</span><strong>{settings!.moneda}</strong></div><div><span>Monto a transferir</span><strong className="yape-payment-total">{money(total)}</strong></div>
     </div> : !error && <div className="ws-notice ws-notice-warning">Configura la cuenta bancaria en Mantenimiento → Transferencia bancaria.</div>}

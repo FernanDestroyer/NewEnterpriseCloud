@@ -408,6 +408,17 @@
 .bank-transfer-details span { color: var(--ws-muted); font-size: 9px; }
 .bank-transfer-details strong { color: var(--ws-text); font-size: 11px; overflow-wrap: anywhere; }
 .bank-transfer-details .yape-payment-total { color: var(--ws-violet); font-size: 17px; }
+.bank-transfer-panel { --bank-accent: var(--ws-primary); --bank-strong: var(--ws-primary); --bank-highlight: var(--ws-primary); --bank-soft: var(--ws-primary-soft); border-color: color-mix(in srgb, var(--bank-accent) 42%, var(--ws-border)); background: linear-gradient(135deg, var(--bank-soft), var(--ws-surface) 85%); box-shadow: inset 0 3px 0 var(--bank-highlight); }
+.bank-transfer-panel--bcp { --bank-accent: #002a8d; --bank-strong: #001e5f; --bank-highlight: #a65300; --bank-soft: #edf2ff; }
+.bank-transfer-panel--scotiabank { --bank-accent: #ec111a; --bank-strong: #a70d14; --bank-highlight: #a70d14; --bank-soft: #fff0f0; }
+.bank-transfer-panel--interbank { --bank-accent: #05be50; --bank-strong: #08743a; --bank-highlight: #0039a6; --bank-soft: #eaf9ef; }
+.bank-transfer-panel .yape-payment-brand, .bank-transfer-panel .bank-transfer-details .yape-payment-total { color: var(--bank-strong); }
+.bank-transfer-panel .yape-payment-tag { padding: 4px 8px; border-radius: 999px; background: var(--bank-soft); color: var(--bank-highlight); font-weight: 700; }
+.bank-transfer-panel .bank-transfer-details > div { border-color: color-mix(in srgb, var(--bank-accent) 24%, var(--ws-border)); }
+.bank-transfer-panel .yape-payment-note { border-color: color-mix(in srgb, var(--bank-accent) 25%, var(--ws-border)); }
+.workspace-shell.erp-shell[data-theme='dark'] .bank-transfer-panel--bcp { --bank-accent: #80a9ff; --bank-strong: #bdd0ff; --bank-highlight: #ff9a38; --bank-soft: #14223c; }
+.workspace-shell.erp-shell[data-theme='dark'] .bank-transfer-panel--scotiabank { --bank-accent: #ff6670; --bank-strong: #ffd4d7; --bank-highlight: #ff6670; --bank-soft: #3a2027; }
+.workspace-shell.erp-shell[data-theme='dark'] .bank-transfer-panel--interbank { --bank-accent: #59d879; --bank-strong: #b7ffcb; --bank-highlight: #6ba8ff; --bank-soft: #163021; }
 @media (max-width: 420px) { .bank-transfer-details { grid-template-columns: 1fr; } }
 @media (max-width: 420px) {
   .yape-payment-body { grid-template-columns: 1fr; }

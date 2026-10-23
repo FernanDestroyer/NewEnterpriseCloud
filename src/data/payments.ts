@@ -92,7 +92,7 @@ export function parsePlinSettings(detail: string): PlinSettings {
   } catch { throw new Error('La configuración de Plin no es válida. Vuelve a guardarla en Mantenimiento → QR de Plin.') }
 }
 export function validateBankTransferSettings(input: BankTransferSettings): BankTransferSettings {
-  const settings = { titular: input.titular.trim(), banco: input.banco.trim(), tipoCuenta: input.tipoCuenta.trim(), numeroCuenta: input.numeroCuenta.trim(), cci: input.cci.replace(/[\s-]/g, ''), moneda: input.moneda.trim().toUpperCase(), enabled: input.enabled }
+  const settings = { titular: input.titular.trim(), banco: input.banco.trim(), tipoCuenta: input.tipoCuenta.trim(), numeroCuenta: input.numeroCuenta.replace(/[\s-]/g, ''), cci: input.cci.replace(/[\s-]/g, ''), moneda: input.moneda.trim().toUpperCase(), enabled: input.enabled }
   if (settings.enabled && (!settings.titular || !settings.banco || !settings.numeroCuenta)) throw new Error('Completa el titular, el banco y el número de cuenta para habilitar la transferencia.')
   if (settings.cci && !/^\d{20}$/.test(settings.cci)) throw new Error('El CCI debe tener 20 dígitos.')
   return settings
