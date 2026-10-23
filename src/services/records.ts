@@ -506,7 +506,22 @@ function enrichRelations(records: Record<DataPage, RecordItem[]>): Record<DataPa
   }
 }
 
+let sessionCheck: Promise<void> | null = null
+
+/** Evita enviar consultas del ERP cuando Auth perdió o aún no recuperó la sesión. */
+async function ensureAuthenticatedSession(): Promise<void> {
+  if (!sessionCheck) {
+    sessionCheck = (async () => {
+      const { data, error } = await requireSupabase().auth.getSession()
+      if (error) throw error
+      if (!data.session?.access_token) throw new Error('Tu sesión expiró o dejó de ser válida. Vuelve a iniciar sesión para consultar los datos.')
+    })().finally(() => { sessionCheck = null })
+  }
+  await sessionCheck
+}
+
 async function fetchTableRows(table: string): Promise<Row[]> {
+  await ensureAuthenticatedSession()
   const rows: Row[] = []
   const size = 500
   for (let offset = 0; ; offset += size) {
