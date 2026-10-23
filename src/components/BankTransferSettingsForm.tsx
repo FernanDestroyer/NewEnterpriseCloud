@@ -19,7 +19,7 @@ export default function BankTransferSettingsForm({ canCreate, canEdit, onSaved }
   if (failed) return <div className="ws-notice ws-notice-warning" role="alert"><span>{message}</span><button className="ws-text-button" type="button" onClick={() => setReload(value => value + 1)}>Reintentar</button></div>
   const field = (key: keyof BankTransferSettings, label: string, placeholder: string, required = false) => <label>{label}<input value={String(settings[key])} required={required && settings.enabled} disabled={!editable || busy} placeholder={placeholder} onChange={event => setSettings(value => ({ ...value, [key]: event.target.value }))} /></label>
   const bankOption = selectedBankOption(settings.banco)
-  return <form className="ws-form" onSubmit={save}>
+  return <form className="ws-form bank-transfer-settings-form" onSubmit={save}>
     <div className="ws-form-grid">{field('titular', 'Titular de la cuenta', 'Nombre de la persona o empresa', true)}
       <label>Banco<select value={bankOption} required={settings.enabled} disabled={!editable || busy} onChange={event => setSettings(value => ({ ...value, banco: event.target.value }))}><option value="">Selecciona un banco</option>{BANK_OPTIONS.map(bank => <option key={bank}>{bank}</option>)}<option value="Otro">Otro</option></select></label>
       {bankOption === 'Otro' && <label>Nombre del banco<input value={settings.banco === 'Otro' ? '' : settings.banco} required={settings.enabled} disabled={!editable || busy} placeholder="Escribe el nombre del banco" onChange={event => setSettings(value => ({ ...value, banco: event.target.value }))} /></label>}

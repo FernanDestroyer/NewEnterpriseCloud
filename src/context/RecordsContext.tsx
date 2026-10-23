@@ -190,6 +190,15 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     let name = String(form.get('name') ?? '').trim()
     const detail = String(form.get('detail') ?? '').trim()
     let selectedStatus = String(form.get('status') ?? defaultStatus(page)) as RecordStatus
+    const saleMethod = page === 'sales' ? String(form.get('medio_pago') ?? record?.medio ?? '').trim() : ''
+    // El crédito interno financia la venta: el documento se completa y el
+    // saldo se registra como cuenta por cobrar hasta que el cliente pague.
+    if (page === 'sales' && consumesCreditLine(saleMethod)) selectedStatus = 'Completada'
+    else if (page === 'sales' && record && consumesCreditLine(record.medio) && record.status === 'Completada') {
+      // Al quitar Tarjeta de una venta a crédito, no interpretar el estado
+      // "Completada" anterior como confirmación de un pago en efectivo.
+      selectedStatus = 'Pendiente'
+    }
     // Descuento % en ventas: solo roles con acceso a finanzas (no vendedores).
     const discountRaw = page === 'sales' ? Number(String(form.get('descuento') ?? '')) : 0
     const discount = page === 'sales' && Number.isFinite(discountRaw) && discountRaw > 0 ? Math.min(100, discountRaw) : 0
@@ -328,7 +337,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       ...(page === 'inventory' && savedPrecio !== undefined ? { precio: savedPrecio } : {}),
       ...(page === 'purchases' && savedFechaLimite !== undefined ? { fecha_limite: savedFechaLimite } : {}),
       ...(page === 'sales' ? { descuento: discount } : {}),
-      ...(page === 'sales' ? { medio_pago: String(form.get('medio_pago') ?? '').trim() || null } : {}),
+      ...(page === 'sales' ? { medio_pago: saleMethod || null } : {}),
       ...(page === 'suppliers' ? {
         ruc: rucDigits,
         direccion: direccionInput || null,
@@ -365,16 +374,22 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
           const customerId = relatedId ?? record?.cliente_id ?? null
           const customer = customerId ? records.customers.find((item) => item.rowId === customerId) : undefined
           const linea = Number(customer?.amount ?? 0) || 0
-          if (customer && linea > 0) {
-            const subtotal = effective.reduce((sum, line) => sum + line.cantidad * line.precio, 0)
-            const newTotal = effective.length
-              ? Math.round(subtotal * (1 - discount / 100) * 100) / 100
-              : (savedAmount ?? record?.amount ?? 0)
-            const credit = customerCredit(customer, records.sales, records.finance, record?.rowId ?? null)
-            if (newTotal > credit.disponible) {
-              notify(`Sin crédito suficiente para ${customer.name}: paga con Tarjeta y su disponible es ${money(credit.disponible)} (línea ${money(linea)} − consumido ${money(credit.consumidoTarjeta)}). Esta compra es ${money(newTotal)}. Cobra en efectivo/Yape o amplía su línea.`)
-              return
-            }
+          if (!customer) {
+            notify('Vincula la venta a un cliente registrado para usar su crédito con Tarjeta.')
+            return
+          }
+          if (linea <= 0) {
+            notify(`El cliente ${customer.name} no tiene una línea de crédito configurada. Asígnala en Clientes antes de usar Tarjeta.`)
+            return
+          }
+          const subtotal = effective.reduce((sum, line) => sum + line.cantidad * line.precio, 0)
+          const newTotal = effective.length
+            ? Math.round(subtotal * (1 - discount / 100) * 100) / 100
+            : (savedAmount ?? record?.amount ?? 0)
+          const credit = customerCredit(customer, records.sales, records.finance, record?.rowId ?? null)
+          if (newTotal > credit.disponible) {
+            notify(`Sin crédito suficiente para ${customer.name}: su disponible es ${money(credit.disponible)} (línea ${money(linea)} − consumido ${money(credit.consumidoTarjeta)}). Esta venta es ${money(newTotal)}. Cobra en efectivo/Yape o amplía su línea.`)
+            return
           }
         }
         saved = record

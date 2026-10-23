@@ -1,5 +1,6 @@
 import { requireSupabase } from '../lib/supabase'
 import { salePayableTotal } from '../data/payments'
+import { consumesCreditLine } from '../data/workspace'
 import { DATA_PAGES } from '../data/catalog'
 import { formatWhen, purchaseHasStock, totalWithIgv } from '../data/helpers'
 import type { CustomerImportRow, PurchaseImportRow, SalesImportRow, SupplierImportReport, SupplierImportRow } from './import'
@@ -993,7 +994,8 @@ async function createRelatedPago(kind: 'sale' | 'purchase', header: Row, total: 
   const client = requireSupabase()
   const codigo = String(header.codigo)
   const isSale = kind === 'sale'
-  const pagoEstado: RecordStatus = estado === 'Completada' || estado === 'Pagada' ? 'Completada' : estado === 'En curso' || estado === 'En tránsito' ? 'En curso' : 'Pendiente'
+  const isCreditSale = isSale && consumesCreditLine(String(header.medio_pago ?? ''))
+  const pagoEstado: RecordStatus = isCreditSale ? 'Pendiente' : estado === 'Completada' || estado === 'Pagada' ? 'Completada' : estado === 'En curso' || estado === 'En tránsito' ? 'En curso' : 'Pendiente'
   const { error } = await client.from('pagos').insert({
     contraparte: isSale ? String(header.cliente_nombre) : String(header.proveedor_nombre),
     detalle: isSale ? `Cuenta por cobrar · ${codigo}` : `Cuenta por pagar · ${codigo}`,
@@ -1021,7 +1023,8 @@ async function syncRelatedPago(kind: 'sale' | 'purchase', headerId: string, tota
     if (header) await createRelatedPago(kind, header as Row, total, estado)
     return
   }
-  const nextEstado = estado === 'Completada' || estado === 'Pagada' ? 'Completada' : existing.estado
+  const isCreditSale = kind === 'sale' && consumesCreditLine(medioPago)
+  const nextEstado = isCreditSale ? existing.estado : estado === 'Completada' || estado === 'Pagada' ? 'Completada' : existing.estado
   const result = await client.from('pagos').update({
     monto: total,
     estado: nextEstado,

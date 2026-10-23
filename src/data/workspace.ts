@@ -117,7 +117,7 @@ export function consumesCreditLine(medio?: string | null): boolean {
   return (medio ?? '').trim().toLocaleLowerCase('es') === 'tarjeta'
 }
 
-// Ventas del cliente + consumo de su línea (solo lo pagado con Tarjeta).
+// Ventas del cliente + consumo vigente de su línea (solo Tarjeta con CxC abierta).
 // excludeSaleRowId descuenta la venta que se está editando para no contarla dos veces.
 export function customerCredit(
   customer: RecordItem,
@@ -130,9 +130,19 @@ export function customerCredit(
     && sale.cliente_id === customer.rowId
     && sale.rowId !== (excludeSaleRowId ?? ''))
   const ids = new Set(mine.filter((sale) => sale.rowId).map((sale) => sale.rowId as string))
+  const paymentBySale = new Map<string, RecordItem>()
+  for (const item of finance) {
+    if (item.saleId && !paymentBySale.has(item.saleId)) paymentBySale.set(item.saleId, item)
+  }
   const consumidoTarjeta = mine
     .filter((sale) => consumesCreditLine(sale.medio))
-    .reduce((sum, sale) => sum + (Number(sale.amount) || 0), 0)
+    .reduce((sum, sale) => {
+      const payment = sale.rowId ? paymentBySale.get(sale.rowId) : undefined
+      // Sin CxC vinculada se conserva el consumo por precaución; una CxC
+      // completada libera el cupo que ocupó la venta.
+      if (payment?.status === 'Completada') return sum
+      return sum + (Number(payment?.amount ?? sale.amount) || 0)
+    }, 0)
   const deuda = finance
     .filter((item) => item.saleId && ids.has(item.saleId) && item.status !== 'Completada')
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)

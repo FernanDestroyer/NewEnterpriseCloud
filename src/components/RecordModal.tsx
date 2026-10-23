@@ -5,7 +5,7 @@ import { defaultStatus, LOW_STOCK_THRESHOLD, money, statusesForPage, totalWithIg
 import { useRecords } from '../context/RecordsContext'
 import { useAuth } from '../context/AuthContext'
 import { fetchDocumentLines, fetchPaymentMethods, friendlyError } from '../services/records'
-import { customerCredit } from '../data/workspace'
+import { consumesCreditLine, customerCredit } from '../data/workspace'
 import { isPeruLookupConfigured, lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
 import { isYapeMethod, isPlinMethod, isBankTransferMethod, salePayableTotal, type YapeSettings, type PlinSettings, type BankTransferSettings } from '../data/payments'
@@ -70,6 +70,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   // Medios de pago para elegir cómo pagará el cliente (llega solo).
   const [saleMethods, setSaleMethods] = useState<string[]>(['Efectivo'])
   const [saleMethod, setSaleMethod] = useState(record?.medio || 'Efectivo')
+  const saleUsesCreditLine = page === 'sales' && consumesCreditLine(saleMethod)
   const [manualAmount, setManualAmount] = useState(record?.amount === undefined ? '' : String(record.amount))
   const [yapeSettings, setYapeSettings] = useState<YapeSettings | null>(null)
   const [yapeLoading, setYapeLoading] = useState(false)
@@ -629,13 +630,13 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     <GoogleIcon name="link" className="small" />
                     Vinculado a {linkedTarget.name} ({linkedTarget.id}). Datos del cliente agregados a la {page === 'sales' ? 'venta' : 'cotización'}.
                   </small>
-                  {page === 'sales' && Number(linkedTarget.amount ?? 0) > 0 && (() => {
+                  {page === 'sales' && (Number(linkedTarget.amount ?? 0) > 0 || saleUsesCreditLine) && (() => {
                     const credit = customerCredit(linkedTarget, records.sales, records.finance, record?.rowId ?? null)
                     return (
                       <small className={`relation-hint${credit.disponible > 0 ? ' linked' : ''}`}>
                         <GoogleIcon name="payments" className="small" />
                         Línea {money(credit.linea)} · Consumido con tarjeta {money(credit.consumidoTarjeta)} · Disponible {money(credit.disponible)}
-                        {credit.disponible <= 0 ? ' · Sin cupo en tarjeta: solo efectivo/Yape.' : ' · Solo Tarjeta descuenta de la línea.'}
+                        {credit.linea <= 0 ? ' · No tiene crédito configurado.' : credit.disponible <= 0 ? ' · Sin cupo en tarjeta: solo efectivo/Yape.' : ' · Solo Tarjeta descuenta de la línea.'}
                       </small>
                     )
                   })()}
@@ -740,6 +741,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                   {saleMethods.map((method) => <option key={method} value={method}>{method}</option>)}
                 </select>
               </label>
+              {saleUsesCreditLine && !linkedTarget && <small className="relation-hint">Vincula la venta a un cliente registrado para descontar su crédito.</small>}
               {isYapeMethod(saleMethod) && <YapePaymentPanel settings={yapeSettings} total={saleTotal} loading={yapeLoading} totalLoading={linesLoading} error={yapeError} onRetry={() => setYapeReload(value => value + 1)} />}
               {isPlinMethod(saleMethod) && <WalletPaymentPanel brand="Plin" settings={plinSettings} total={saleTotal} loading={plinLoading} totalLoading={linesLoading} error={plinError} onRetry={() => setPlinReload(value => value + 1)} />}
               {isBankTransferMethod(saleMethod) && <BankTransferPaymentPanel settings={bankSettings} total={saleTotal} loading={bankLoading} error={bankError} onRetry={() => setBankReload(value => value + 1)} />}
@@ -748,11 +750,19 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
           {page === 'sales' ? (
             <div className="split-duo">
               <label>{meta.detailLabel}<input name="detail" required value={detailValue} readOnly title="Comprobante automático: cambia el tipo o la ciudad para generarlo" placeholder={meta.detailLabel} /></label>
-              <label>Estado
-                <select name="status" value={statusValue} onChange={(event) => setStatusValue(event.target.value as RecordStatus)}>
-                  {statusOptions.map((status) => <option key={status}>{status}</option>)}
-                </select>
-              </label>
+              {saleUsesCreditLine ? (
+                <label>Estado
+                  <input value="Completada" readOnly aria-describedby="sale-credit-status-help" />
+                  <input type="hidden" name="status" value="Completada" />
+                  <small id="sale-credit-status-help" className="relation-hint linked">El total se descuenta del crédito disponible. La cuenta por cobrar seguirá pendiente hasta registrar el cobro.</small>
+                </label>
+              ) : (
+                <label>Estado
+                  <select name="status" value={statusValue} onChange={(event) => setStatusValue(event.target.value as RecordStatus)}>
+                    {statusOptions.map((status) => <option key={status}>{status}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
           ) : (
             <label>{meta.detailLabel}<input name="detail" required={page !== 'suppliers'} value={detailValue} onChange={(event) => setDetailValue(event.target.value)} placeholder={page === 'suppliers' ? '(opcional)' : meta.detailLabel} /></label>
