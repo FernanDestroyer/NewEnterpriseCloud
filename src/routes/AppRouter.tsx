@@ -16,6 +16,7 @@ const PermisosPage = lazy(() => import('../components/PermisosPage'))
 const ModuloPage = lazy(() => import('../pages/ModuloPage'))
 const ReportsPage = lazy(() => import('../components/ReportsPage'))
 const ProfilePage = lazy(() => import('../components/ProfilePage'))
+const AnalyzerPage = lazy(() => import('../components/AnalyzerPage'))
 
 // Solo deja pasar a quien tenga una sesión de Supabase activa.
 // Tras iniciar sesión se muestra "Preparando tu panel" un tiempo mínimo
@@ -62,6 +63,7 @@ export default function AppRouter() {
         <Route path="/mantenimientos" element={<MaintenancePage />} />
         <Route path="/permisos" element={<PermisosPage />} />
         <Route path="/caja" element={<CajaPage />} />
+        <Route path="/analizador" element={<AnalyzerPage />} />
         <Route path="/settings" element={<Navigate to="/mantenimientos" replace />} />
         <Route path="/documents" element={<Navigate to="/dashboard" replace />} />
         <Route path="/perfil" element={<ProfilePage />} />

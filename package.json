@@ -6,10 +6,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/dashboard.test.mjs tests/workspace.test.mjs tests/peru.test.mjs tests/import.test.mjs tests/yape.test.mjs"
+    "test": "node --test tests/dashboard.test.mjs tests/workspace.test.mjs tests/peru.test.mjs tests/import.test.mjs tests/yape.test.mjs tests/analyzer.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.50.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

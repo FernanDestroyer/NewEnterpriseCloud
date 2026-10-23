@@ -1,6 +1,8 @@
-import { Boxes, Building2, ClipboardList, LayoutDashboard, PackageCheck, ReceiptText, ShoppingCart, TrendingUp, Users, Wallet, ArrowLeftRight, Wrench, Banknote, KeyRound } from 'lucide-react'
+import { Boxes, Building2, ClipboardList, LayoutDashboard, PackageCheck, ReceiptText, ScanSearch, ShoppingCart, TrendingUp, Users, Wallet, ArrowLeftRight, Wrench, Banknote, KeyRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
+
+export type PermissionModuleKey = DataPage | 'analizador'
 
 export type WorkspaceEntry = { label: string; path: string; page?: DataPage; icon: LucideIcon; group: string }
 export const workspaceEntries: WorkspaceEntry[] = [
@@ -18,12 +20,13 @@ export const workspaceEntries: WorkspaceEntry[] = [
   { label: 'Reportes', path: '/reports', page: 'reports', icon: TrendingUp, group: 'ADMINISTRACIÓN' },
   { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'ADMINISTRACIÓN' },
   { label: 'Permisos', path: '/permisos', page: 'settings', icon: KeyRound, group: 'ADMINISTRACIÓN' },
+  { label: 'Analizador de proyectos', path: '/analizador', icon: ScanSearch, group: 'ADMINISTRACIÓN' },
 ]
 
-export const permissionModule: Record<DataPage, string> = {
+export const permissionModule: Record<PermissionModuleKey, string> = {
   sales: 'ventas', quotes: 'cotizaciones', purchases: 'compras', inventory: 'inventario',
   customers: 'clientes', suppliers: 'proveedores', finance: 'finanzas', documents: 'documentos',
-  reports: 'reportes', settings: 'configuracion',
+  reports: 'reportes', settings: 'configuracion', analizador: 'analizador',
 }
 
 export type Period = 'all' | 'month' | '30' | '7' | 'today'

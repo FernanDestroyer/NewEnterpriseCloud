@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { permissionModule } from '../data/workspace'
-import type { DataPage } from '../types'
+import { permissionModule, type PermissionModuleKey } from '../data/workspace'
 
 export type Profile = {
   id: string
@@ -23,7 +22,7 @@ type AuthContextValue = {
   configured: boolean
   error: string
   permissions: string[]
-  can: (page: DataPage, action?: PermissionAction) => boolean
+  can: (page: PermissionModuleKey, action?: PermissionAction) => boolean
   refreshProfile: () => Promise<void>
   updateProfile: (nombre: string, avatarUrl?: string | null) => Promise<void>
   signIn: (email: string, password: string) => Promise<string | null>
@@ -229,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(current => current ? { ...current, nombre: name, avatarUrl: avatarUrl === undefined ? current.avatarUrl : avatarUrl } : current)
   }, [session])
 
-  const can = useCallback((page: DataPage, action: PermissionAction = 'ver') => Boolean(profile?.activo && permissions.includes(`${permissionModule[page]}:${action}`)), [profile, permissions])
+  const can = useCallback((page: PermissionModuleKey, action: PermissionAction = 'ver') => Boolean(profile?.activo && permissions.includes(`${permissionModule[page]}:${action}`)), [profile, permissions])
 
   const value = useMemo<AuthContextValue>(
     () => ({ session, profile, loading, error, permissions, can, refreshProfile, updateProfile, configured: isSupabaseConfigured, signIn, signUp, signOut }),
