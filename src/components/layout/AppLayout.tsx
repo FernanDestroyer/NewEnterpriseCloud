@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bell, ChevronDown, ChevronRight, Home, Info, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, ShieldCheck, Sun, UserRound, X } from 'lucide-react'
+import { AlertTriangle, Bell, ChevronDown, ChevronRight, Home, Info, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, ScanSearch, Search, ShieldCheck, Sun, UserRound, X } from 'lucide-react'
 import ConfirmModal from '../ConfirmModal'
 import RecordModal from '../RecordModal'
 import SystemGuideButton from '../SystemGuideButton'
@@ -8,7 +8,7 @@ import { LogoMark } from '../LogoMark'
 import { DATA_PAGES, pageMeta } from '../../data/catalog'
 import { isStockAlert, money } from '../../data/helpers'
 import { countMaintenanceIssues } from '../../data/maintenance'
-import { matchesSearch, workspaceEntries } from '../../data/workspace'
+import { matchesSearch, submoduleMatchesLocation, workspaceEntries, workspaceModules } from '../../data/workspace'
 import { useAuth } from '../../context/AuthContext'
 import { useRecords } from '../../context/RecordsContext'
 import { useTheme } from '../../context/ThemeContext'
@@ -27,6 +27,7 @@ export default function AppLayout() {
   const [query, setQuery] = useState('')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(storedCollapsed)
+  const [openModule, setOpenModule] = useState<string | null>(() => workspaceModules.find(module => module.children.some(child => submoduleMatchesLocation(child.path, location.pathname, location.hash)))?.id ?? null)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -34,10 +35,14 @@ export default function AppLayout() {
   const searchRef = useRef<HTMLInputElement>(null)
   const headerRef = useRef<HTMLElement>(null)
 
-  const entries = workspaceEntries.filter(entry => !entry.page || can(entry.page))
+  const entries = workspaceEntries.filter(entry => (!entry.page || can(entry.page)) && (!entry.permission || can(entry.permission)))
+  const visibleModules = workspaceModules
+    .map(module => ({ ...module, children: module.children.filter(child => !child.permission || can(child.permission)) }))
+    .filter(module => module.children.length > 0)
   const active = workspaceEntries.find(entry => entry.path === location.pathname)
-  const title = location.pathname === '/perfil' ? 'Mi perfil' : active?.label ?? 'Espacio de trabajo'
-  const groups = [...new Set(entries.map(entry => entry.group))]
+  const activeModule = visibleModules.find(module => module.children.some(child => submoduleMatchesLocation(child.path, location.pathname, location.hash)))
+  const activeSubmodule = activeModule?.children.find(child => submoduleMatchesLocation(child.path, location.pathname, location.hash))
+  const title = location.pathname === '/perfil' ? 'Mi perfil' : activeSubmodule?.label ?? active?.label ?? 'Espacio de trabajo'
   const stockAlerts = records.inventory.filter(isStockAlert)
   const financeAlerts = records.finance.filter(item => item.status !== 'Completada')
   const purchaseAlerts = records.purchases.filter(item => item.status === 'Pendiente' || item.status === 'Solicitud' || item.status === 'Orden' || item.status === 'Recibida')
@@ -67,6 +72,11 @@ export default function AppLayout() {
     setProfileOpen(false)
     setQuery('')
   }, [location.pathname])
+
+  useEffect(() => {
+    const currentModule = workspaceModules.find(module => module.children.some(child => submoduleMatchesLocation(child.path, location.pathname, location.hash)))
+    if (currentModule) setOpenModule(currentModule.id)
+  }, [location.pathname, location.hash])
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
@@ -104,10 +114,53 @@ export default function AppLayout() {
         </NavLink>
         <button className="ws-mobile-close ws-icon-button" onClick={() => setMobileOpen(false)} aria-label="Cerrar menú" data-tip="Cerrar menú"><X size={19} /></button>
         <nav className="ws-navigation" aria-label="Módulos del ERP">
-          {groups.map(group => <section className="ws-nav-group" key={group}><span className="ws-nav-label">{group}</span>{entries.filter(entry => entry.group === group).map(entry => {
-            const Icon = entry.icon
-            return <NavLink key={entry.path} to={entry.path} end title={entry.label} aria-label={entry.label} className={({ isActive }) => `ws-nav-item${isActive ? ' is-active' : ''}`}><Icon size={18} /><span>{entry.label}</span>{entry.path === '/inventory' && stockAlerts.length > 0 && <b>{stockAlerts.length}</b>}{entry.path === '/mantenimientos' && maintenanceIssues > 0 && <b>{maintenanceIssues}</b>}</NavLink>
-          })}</section>)}
+          {visibleModules.map(module => {
+            const Icon = module.icon
+            const expanded = openModule === module.id
+            const containsActivePage = module.children.some(child => submoduleMatchesLocation(child.path, location.pathname, location.hash))
+            return <section className="ws-module-group" key={module.id}>
+              <button
+                type="button"
+                className={`ws-module-trigger${expanded ? ' is-open' : ''}${containsActivePage ? ' has-active' : ''}`}
+                title={module.label}
+                aria-label={module.label}
+                aria-expanded={expanded}
+                aria-controls={`ws-module-${module.id}`}
+                onClick={() => {
+                  if (collapsed) {
+                    setCollapsed(false)
+                    setOpenModule(module.id)
+                    return
+                  }
+                  setOpenModule(current => current === module.id ? null : module.id)
+                }}
+              >
+                <Icon size={18} />
+                <span className="ws-module-label">{module.label}</span>
+                <ChevronDown className={`ws-module-chevron${expanded ? ' is-open' : ''}`} size={15} />
+              </button>
+              <div className="ws-module-children" id={`ws-module-${module.id}`} hidden={!expanded}>
+                {module.children.map((child, index) => {
+                  const ChildIcon = child.icon
+                  const key = `${module.id}-${child.label}-${index}`
+                  if (child.path) return <NavLink key={key} to={child.path} end title={child.label} aria-label={child.label} className={({ isActive }) => `ws-submodule-link${isActive && submoduleMatchesLocation(child.path, location.pathname, location.hash) ? ' is-active' : ''}`}>
+                    {ChildIcon && <ChildIcon size={15} />}
+                    <span>{child.label}</span>
+                    {child.path === '/inventory#existencias' && stockAlerts.length > 0 && <b>{stockAlerts.length}</b>}
+                    {child.path === '/mantenimientos#catalogos' && maintenanceIssues > 0 && <b>{maintenanceIssues}</b>}
+                    {child.availability === 'partial' && <small className="ws-submodule-status is-partial">Parcial</small>}
+                  </NavLink>
+                  if (child.action === 'notifications') return <button key={key} type="button" className="ws-submodule-action" onClick={() => { setNotificationsOpen(true); setProfileOpen(false); setMobileOpen(false) }}>
+                    {ChildIcon && <ChildIcon size={15} />}<span>{child.label}</span><ChevronRight size={13} />
+                  </button>
+                  return <div key={key} className="ws-submodule-disabled" aria-label={`${child.label}, ${child.availability === 'optional' ? 'opcional' : 'próximamente'}`}>
+                    {ChildIcon && <ChildIcon size={15} />}<span>{child.label}</span><small>{child.availability === 'optional' ? 'Opcional' : 'Próximamente'}</small>
+                  </div>
+                })}
+              </div>
+            </section>
+          })}
+          {can('analizador') && <section className="ws-nav-group"><span className="ws-nav-label">HERRAMIENTAS</span><NavLink to="/analizador" end title="Analizador de proyectos" aria-label="Analizador de proyectos" className={({ isActive }) => `ws-nav-item${isActive ? ' is-active' : ''}`}><ScanSearch size={18} /><span>Analizador de proyectos</span></NavLink></section>}
         </nav>
         <div className="ws-sidebar-footer">
           <button className="ws-sidebar-profile" onClick={() => navigate('/perfil')} aria-label="Mi perfil — ver cuenta y permisos" data-tip="Mi perfil — ver cuenta y permisos"><span className="ws-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials}</span><span><strong>{fullName}</strong><small>{profile?.rol}</small></span><ChevronRight size={15} /></button>
@@ -117,7 +170,7 @@ export default function AppLayout() {
 
       <div className="app-main ws-main">
         <header className="topbar ws-topbar" ref={headerRef}>
-          <div className="ws-topbar-location"><button className="ws-icon-button ws-desktop-toggle" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'} data-tip={collapsed ? 'Expandir menú' : 'Contraer menú'}>{collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button><button className="ws-icon-button ws-mobile-toggle" onClick={() => setMobileOpen(true)} aria-label="Abrir menú" data-tip="Abrir menú"><Menu size={20} /></button><nav className="ws-breadcrumb" aria-label="Ubicación"><Home size={14} /><span>{active?.group.toLocaleLowerCase('es') ?? 'Cuenta'}</span><ChevronRight size={13} /><strong>{title}</strong></nav></div>
+          <div className="ws-topbar-location"><button className="ws-icon-button ws-desktop-toggle" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'} data-tip={collapsed ? 'Expandir menú' : 'Contraer menú'}>{collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button><button className="ws-icon-button ws-mobile-toggle" onClick={() => setMobileOpen(true)} aria-label="Abrir menú" data-tip="Abrir menú"><Menu size={20} /></button><nav className="ws-breadcrumb" aria-label="Ubicación"><Home size={14} /><span>{activeModule?.label ?? (active?.group.toLocaleLowerCase('es') ?? 'Cuenta')}</span><ChevronRight size={13} /><strong>{title}</strong></nav></div>
           <div className="ws-topbar-actions">
             <div className="ws-search"><Search size={16} /><input ref={searchRef} value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar registros o módulos…" aria-label="Buscar en el sistema" role="combobox" aria-expanded={Boolean(query)} aria-controls="workspace-results" autoComplete="off" /><kbd>Ctrl K</kbd>
               {query && <div className="ws-search-results" id="workspace-results" role="listbox" aria-label="Resultados de búsqueda">{moduleResults.map(entry => <button key={entry.path} role="option" aria-selected={false} onClick={() => navigate(entry.path)}><entry.icon size={17} /><span><strong>{entry.label}</strong><small>Módulo · {entry.group.toLocaleLowerCase('es')}</small></span><ChevronRight size={14} /></button>)}{results.map(({ page, item }) => <button key={`${page}-${item.id}`} role="option" aria-selected={false} onClick={() => navigate(`/${page}?q=${encodeURIComponent(item.id)}`)}><Search size={16} /><span><strong>{item.name}</strong><small>{pageMeta[page].title} · {item.id}</small></span><ChevronRight size={14} /></button>)}{!moduleResults.length && !results.length && <p>No encontramos coincidencias en tus datos.</p>}</div>}

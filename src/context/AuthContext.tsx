@@ -221,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await supabase.from('usuarios').update(payload).eq('id', session.user.id).select('id').single()
     if (result.error) {
       if (avatarUrl !== undefined && isMissingAvatarColumn(result.error)) {
-        throw new Error('Falta la columna avatar_url en Supabase. Ejecuta la migración 20261016000000_perfil_avatar.sql y vuelve a intentarlo. Tu nombre no se modificó.')
+        throw new Error('No se pudo guardar el cambio de perfil porque falta una columna en Supabase. Revisa el historial y aplica solo la migración aprobada antes de reintentar. Tu nombre no se modificó.')
       }
       throw result.error
     }

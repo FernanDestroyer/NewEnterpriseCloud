@@ -1,17 +1,18 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ArrowDownUp, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ClipboardCheck, ClipboardList, Download, Eye, FileText, Filter, Info, Layers3, Lock, PackageCheck, Pencil, Plus, Receipt, RefreshCw, Search, ShoppingCart, Trash2, Wallet } from 'lucide-react'
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, ArrowDownUp, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ClipboardList, Download, Eye, FileText, Filter, Info, Layers3, Lock, PackageCheck, Pencil, Plus, Receipt, RefreshCw, Search, ShoppingCart, Trash2, Wallet } from 'lucide-react'
 import { DATA_PAGES, pageMeta } from '../data/catalog'
 import { financialSnapshot } from '../data/dashboard'
-import { money, purchaseHasStock, statusTone, stockStatus } from '../data/helpers'
+import { money, statusTone, stockStatus } from '../data/helpers'
 import { businessDate, customerCredit, displayDate, inDateRange, matchesSearch } from '../data/workspace'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
-import { fetchKardex, fetchPaymentMethods, friendlyError, type KardexEntry } from '../services/records'
-import { getOpenCashShift } from '../services/caja'
+import { fetchAccountOutstanding, fetchActiveWarehouses, fetchKardex, fetchPaymentMethods, friendlyError, type ActiveWarehouse, type KardexEntry } from '../services/records'
+import { getOpenCashShifts, type CashShift } from '../services/caja'
 import ConfirmModal from '../components/ConfirmModal'
 import CustomerHistory from '../components/CustomerHistory'
 import PurchaseOrderDetail from '../components/PurchaseOrderDetail'
+import PurchaseReceiptModal from '../components/PurchaseReceiptModal'
 import SupplierCatalog from '../components/SupplierCatalog'
 import SupplierImport from '../components/SupplierImport'
 import ModuleCsvImport from '../components/ModuleCsvImport'
@@ -29,8 +30,9 @@ export default function ModuloPage({ page: suppliedPage, view = 'records', embed
 
 function ModuleContent({ page, view, embedded, allowCreate = true }: { page: DataPage; view: ModuleView; embedded: boolean; allowCreate?: boolean }) {
   const { can } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
-  const { records, loading, errors, saving, refreshing, lastSyncedAt, openComposer, openEditor, requestDelete, exportTable, convertQuote, reload, settleAccount, receivePurchase, registerPurchaseIngress, notify } = useRecords()
+  const { records, loading, errors, saving, refreshing, lastSyncedAt, openComposer, openEditor, requestDelete, exportTable, convertQuote, reload, settleAccount, receivePurchase, notify } = useRecords()
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
   const status = params.get('status') ?? 'Todos'
@@ -44,9 +46,14 @@ function ModuleContent({ page, view, embedded, allowCreate = true }: { page: Dat
   const [sort, setSort] = useState<{ field: 'createdAt' | 'id' | 'name' | 'value'; ascending: boolean }>({ field: 'createdAt', ascending: false })
   const [exportOpen, setExportOpen] = useState(false)
   const [purchaseId, setPurchaseId] = useState<string | null>(null)
+  const [receiptOrder, setReceiptOrder] = useState<RecordItem | null>(null)
   const [supplierId, setSupplierId] = useState<string | null>(null)
   const [voucher, setVoucher] = useState<RecordItem | null>(null)
   const [quote, setQuote] = useState<RecordItem | null>(null)
+  const [quoteWarehouses, setQuoteWarehouses] = useState<ActiveWarehouse[]>([])
+  const [quoteWarehouseId, setQuoteWarehouseId] = useState('')
+  const [quoteWarehouseError, setQuoteWarehouseError] = useState('')
+  const [quoteRequestKey, setQuoteRequestKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
   const [account, setAccount] = useState<RecordItem | null>(null)
   const [historyCustomer, setHistoryCustomer] = useState<RecordItem | null>(null)
   const [kardex, setKardex] = useState<KardexEntry[]>([])
@@ -57,16 +64,27 @@ function ModuleContent({ page, view, embedded, allowCreate = true }: { page: Dat
   const [kardexRefresh, setKardexRefresh] = useState(0)
   const [payMethods, setPayMethods] = useState<string[]>(['Efectivo'])
   const [payMedio, setPayMedio] = useState('Efectivo')
-  // Sin turno abierto no se puede vender ni comprar (solo lectura y edición).
+  const [openCashShifts, setOpenCashShifts] = useState<CashShift[]>([])
+  const [cashShiftId, setCashShiftId] = useState('')
+  const [accountBalance, setAccountBalance] = useState<number | null>(null)
+  const [accountAmount, setAccountAmount] = useState('')
+  const [accountRequestKey, setAccountRequestKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
+  // Solo los cobros en efectivo requieren turno; el servidor valida el medio final.
   const [cashGate, setCashGate] = useState<boolean | null>(null)
   useEffect(() => {
-    if ((page !== 'sales' && page !== 'purchases') || !can(page, 'crear')) {
+    const anchor = location.hash.slice(1)
+    if (!anchor) return
+    const frame = window.requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [location.hash])
+  useEffect(() => {
+    if (page !== 'sales' || !can(page, 'crear')) {
       setCashGate(null)
       return
     }
     let active = true
-    getOpenCashShift()
-      .then((shift) => active && setCashGate(!shift))
+    getOpenCashShifts()
+      .then((shifts) => active && setCashGate(shifts.length === 0))
       .catch(() => active && setCashGate(null))
     return () => {
       active = false
@@ -75,22 +93,40 @@ function ModuleContent({ page, view, embedded, allowCreate = true }: { page: Dat
   useEffect(() => {
     if (!account) return
     let active = true
-    fetchPaymentMethods()
-      .then((methods) => {
+    Promise.all([fetchPaymentMethods(), account.rowId ? fetchAccountOutstanding(account.rowId) : Promise.resolve(Number(account.amount ?? 0)), getOpenCashShifts()])
+      .then(([methods, outstanding, shifts]) => {
         if (!active) return
         const names = methods.map((method) => method.nombre)
         setPayMethods(names)
+        setOpenCashShifts(shifts)
+        setCashShiftId(shifts.length === 1 ? shifts[0].id : '')
+        setAccountBalance(outstanding)
+        setAccountAmount(outstanding.toFixed(2))
+        setAccountRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
         const sale = account.saleId ? records.sales.find(item => item.rowId === account.saleId) : undefined
         setPayMedio(sale?.medio && names.includes(sale.medio) ? sale.medio : (names[0] ?? 'Efectivo'))
       })
-      .catch(() => active && setPayMethods(['Efectivo']))
+      .catch(() => { if (active) { setPayMethods(['Efectivo']); setAccountBalance(Number(account.amount ?? 0)); setAccountAmount(String(account.amount ?? 0)) } })
     return () => {
       active = false
     }
   }, [account, records.sales])
+  useEffect(() => {
+    if (!quote) return
+    let active = true
+    setQuoteWarehouseError('')
+    fetchActiveWarehouses().then(items => {
+      if (!active) return
+      setQuoteWarehouses(items)
+      setQuoteWarehouseId(items[0]?.id ?? '')
+    }).catch(error => active && setQuoteWarehouseError(friendlyError(error)))
+    return () => { active = false }
+  }, [quote])
   const meta = pageMeta[page]
-  const title = view === 'receipts' ? 'Ingreso al Kardex' : view === 'billing' ? 'Comprobantes de venta' : view === 'accounts' ? 'Estado de cuenta' : view === 'kardex' ? 'Movimientos de Kardex' : meta.title
-  const description = view === 'receipts' ? 'Registra el ingreso de las compras recibidas: confirma su entrada al inventario.' : view === 'billing' ? 'Consulta e imprime los comprobantes de tus ventas registradas.' : view === 'accounts' ? 'Da seguimiento a las cuentas por cobrar y registra su cancelación.' : view === 'kardex' ? 'Entradas y salidas registradas automáticamente por los cambios de stock.' : meta.description
+  const inventoryContext = page === 'inventory' && view === 'records' ? location.hash.slice(1) : ''
+  const salesContext = page === 'sales' && view === 'records' ? location.hash.slice(1) : ''
+  const title = inventoryContext === 'productos' ? 'Productos y clasificación' : inventoryContext === 'existencias' ? 'Existencias' : salesContext === 'comprobantes' ? 'Comprobantes imprimibles' : view === 'receipts' ? 'Ingreso al Kardex' : view === 'billing' ? 'Comprobantes de venta' : view === 'accounts' ? 'Estado de cuenta' : view === 'kardex' ? 'Movimientos de Kardex' : meta.title
+  const description = inventoryContext === 'productos' ? 'Administra los productos del catálogo. La clasificación avanzada se habilitará en una etapa posterior.' : inventoryContext === 'existencias' ? 'Consulta y controla las existencias actuales. Los movimientos trazables están en Kardex.' : salesContext === 'comprobantes' ? 'Consulta ventas y genera comprobantes imprimibles. La emisión electrónica SUNAT aún no está integrada.' : view === 'receipts' ? 'Registra el ingreso de las compras recibidas: confirma su entrada al inventario.' : view === 'billing' ? 'Consulta e imprime los comprobantes de tus ventas registradas.' : view === 'accounts' ? 'Da seguimiento a las cuentas por cobrar y registra su cancelación.' : view === 'kardex' ? 'Entradas y salidas registradas automáticamente por los cambios de stock.' : meta.description
   const invalidRange = Boolean(from && to && from > to)
   const finance = useMemo(() => financialSnapshot(records.finance), [records.finance])
 
@@ -98,11 +134,8 @@ function ModuleContent({ page, view, embedded, allowCreate = true }: { page: Dat
     let items = records[page]
     // Órdenes de compra: se visualiza todo lo comprado (pendiente y recibido).
     if (page === 'purchases' && view === 'receipts') {
-      // Ingreso al Kardex: solo lo recibido (Recibida por registrar + En inventario).
-      // Lo pendiente (Pendiente, Solicitud u Orden) vive en Órdenes de compra.
-      items = items.filter(item => item.status === 'Recibida' || purchaseHasStock(item.status))
-      if (receiptTab === 'received') items = items.filter(item => purchaseHasStock(item.status))
-      else if (receiptTab === 'pending') items = items.filter(item => !purchaseHasStock(item.status))
+      if (receiptTab === 'received') items = items.filter(item => item.requiereRecepcion !== false && item.estadoRecepcion === 'completa')
+      else if (receiptTab === 'pending') items = items.filter(item => item.requiereRecepcion !== false && item.estadoRecepcion !== 'completa')
     }
     if (page === 'finance' && financeTab !== 'todos') {
       const source = financeTab === 'cobrar' ? [...finance.receivables, ...finance.completedReceivables] : financeTab === 'pagar' ? [...finance.payables, ...finance.completedPayables] : [...finance.completedReceivables, ...finance.completedPayables]
@@ -166,8 +199,8 @@ function ModuleContent({ page, view, embedded, allowCreate = true }: { page: Dat
   if (!can(page)) return <div className="ws-card ws-empty-compact"><ShieldNotice /><strong>Acceso restringido</strong><span>Tu rol no tiene permiso de consulta para {meta.title.toLocaleLowerCase()}.</span></div>
 
   return <>
-    {!embedded && <section className="module-header"><div><span className="section-kicker">{view === 'records' ? meta.eyebrow : 'OPERACIÓN CONECTADA'}</span><h1>{title}</h1><p>{description}</p></div>{view !== 'receipts' && view !== 'kardex' && can(page, 'crear') && <button className="primary-button" disabled={loading || Boolean(errors[page]) || cashGate === true} onClick={() => openComposer(page)}><Plus size={17} />{meta.action}</button>}</section>}
-    {cashGate && <div className="ws-notice ws-notice-warning" role="status"><Lock size={17} /><span>Abre un turno en Caja para registrar {page === 'sales' ? 'ventas' : 'compras'}.</span><button className="ws-text-button" onClick={() => navigate('/caja')}>Ir a Caja</button></div>}
+    {!embedded && <section id={inventoryContext || salesContext || undefined} className="module-header ws-maintenance-anchor"><div><span className="section-kicker">{view === 'records' ? meta.eyebrow : 'OPERACIÓN CONECTADA'}</span><h1>{title}</h1><p>{description}</p></div>{view !== 'receipts' && view !== 'kardex' && can(page, 'crear') && <button className="primary-button" disabled={loading || Boolean(errors[page])} onClick={() => openComposer(page)}><Plus size={17} />{meta.action}</button>}</section>}
+    {page === 'sales' && cashGate && <div className="ws-notice ws-notice-warning" role="status"><Lock size={17} /><span>Las ventas con cobro en efectivo requieren un turno abierto. Puedes registrar ventas a crédito u otros medios sin abrir caja.</span><button className="ws-text-button" onClick={() => navigate('/caja')}>Ir a Caja</button></div>}
     {invalidRange && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={17} />La fecha inicial debe ser anterior o igual a la fecha final.</div>}
     {page === 'purchases' && view === 'receipts' && <div className="ws-view-tabs"><div className="ws-tabs" role="tablist" aria-label="Recepciones"><button role="tab" aria-selected={receiptTab === 'all'} onClick={() => setReceiptTab('all')}>Todas</button><button role="tab" aria-selected={receiptTab === 'pending'} onClick={() => setReceiptTab('pending')}>Por registrar</button><button role="tab" aria-selected={receiptTab === 'received'} onClick={() => setReceiptTab('received')}>En inventario</button></div></div>}
     {page === 'purchases' && view === 'receipts' && !loading && !errors[page] && records.purchases.some(item => item.status === 'Recibida') && <div className="ws-notice ws-notice-warning" role="status"><AlertTriangle size={17} /><span>{records.purchases.filter(item => item.status === 'Recibida').length} {records.purchases.filter(item => item.status === 'Recibida').length === 1 ? 'orden recibida pendiente de registrar' : 'órdenes recibidas pendientes de registrar'}: aún no generan movimiento de Kardex.</span></div>}
@@ -179,13 +212,22 @@ function ModuleContent({ page, view, embedded, allowCreate = true }: { page: Dat
   ? <strong>{item.name}</strong>
   : page === 'suppliers'
     ? <button type="button" className="ws-rowlink" title="Abrir ficha y editar" aria-label={`Ver y editar ${item.name}`} onClick={() => openEditor(page, item)}><strong>{item.name}</strong></button>
-    : <strong>{item.name}</strong>}<small>{item.detail}</small>{item.relatedName && <span className="linked-badge">{item.relatedCode} · {item.relatedName}</span>}{page === 'suppliers' && <span className={`linked-badge${item.ruc ? '' : ' muted'}`}>{item.ruc ? `RUC ${item.ruc}` : 'RUC pendiente'}</span>}{page === 'customers' && <span className={`linked-badge${item.documento ? '' : ' muted'}`}>{item.documento ? `${item.tipoDoc ?? 'DOC'} ${item.documento}` : 'Sin documento'}</span>}{page === 'finance' && item.dueAt && <small>Vence: {displayDate(`${item.dueAt}T12:00:00Z`)}</small>}</td><td className="record-date">{displayDate(item.createdAt)}<small>{item.date}</small></td>{page !== 'suppliers' && <td className="record-value ws-align-right">{page === 'inventory' ? <>{item.quantity ?? 0} und.<small>{item.precio !== undefined ? money(item.precio) : 'Precio pendiente'}</small></> : page === 'customers' ? (() => {
+    : <strong>{item.name}</strong>}<small>{item.detail}</small>{page === 'purchases' && <small className="ws-receipt-state">{item.requiereRecepcion === false ? 'No requiere ingreso a almacén' : 'Recepción: ' + (item.estadoRecepcion === 'completa' ? 'completa' : item.estadoRecepcion === 'parcial' ? 'parcial' : 'pendiente')}</small>}{item.relatedName && <span className="linked-badge">{item.relatedCode} · {item.relatedName}</span>}{page === 'suppliers' && <span className={`linked-badge${item.ruc ? '' : ' muted'}`}>{item.ruc ? `RUC ${item.ruc}` : 'RUC pendiente'}</span>}{page === 'customers' && <span className={`linked-badge${item.documento ? '' : ' muted'}`}>{item.documento ? `${item.tipoDoc ?? 'DOC'} ${item.documento}` : 'Sin documento'}</span>}{page === 'finance' && item.dueAt && <small>Vence: {displayDate(`${item.dueAt}T12:00:00Z`)}</small>}</td><td className="record-date">{displayDate(item.createdAt)}<small>{item.date}</small></td>{page !== 'suppliers' && <td className="record-value ws-align-right">{page === 'inventory' ? <>{item.quantity ?? 0} und.<small>{item.precio !== undefined ? money(item.precio) : 'Precio pendiente'}</small></> : page === 'customers' ? (() => {
                         const credit = customerCredit(item, records.sales, records.finance)
                         return <>{money(credit.disponible)}<small>Línea {money(credit.linea)}</small></>
-                      })() : meta.kind === 'money' ? money(item.amount) : item.detail.split('·')[0]}</td>}<td><span className={`status-pill ${statusTone(page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status)}`}>{page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status}</span></td><td><div className="row-actions">{(page === 'sales' || page === 'purchases') && <button className="row-action" title="Ver comprobante" aria-label={`Ver comprobante de ${item.id}`} onClick={() => setVoucher(item)}><Receipt size={15} /></button>}{page === 'purchases' && ['Pendiente', 'Solicitud', 'Orden'].includes(item.status) && can('purchases', 'editar') && <button className="primary-button row-action-text" title="Recibir: ingresa lo comprado al inventario (+ kardex)" aria-label={`Recibir ${item.id}`} disabled={saving} onClick={() => void receivePurchase(item)}><PackageCheck size={14} /> Recibir</button>}{page === 'purchases' && item.status === 'Recibida' && can('purchases', 'editar') && <button className="export-button row-action-text" title="Registrar ingreso: aplica lo comprado al inventario (+ kardex)" aria-label={`Registrar ingreso de ${item.id}`} disabled={saving} onClick={() => void registerPurchaseIngress(item)}><ClipboardCheck size={14} /> Registrar ingreso</button>}{page === 'quotes' && ['Pendiente', 'En curso', 'Aprobada'].includes(item.status) && can('sales', 'crear') && can('quotes', 'editar') && <button className="row-action" title="Convertir en venta" aria-label={`Convertir ${item.id} en venta`} disabled={saving} onClick={() => setQuote(item)}><ShoppingCart size={15} /></button>}{page === 'finance' && item.status !== 'Completada' && can('finance', 'editar') && <button className="row-action" title={item.financeType === 'pagar' ? 'Registrar pago total' : 'Registrar cobro total'} aria-label={`Completar cuenta ${item.id}`} disabled={saving} onClick={() => setAccount(item)}><Wallet size={15} /></button>}{page === 'suppliers' && <button className="row-action" title="Catálogo del proveedor" aria-expanded={supplierId === item.id} aria-label={`Ver catálogo de ${item.name}`} onClick={() => setSupplierId(value => value === item.id ? null : item.id)}>{supplierId === item.id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button>}{page === 'customers' && (can('sales') || can('finance')) && <button className="row-action" title="Historial de compras" aria-label={`Ver historial de ${item.name}`} onClick={() => setHistoryCustomer(item)}><Eye size={15} /></button>}{((page !== 'suppliers' && page !== 'purchases' && page !== 'customers' && page !== 'inventory' && page !== 'finance' && (page !== 'sales' || item.status !== 'Completada')) || ((page === 'suppliers' || page === 'customers') && embedded)) && can(page, 'editar') && <button className="row-action" title="Editar" aria-label={`Editar ${item.name}`} onClick={() => openEditor(page, item)}><Pencil size={15} /></button>}{can(page, 'eliminar') && <button className="row-action delete" title="Eliminar" aria-label={`Eliminar ${item.name}`} onClick={() => requestDelete(page, item)}><Trash2 size={15} /></button>}</div></td></tr>{page === 'suppliers' && supplierId === item.id && <tr><td colSpan={6}><SupplierCatalog supplier={item} allowEdit={embedded} /></td></tr>}</Fragment>)}{!visible.length && <tr><td colSpan={6}><EmptyRecords loading={loading} error={errors[page]} title={query || status !== 'Todos' || from || to ? 'Sin coincidencias con estos filtros' : 'Todavía no hay registros'} /></td></tr>}</tbody></table></div><div className="ws-pagination"><span>{sorted.length ? current * pageSize + 1 : 0}–{Math.min((current + 1) * pageSize, sorted.length)} de {sorted.length} registros</span><label>Filas<select value={pageSize} onChange={event => setPageSize(Number(event.target.value))} aria-label="Filas por página"><option>10</option><option>25</option><option>50</option></select></label><div><button className="ws-icon-button" aria-label="Página anterior" disabled={!current} onClick={() => setPageIndex(current - 1)}><ChevronLeft size={16} /></button><span>{current + 1} / {pageCount}</span><button className="ws-icon-button" aria-label="Página siguiente" disabled={current + 1 >= pageCount} onClick={() => setPageIndex(current + 1)}><ChevronRight size={16} /></button></div></div></section>
-      <aside className="ws-module-aside"><section className="ws-card"><h2 className="ws-summary-title"><ClipboardList size={15} />Resumen de la consulta</h2><div className="ws-summary-list">{summary.map(([label, value]) => <div key={label}><small>{label}</small><strong>{loading ? '—' : errors[page] ? 'No disponible' : value}</strong></div>)}</div></section>{can('finance') && <section className="ws-card"><h2 className="ws-summary-title"><Wallet size={15} />Situación financiera</h2><div className="ws-summary-list"><div><small>Por cobrar</small><strong>{errors.finance ? 'No disponible' : money(finance.receivable)}</strong></div><div><small>Por pagar</small><strong>{errors.finance ? 'No disponible' : money(finance.payable)}</strong></div></div></section>}<div className="ws-source-note"><Info size={15} /><span>Los filtros, los totales y la exportación usan los mismos registros de Supabase. {page === 'inventory' ? 'La valorización utiliza el precio de venta, no el costo de adquisición.' : page === 'purchases' ? 'El ingreso de stock ocurre en Recepción; la cuenta por pagar incluye IGV.' : page === 'finance' ? 'Completar una cuenta registra su cancelación total.' : 'Los cambios se conservan al volver a iniciar sesión.'}</span></div>{embedded && allowCreate !== false && can(page, 'crear') && <button className="primary-button" disabled={cashGate === true} onClick={() => openComposer(page)}><Plus size={16} />{meta.action}</button>}</aside></div>}
-    {quote && <ConfirmModal title="Convertir cotización en venta" message={`${quote.id}: se creará una venta, se actualizará el stock y se generará la cuenta por cobrar correspondiente.`} confirmLabel="Convertir en venta" busy={saving} onCancel={() => setQuote(null)} onConfirm={async () => { await convertQuote(quote.id); setQuote(null) }} />}
-    {account && <ConfirmModal title={account.financeType === 'pagar' ? 'Registrar pago' : 'Registrar cobro'} message={`Registrar la cancelación total de ${account.id} por ${money(account.amount)}. La cuenta quedará completada en Supabase y la operación vinculada también.`} confirmLabel="Registrar cancelación" busy={saving} onCancel={() => setAccount(null)} onConfirm={async () => { await settleAccount(account, payMedio); setAccount(null) }}><label className="ws-confirm-field">Medio de pago<select value={payMedio} onChange={(event) => setPayMedio(event.target.value)} aria-label="Medio de pago">{payMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label></ConfirmModal>}
+                      })() : meta.kind === 'money' ? money(item.amount) : item.detail.split('·')[0]}</td>}<td><span className={`status-pill ${statusTone(page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status)}`}>{page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status}</span></td><td><div className="row-actions">{(page === 'sales' || page === 'purchases') && <button className="row-action" title="Ver comprobante" aria-label={`Ver comprobante de ${item.id}`} onClick={() => setVoucher(item)}><Receipt size={15} /></button>}{page === 'purchases' && item.requiereRecepcion !== false && item.estadoRecepcion !== 'completa' && item.status !== 'Rechazada' && can('purchases', 'editar') && (can('inventory', 'editar') || can('inventory', 'crear')) && <button className="primary-button row-action-text" title="Registrar una recepción parcial o completa por almacén" aria-label={`Recibir ${item.id}`} disabled={saving} onClick={() => setReceiptOrder(item)}><PackageCheck size={14} />{item.estadoRecepcion === 'parcial' ? 'Continuar recepción' : 'Recibir'}</button>}{page === 'quotes' && ['Pendiente', 'En curso', 'Aprobada'].includes(item.status) && can('sales', 'crear') && can('quotes', 'editar') && <button className="row-action" title="Convertir en venta" aria-label={`Convertir ${item.id} en venta`} disabled={saving} onClick={() => { setQuote(item); setQuoteWarehouseId(''); setQuoteRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }}><ShoppingCart size={15} /></button>}{page === 'finance' && item.status !== 'Completada' && can('finance', 'crear') && <button className="row-action" title={item.financeType === 'pagar' ? 'Registrar pago o abono' : 'Registrar cobro o abono'} aria-label={`Registrar movimiento para ${item.id}`} disabled={saving} onClick={() => { setAccount(item); setAccountBalance(null); setAccountAmount(''); setAccountRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }}><Wallet size={15} /></button>}{page === 'suppliers' && <button className="row-action" title="Catálogo del proveedor" aria-expanded={supplierId === item.id} aria-label={`Ver catálogo de ${item.name}`} onClick={() => setSupplierId(value => value === item.id ? null : item.id)}>{supplierId === item.id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button>}{page === 'customers' && (can('sales') || can('finance')) && <button className="row-action" title="Historial de compras" aria-label={`Ver historial de ${item.name}`} onClick={() => setHistoryCustomer(item)}><Eye size={15} /></button>}{((page !== 'suppliers' && page !== 'purchases' && page !== 'customers' && page !== 'inventory' && page !== 'finance' && (page !== 'sales' || item.status !== 'Completada')) || ((page === 'suppliers' || page === 'customers') && embedded)) && can(page, 'editar') && <button className="row-action" title="Editar" aria-label={`Editar ${item.name}`} onClick={() => openEditor(page, item)}><Pencil size={15} /></button>}{can(page, 'eliminar') && <button className="row-action delete" title="Eliminar" aria-label={`Eliminar ${item.name}`} onClick={() => requestDelete(page, item)}><Trash2 size={15} /></button>}</div></td></tr>{page === 'suppliers' && supplierId === item.id && <tr><td colSpan={6}><SupplierCatalog supplier={item} allowEdit={embedded} /></td></tr>}</Fragment>)}{!visible.length && <tr><td colSpan={6}><EmptyRecords loading={loading} error={errors[page]} title={query || status !== 'Todos' || from || to ? 'Sin coincidencias con estos filtros' : 'Todavía no hay registros'} /></td></tr>}</tbody></table></div><div className="ws-pagination"><span>{sorted.length ? current * pageSize + 1 : 0}–{Math.min((current + 1) * pageSize, sorted.length)} de {sorted.length} registros</span><label>Filas<select value={pageSize} onChange={event => setPageSize(Number(event.target.value))} aria-label="Filas por página"><option>10</option><option>25</option><option>50</option></select></label><div><button className="ws-icon-button" aria-label="Página anterior" disabled={!current} onClick={() => setPageIndex(current - 1)}><ChevronLeft size={16} /></button><span>{current + 1} / {pageCount}</span><button className="ws-icon-button" aria-label="Página siguiente" disabled={current + 1 >= pageCount} onClick={() => setPageIndex(current + 1)}><ChevronRight size={16} /></button></div></div></section>
+      <aside className="ws-module-aside"><section className="ws-card"><h2 className="ws-summary-title"><ClipboardList size={15} />Resumen de la consulta</h2><div className="ws-summary-list">{summary.map(([label, value]) => <div key={label}><small>{label}</small><strong>{loading ? '—' : errors[page] ? 'No disponible' : value}</strong></div>)}</div></section>{can('finance') && <section className="ws-card"><h2 className="ws-summary-title"><Wallet size={15} />Situación financiera</h2><div className="ws-summary-list"><div><small>Por cobrar</small><strong>{errors.finance ? 'No disponible' : money(finance.receivable)}</strong></div><div><small>Por pagar</small><strong>{errors.finance ? 'No disponible' : money(finance.payable)}</strong></div></div></section>}<div className="ws-source-note"><Info size={15} /><span>Los filtros, los totales y la exportación usan los mismos registros de Supabase. {page === 'inventory' ? 'La valorización utiliza el precio de venta, no el costo de adquisición.' : page === 'purchases' ? 'La recepción por almacén crea stock y Kardex; los pagos se registran en Tesorería.' : page === 'finance' ? 'Los abonos y cancelaciones crean movimientos aplicados a su cuenta.' : 'Los cambios se conservan al volver a iniciar sesión.'}</span></div>{embedded && allowCreate !== false && can(page, 'crear') && <button className="primary-button" onClick={() => openComposer(page)}><Plus size={16} />{meta.action}</button>}</aside></div>}
+    {quote && <ConfirmModal title="Convertir cotización en venta" message={`${quote.id}: se creará la venta, se descontará del almacén seleccionado y se generará la cuenta por cobrar dentro de la misma operación.`} confirmLabel="Convertir en venta" busy={saving} onCancel={() => setQuote(null)} onConfirm={async () => {
+      if (!quoteWarehouseId) { notify(quoteWarehouseError || 'Crea y activa un almacén antes de convertir la cotización.'); return }
+      if (await convertQuote(quote.id, quoteWarehouseId, quoteRequestKey)) setQuote(null)
+    }}><label className="ws-confirm-field">Almacén de salida<select value={quoteWarehouseId} onChange={event => { setQuoteWarehouseId(event.target.value); setQuoteRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }}><option value="">Selecciona un almacén</option>{quoteWarehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.nombre}</option>)}</select></label>{quoteWarehouseError && <small className="relation-hint">{quoteWarehouseError}</small>}</ConfirmModal>}
+    {account && <ConfirmModal title={account.financeType === 'pagar' ? 'Registrar pago' : 'Registrar cobro'} message={`Saldo pendiente de ${account.id}: ${accountBalance === null ? 'consultando…' : money(accountBalance)}. Puedes registrar un abono parcial o cancelar el saldo.`} confirmLabel="Registrar movimiento" busy={saving} onCancel={() => setAccount(null)} onConfirm={async () => {
+      const amount = Number(accountAmount)
+      if (!Number.isFinite(amount) || amount <= 0 || accountBalance === null || amount > accountBalance) { notify('El importe debe ser mayor que cero y no puede superar el saldo pendiente.'); return }
+      if (payMedio.toLocaleLowerCase('es') === 'efectivo' && !cashShiftId) { notify('Selecciona una caja con turno abierto para registrar efectivo.'); return }
+      if (await settleAccount(account, amount, payMedio, accountRequestKey, cashShiftId)) setAccount(null)
+    }}><label className="ws-confirm-field">Importe del movimiento<input type="number" min="0.01" max={accountBalance ?? undefined} step="0.01" value={accountAmount} disabled={accountBalance === null} onChange={event => { setAccountAmount(event.target.value); setAccountRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }} /></label><label className="ws-confirm-field">Medio de pago<select value={payMedio} onChange={event => { setPayMedio(event.target.value); setCashShiftId(openCashShifts.length === 1 ? openCashShifts[0].id : ''); setAccountRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }} aria-label="Medio de pago">{payMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>{payMedio.toLocaleLowerCase('es') === 'efectivo' && <label className="ws-confirm-field">Caja que recibe o entrega el efectivo<select value={cashShiftId} required onChange={event => { setCashShiftId(event.target.value); setAccountRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }}><option value="">Selecciona un turno abierto</option>{openCashShifts.map(shift => <option key={shift.id} value={shift.id}>Turno {new Date(shift.abiertoEn).toLocaleString('es-PE', { timeZone: 'America/Lima' })} · {shift.abiertoPor ?? 'Sin responsable'}</option>)}</select>{!openCashShifts.length && <small>No hay cajas abiertas. Abre un turno en Tesorería.</small>}</label>}</ConfirmModal>}
+    {receiptOrder && <PurchaseReceiptModal order={receiptOrder} busy={saving} onClose={() => setReceiptOrder(null)} onSubmit={(warehouseId, lines, idempotencyKey) => receivePurchase(receiptOrder, warehouseId, lines, idempotencyKey)} />}
     {voucher && (page === 'sales' || page === 'purchases') && <VoucherModal page={page} record={voucher} onClose={() => setVoucher(null)} />}
     {historyCustomer && page === 'customers' && <CustomerHistory customer={historyCustomer} onClose={() => setHistoryCustomer(null)} />}
   </>

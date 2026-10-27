@@ -6,7 +6,6 @@ import { useRecords } from '../../context/RecordsContext'
 import { financialSnapshot, totalAmount } from '../../data/dashboard'
 import { isStockAlert, money, statusTone } from '../../data/helpers'
 import { businessDate, dailyOperations, displayDate, inDateRange, matchesSearch, periodRange, shiftDate, type Period } from '../../data/workspace'
-import { readCompanyProfile } from '../../services/company'
 import { exportExecutiveDashboard } from '../../services/dashboardReport'
 import SystemGuideButton from '../SystemGuideButton'
 import type { DataPage, ExportFormat, RecordItem } from '../../types'
@@ -37,7 +36,7 @@ function OperationsChart({ sales, purchases, period }: { sales: RecordItem[]; pu
 
 export default function DashboardOverview() {
   const { profile, can } = useAuth()
-  const { records, loading, errors: queryErrors, openComposer, exportTable, notify } = useRecords()
+  const { records, company, loading, errors: queryErrors, openComposer, exportTable, notify } = useRecords()
   const errors: Partial<Record<DataPage, string>> = { ...queryErrors }
   for (const page of ['sales', 'purchases', 'inventory'] as const) if (!can(page)) errors[page] = 'Tu rol no tiene permiso para consultar este módulo.'
   const navigate = useNavigate()
@@ -102,7 +101,7 @@ export default function DashboardOverview() {
       finance: can('finance') && !queryErrors.finance ? records.finance : undefined,
       range,
       periodLabel,
-      company: readCompanyProfile(records.settings),
+      company,
       author: profile?.nombre,
       dataNotes: optionalSources.filter(source => can(source.page) && queryErrors[source.page]).map(source => source.label),
     }).then(() => notify('Dashboard ejecutivo preparado. Selecciona Guardar como PDF en la ventana de impresión.'))

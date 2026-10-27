@@ -46,7 +46,7 @@ test('reconoce la pila del proyecto y los servicios AWS por evidencias', () => {
   assert.ok(report.stack.includes('JavaScript'))
   assert.ok(report.stack.includes('AWS SDK v3'))
   assert.deepEqual(report.stats.languages, ['JavaScript'])
-  const s3 = report.aws.find((insight) => insight.service === 'Amazon S3')
+  const s3 = report.awsRecommendations.find((insight) => insight.service === 'Amazon S3')
   assert.ok(s3, 'debe detectar Amazon S3')
   assert.ok(s3.category.length > 0)
   const clean = buildAnalysisFromFiles('clean', 'zip', 'clean.zip', [
@@ -56,7 +56,7 @@ test('reconoce la pila del proyecto y los servicios AWS por evidencias', () => {
     { path: '.github/workflows/ci.yml', bytes: 30, text: 'on: push\njobs:\n' },
     { path: 'tests/main.test.js', bytes: 30, text: 'test()\n' },
   ])
-  assert.equal(clean.aws.length, 0)
+  assert.equal(clean.awsRecommendations.length, 0)
   assert.equal(clean.findings.length, 0)
 })
 

@@ -30,8 +30,13 @@ function findingRows(findings: AnalyzerFinding[]) {
 }
 
 function awsRows(analysis: AnalyzerReport) {
-  if (!analysis.aws.length) return '<p class="empty">No se detectaron evidencias de servicios AWS en los archivos analizados. Consulta la evaluación de preparación cloud para el plan de migración.</p>'
-  return `<table class="plain"><thead><tr><th>Servicio</th><th>Categoría</th><th>Evidencias</th></tr></thead><tbody>${analysis.aws.map(insight => `<tr><td><b>${esc(insight.service)}</b></td><td>${esc(insight.category)}</td><td>${insight.evidence.length ? insight.evidence.slice(0, 4).map(file => `<code>${esc(file)}</code>`).join(' ') : 'Uso general del proyecto'}</td></tr>`).join('')}</tbody></table>`
+  if (!analysis.awsRecommendations.length) {
+    const message = analysis.recommendationsVersion !== 2
+      ? 'Este análisis histórico es anterior a las recomendaciones AWS. Vuelve a analizar el proyecto para obtener sugerencias basadas en su stack.'
+      : 'No hay señales suficientes para sugerir servicios AWS concretos. Confirma el tipo de aplicación, su destino de despliegue y sus necesidades de datos o archivos.'
+    return `<p class="empty">${esc(message)}</p>`
+  }
+  return `<table class="plain"><thead><tr><th>Prioridad</th><th>Servicio</th><th>Categoría y motivo</th><th>Señales del proyecto</th></tr></thead><tbody>${analysis.awsRecommendations.map(item => `<tr><td>${esc(item.priority)}</td><td><b>${esc(item.service)}</b></td><td>${esc(item.category)} · ${esc(item.reason)}</td><td>${item.signals.map(signal => `<code>${esc(signal)}</code>`).join(' ')}</td></tr>`).join('')}</tbody></table>`
 }
 
 function metaRow(analysis: AnalyzerReport) {
@@ -93,8 +98,8 @@ ${analysis.stack.length ? `<p class="meta" style="margin-top:2px">Stack detectad
 <p class="meta" style="margin:10px 0 0">Carpeta de referencia: ${esc(metaRow(analysis))} · Idiomas principales: ${esc(analysis.stats.languages.join(', ') || 'no identificados')}</p>
 <h2>Seguridad · hallazgos y recomendaciones</h2>${findingRows(sortingFindings(analysis.findings, 'Seguridad'))}
 <h2>Escalabilidad · hallazgos y recomendaciones</h2>${findingRows(sortingFindings(analysis.findings, 'Escalabilidad'))}
-<h2>Servicios AWS detectados</h2>${awsRows(analysis)}
-<h2>Lectura de la preparación cloud</h2><p style="color:#3c4a5d">La puntuación de preparación cloud combina contenerización (Docker), infraestructura como código (SAM/Serverless/Terraform), integración continua, pruebas y uso de servicios administrados AWS. Un proyecto con manifiestos reproducibles y secretos en gestores de secretos obtiene mejor resultado al migrar a ECS/Fargate o Lambda según la carga.</p>
+<h2>Servicios AWS recomendados</h2>${awsRows(analysis)}
+<h2>Lectura de la preparación cloud</h2><p style="color:#3c4a5d">La puntuación de preparación cloud combina contenerización (Docker), infraestructura como código (SAM/Serverless/Terraform), integración continua y pruebas. Las recomendaciones AWS se basan en el stack y las señales visibles en los archivos; son opciones iniciales y requieren confirmar requisitos de carga, disponibilidad, costos y datos antes de decidir el diseño final.</p>
 <footer class="footer">EnterpriseCloud · Analizador de proyectos · Informe generado automáticamente sobre los archivos compartidos; los hallazgos son heurísticas y requieren revisión humana antes de actuar.</footer>
 <div class="actions"><button onclick="window.print()">Imprimir o guardar PDF</button></div>
 <script>window.addEventListener('load', () => { setTimeout(() => window.focus(), 150) })</script>

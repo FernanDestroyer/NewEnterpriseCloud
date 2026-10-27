@@ -16,10 +16,12 @@ export type AnalyzerFinding = {
   recommendation: string
 }
 
-export type AwsInsight = {
+export type AwsRecommendation = {
   service: string
   category: string
-  evidence: string[]
+  priority: 'Principal' | 'Complementario' | 'Opcional'
+  reason: string
+  signals: string[]
 }
 
 export type AnalyzerStats = {
@@ -42,7 +44,8 @@ export type AnalyzerReport = {
   stats: AnalyzerStats
   stack: string[]
   findings: AnalyzerFinding[]
-  aws: AwsInsight[]
+  awsRecommendations: AwsRecommendation[]
+  recommendationsVersion?: number
   scores: AnalyzerScores
 }
 
@@ -56,22 +59,9 @@ type FileRule = {
   test: (file: AnalyzerFile) => boolean
 }
 
-type AwsPattern = {
-  service: string
-  category: string
-  pattern: RegExp
-}
-
 type Accumulated = {
   finding: Omit<AnalyzerFinding, 'files'>
   files: Set<string>
-}
-
-type AwsWorking = {
-  service: string
-  category: string
-  pattern: RegExp
-  evidence: Set<string>
 }
 
 const CLAMP = (value: number) => Math.max(0, Math.min(100, Math.round(value)))
@@ -256,43 +246,6 @@ const FILE_RULES: FileRule[] = [
   },
 ]
 
-const AWS_PATTERNS: AwsPattern[] = [
-  { service: 'Amazon S3', category: 'Almacenamiento de objetos', pattern: /(?:^|[^a-z0-9])s3(?![a-z0-9])|S3Client|aws_s3_|\.s3\.amazonaws\.com|bucketName|putObject|presigned/i },
-  { service: 'AWS Lambda', category: 'Cómputo sin servidor', pattern: /\blambda\b|AWS_LAMBDA_FUNCTION_NAME|lambda_handler|\bserverless\.ya?ml/i },
-  { service: 'Amazon API Gateway', category: 'Integraciones', pattern: /apigateway|aws_apigateway|api\.gateway/i },
-  { service: 'Amazon DynamoDB', category: 'Base de datos NoSQL', pattern: /dynamodb|DocumentClient|aws_dynamodb_/i },
-  { service: 'Amazon RDS / Aurora', category: 'Base de datos relacional', pattern: /\brds\b|aurora|aws_db_instance|aws_rds_cluster/i },
-  { service: 'Amazon SQS', category: 'Colas de mensajes', pattern: /\bsqs\b|SendMessage|aws_sqs_/i },
-  { service: 'Amazon SNS', category: 'Notificaciones', pattern: /\bsns\b|TopicArn|aws_sns_/i },
-  { service: 'Amazon Cognito', category: 'Identidad y accesos', pattern: /cognito|userPool/i },
-  { service: 'AWS Secrets Manager', category: 'Seguridad de secretos', pattern: /secretsmanager|getSecretValue|aws_secretsmanager_/i },
-  { service: 'Parameter Store (SSM)', category: 'Seguridad de secretos', pattern: /GetParameter|aws_ssm_|\bssm\./i },
-  { service: 'Amazon SES', category: 'Correo', pattern: /\bses\b|SendEmailCommand|aws_ses_/i },
-  { service: 'Amazon CloudWatch', category: 'Observabilidad', pattern: /cloudwatch|aws_cloudwatch_/i },
-  { service: 'Amazon CloudFront', category: 'Entrega de contenido (CDN)', pattern: /cloudfront|aws_cloudfront_/i },
-  { service: 'Amazon ECS / Fargate', category: 'Contenedores', pattern: /\becs\b|fargate|aws_ecs_/i },
-  { service: 'Amazon EKS', category: 'Contenedores Kubernetes', pattern: /\beks\b|aws_eks_/i },
-  { service: 'Amazon ECR', category: 'Registro de contenedores', pattern: /\becr\b|aws_ecr_/i },
-  { service: 'Amazon EC2', category: 'Cómputo virtual', pattern: /\bec2\b|aws_instance|AWS::EC2::/i },
-  { service: 'Amazon EventBridge', category: 'Bus de eventos', pattern: /eventbridge|PutEvents|aws_cloudwatch_event_/i },
-  { service: 'AWS Step Functions', category: 'Orquestación', pattern: /stepfunctions|aws_sfn_|stateMachine/i },
-  { service: 'Amazon Redshift', category: 'Almacén de datos', pattern: /redshift/i },
-  { service: 'ElastiCache / Redis', category: 'Caché administrada', pattern: /elasticache|aws_elasticache_/i },
-  { service: 'Route 53', category: 'DNS', pattern: /route53|aws_route53_/i },
-  { service: 'AWS Amplify', category: 'Despliegue de apps', pattern: /@?aws-amplify/i },
-  { service: 'AWS CDK', category: 'Infraestructura como código', pattern: /@aws-cdk|aws-cdk-lib/i },
-  { service: 'AWS CloudFormation / SAM', category: 'Infraestructura como código', pattern: /AWSTemplateFormatVersion|AWS::|samconfig/i },
-  { service: 'Terraform AWS', category: 'Infraestructura como código', pattern: /(?:resource|provider)\s+"aws_/i },
-  { service: 'Amazon OpenSearch', category: 'Búsqueda', pattern: /opensearch|elasticsearch/i },
-  { service: 'Amazon Kinesis', category: 'Streaming de datos', pattern: /kinesis/i },
-  { service: 'Elastic Beanstalk', category: 'Despliegue por plataforma', pattern: /elasticbeanstalk/i },
-  { service: 'Amazon Bedrock', category: 'IA generativa', pattern: /bedrock|invokeModel/i },
-  { service: 'Amazon Textract', category: 'IA de documentos', pattern: /textract/i },
-  { service: 'Amazon Rekognition', category: 'IA de visión', pattern: /rekognition/i },
-  { service: 'EFS / FSx', category: 'Almacenamiento compartido', pattern: /\befs\b|aws_efs_|aws_fsx/i },
-  { service: 'AWS Batch', category: 'Cómputo por lotes', pattern: /aws_batch|AWS::Batch/i },
-]
-
 const LANGUAGE_BY_EXT: Record<string, string> = {
   ts: 'TypeScript', tsx: 'TypeScript', js: 'JavaScript', jsx: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript',
   py: 'Python', rb: 'Ruby', go: 'Go', java: 'Java', kt: 'Kotlin', swift: 'Swift', php: 'PHP', cs: 'C#',
@@ -420,6 +373,140 @@ function detectStack(files: AnalyzerFile[]): string[] {
   return [...stack]
 }
 
+function recommendAwsServices(
+  files: AnalyzerFile[],
+  stack: string[],
+  context: { hasDocker: boolean; hasIac: boolean; hasCi: boolean },
+): AwsRecommendation[] {
+  const recommendations: AwsRecommendation[] = []
+  const add = (recommendation: AwsRecommendation) => {
+    if (!recommendations.some(item => item.service === recommendation.service)) recommendations.push(recommendation)
+  }
+  const pathsMatching = (pattern: RegExp) => files
+    .filter(file => pattern.test(file.path) || pattern.test(file.text ?? ''))
+    .slice(0, 4)
+    .map(file => file.path)
+  const frontend = stack.filter(item => ['React', 'Vue', 'Svelte', 'Angular', 'Vite', 'Next.js'].includes(item))
+  const backend = stack.filter(item => ['Express', 'Fastify', 'Koa', 'NestJS', 'Flask', 'Django', 'FastAPI', '.NET'].includes(item))
+  const apiFiles = pathsMatching(/(?:^|\/)(?:api|backend|server)\/|\b(?:app|router)\.(?:get|post|put|delete|patch)\s*\(|\b(?:FastAPI|Flask|express\s*\(|NestFactory)\b/i)
+  const isServerless = files.some(file => /(?:^|\/)(?:serverless\.ya?ml|samconfig\.toml)$/.test(file.path) || /AWS::Serverless::Function/.test(file.text ?? ''))
+  const hasBackend = backend.length > 0 || apiFiles.length > 0 || isServerless
+  const signals = (...values: Array<string | undefined>) => values.filter((value): value is string => Boolean(value))
+
+  if (frontend.length > 0) {
+    const next = frontend.includes('Next.js')
+    add({
+      service: next ? 'AWS Amplify Hosting' : 'Amazon S3 + Amazon CloudFront',
+      category: next ? 'Hosting de aplicaciones web' : 'Hosting web estático y CDN',
+      priority: 'Principal',
+      reason: next
+        ? 'El stack incluye Next.js; Amplify Hosting es una opción para publicar la aplicación web y sus rutas renderizadas.'
+        : 'El stack incluye una interfaz web. S3 puede servir los archivos estáticos y CloudFront distribuirlos con baja latencia.',
+      signals: signals(...frontend, ...pathsMatching(/(?:^|\/)(?:vite\.config|next\.config|index\.html|src\/.*\.(?:tsx|jsx|vue|svelte))$/i)),
+    })
+  }
+
+  if (hasBackend) {
+    const backendSignals = signals(...backend, ...apiFiles, context.hasDocker ? 'Dockerfile / docker-compose' : undefined)
+    if (isServerless) {
+      add({
+        service: 'AWS Lambda + Amazon API Gateway',
+        category: 'API sin servidor',
+        priority: 'Principal',
+        reason: 'El proyecto ya describe funciones serverless; Lambda ejecuta la lógica y API Gateway puede exponer los endpoints.',
+        signals: signals(...backendSignals, ...pathsMatching(/serverless\.ya?ml|samconfig\.toml|template\.ya?ml/i)),
+      })
+    } else if (context.hasDocker) {
+      add({
+        service: 'Amazon ECS con AWS Fargate',
+        category: 'Ejecución de contenedores',
+        priority: 'Principal',
+        reason: 'El proyecto ya incluye configuración de contenedor; Fargate permite ejecutar el servicio sin administrar servidores. Amazon ECR puede guardar las imágenes.',
+        signals: backendSignals,
+      })
+    } else {
+      add({
+        service: 'Amazon ECS Express Mode + Amazon ECR',
+        category: 'Publicación administrada de API o servicio web',
+        priority: 'Principal',
+        reason: 'Se identificó un framework o rutas de servidor. ECS Express Mode administra la publicación del servicio; como el proyecto no incluye contenedor, primero habrá que preparar una imagen y guardarla en ECR.',
+        signals: backendSignals,
+      })
+    }
+    add({
+      service: 'Amazon CloudWatch',
+      category: 'Registros y monitoreo',
+      priority: 'Complementario',
+      reason: 'Centraliza registros y métricas del servicio desplegado para investigar errores y vigilar su operación.',
+      signals: backendSignals,
+    })
+  }
+
+  const supabase = stack.includes('Supabase') || files.some(file => /@supabase\/|supabase\.co/i.test(file.text ?? ''))
+  const postgres = stack.includes('PostgreSQL') || files.some(file => /postgres(?:ql)?:\/\//i.test(file.text ?? ''))
+  const mysql = stack.includes('MySQL') || files.some(file => /mysql:\/\//i.test(file.text ?? ''))
+  if (postgres || mysql) {
+    const engine = postgres ? 'PostgreSQL' : 'MySQL'
+    add({
+      service: `Amazon RDS para ${engine}`,
+      category: 'Base de datos relacional administrada',
+      priority: supabase ? 'Opcional' : 'Complementario',
+      reason: supabase
+        ? 'El stack ya incluye Supabase/PostgreSQL. Mantén la base actual si cubre las necesidades; considera RDS solo si se decide consolidar también la base de datos en AWS.'
+        : `Se encontró evidencia de ${engine}. RDS puede alojar una base relacional administrada si ese motor forma parte del despliegue previsto.`,
+      signals: signals(...(postgres ? ['PostgreSQL'] : ['MySQL']), ...(supabase ? ['Supabase detectado; migración no necesaria por defecto'] : []), ...pathsMatching(/(?:database|db|supabase|\.env)/i)),
+    })
+  }
+
+  const s3ClientFiles = pathsMatching(/@aws-sdk\/client-s3|\bS3Client\b|\b(?:PutObject|GetObject|DeleteObject)Command\b|\bs3:\/\//i)
+  const uploadFiles = pathsMatching(/multer[^\n]{0,100}dest(?:ination)?\s*[:=]\s*['"][^'";\n]+['"]|fs\.createWriteStream|upload\.single\s*\(/i)
+  const s3Signals = [...new Set([...s3ClientFiles, ...uploadFiles])]
+  if (s3Signals.length > 0) {
+    add({
+      service: 'Amazon S3',
+      category: 'Almacenamiento de archivos',
+      priority: s3ClientFiles.length > 0 ? 'Complementario' : 'Principal',
+      reason: s3ClientFiles.length > 0
+        ? 'Se detectó integración con el cliente de Amazon S3. Revisa permisos IAM mínimos, cifrado, acceso privado y URLs temporales para los objetos.'
+        : 'Se encontró manejo de archivos en el servidor. S3 permite guardar los objetos fuera del disco local de la aplicación y compartirlos entre instancias.',
+      signals: s3Signals,
+    })
+  }
+
+  const secretFiles = pathsMatching(/(?:^|\/)\.env(?:\.|$)|process\.env|import\.meta\.env|os\.environ|os\.getenv/i)
+  if (hasBackend && secretFiles.length > 0) {
+    add({
+      service: 'AWS Secrets Manager',
+      category: 'Gestión de secretos',
+      priority: 'Complementario',
+      reason: 'La aplicación usa configuración de entorno. Para el despliegue, guarda credenciales del servidor en un gestor de secretos y evita incluirlas en el repositorio o el cliente web.',
+      signals: secretFiles,
+    })
+  }
+
+  if (!context.hasCi && (frontend.length > 0 || hasBackend)) {
+    add({
+      service: 'AWS CodeBuild + AWS CodePipeline',
+      category: 'Integración y despliegue continuo',
+      priority: 'Opcional',
+      reason: 'No se encontró un flujo CI visible. Estos servicios pueden automatizar compilación, validaciones y despliegue cuando se elija AWS como destino.',
+      signals: ['No se detectó configuración CI en GitHub Actions, GitLab CI, Bitbucket o CircleCI'],
+    })
+  }
+
+  if (!context.hasIac && hasBackend) {
+    add({
+      service: 'AWS CDK o AWS CloudFormation',
+      category: 'Infraestructura como código',
+      priority: 'Opcional',
+      reason: 'No se encontró infraestructura como código. Definir recursos de AWS en plantillas facilita repetir y revisar el despliegue.',
+      signals: signals(...backend, ...apiFiles, 'No se detectó plantilla de infraestructura'),
+    })
+  }
+
+  return recommendations
+}
+
 export function buildAnalysisFromFiles(
   name: string,
   kind: AnalyzerSourceKind,
@@ -457,23 +544,12 @@ export function buildAnalysisFromFiles(
     }
   }
 
-  const aws = new Map<string, AwsWorking>()
   for (const file of files) {
-    const text = file.text ?? ''
     for (const rule of FILE_RULES) if (rule.test(file)) add(rule, file)
-    for (const hint of AWS_PATTERNS) {
-      if (!hint.pattern.test(text)) continue
-      let insight: AwsWorking | undefined = aws.get(hint.service)
-      if (!insight) {
-        insight = { service: hint.service, category: hint.category, evidence: new Set<string>(), pattern: hint.pattern }
-        aws.set(hint.service, insight)
-      }
-      if (insight.evidence.size < 12) insight.evidence.add(file.path)
-    }
   }
 
   const hasDocker = files.some(file => /(?:^|\/)dockerfile$|docker-compose\.ya?ml$/i.test(file.path))
-  const hasIac = files.some(file => /(?:^|\/)(?:serverless\.ya?ml|template\.ya?ml|samconfig\.toml|\.tf|\.tfvars)$/.test(file.path))
+  const hasIac = files.some(file => /(?:^|\/)(?:serverless\.ya?ml|template\.ya?ml|samconfig\.toml|cdk\.json|[^/]+\.tf(?:vars)?)$/i.test(file.path))
   const hasCi = files.some(file => /(?:^|\/)(?:\.github\/workflows\/|gitlab-ci\.ya?ml|bitbucket-pipelines\.ya?ml|\.circleci\/)/.test(file.path))
   const hasTests = files.some(file => /(?:^|\/)(?:tests?|__tests__|spec)\/|\.(?:test|spec)\./i.test(file.path))
   const usesHttpFramework = stack.some(item => ['Express', 'Fastify', 'Koa', 'NestJS'].includes(item))
@@ -546,17 +622,13 @@ export function buildAnalysisFromFiles(
   })
 
   const areaPenalty = (area: AnalyzerArea) => findingList.filter(item => item.area === area).reduce((sum, finding) => sum + SEVERITY_WEIGHT[finding.severity], 0)
-  const awsList: AwsInsight[] = [...aws.values()].map(insight => ({
-    service: insight.service,
-    category: insight.category,
-    evidence: [...insight.evidence],
-  }))
+  const awsRecommendations = recommendAwsServices(files, stack, { hasDocker, hasIac, hasCi })
   const empty = stats.files === 0
   const security = empty ? 0 : CLAMP(100 - areaPenalty('Seguridad'))
   const scalability = empty ? 0 : CLAMP(100 - areaPenalty('Escalabilidad'))
   let cloudReadiness = empty
     ? 0
-    : CLAMP(15 + (hasDocker ? 20 : 0) + (hasIac ? 30 : 0) + (hasCi ? 15 : 0) + (hasTests ? 5 : 0) + Math.min(15, awsList.length * 3))
+    : CLAMP(15 + (hasDocker ? 20 : 0) + (hasIac ? 30 : 0) + (hasCi ? 15 : 0) + (hasTests ? 5 : 0))
   if (findingList.some(item => item.severity === 'Critica')) cloudReadiness = Math.max(0, cloudReadiness - 10)
   const total = empty ? 0 : CLAMP(security * 0.4 + scalability * 0.3 + cloudReadiness * 0.3)
 
@@ -567,7 +639,8 @@ export function buildAnalysisFromFiles(
     stats,
     stack,
     findings: findingList,
-    aws: awsList.sort((a, b) => b.evidence.length - a.evidence.length || a.service.localeCompare(b.service)),
+    awsRecommendations,
+    recommendationsVersion: 2,
     scores: { security, scalability, cloudReadiness, total },
   }
 }

@@ -2,17 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { pageMeta } from '../data/catalog'
 import { brandLogoUrl, defaultStatus, escapeCell, isStockAlert, money, stockStatus } from '../data/helpers'
 import { customerCredit, consumesCreditLine } from '../data/workspace'
-import { readCompanyProfile } from '../services/company'
-import { convertQuoteToSale, completeLinkedDocument, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertPurchaseWithLines, insertQuoteWithLines, insertRecord, insertSaleWithLines, isMissingTableError, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput } from '../services/records'
-import { getOpenCashShift } from '../services/caja'
+import { fetchCompanyProfile, type CompanyProfile } from '../services/company'
+import { convertQuoteToSale, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertPurchaseWithLines, insertQuoteWithLines, insertRecord, insertSaleWithLines, registerPurchaseReceipt, registerTreasuryPayment, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput, type PurchaseReceiptInputLine } from '../services/records'
 import { DATA_PAGES } from '../data/catalog'
 import { csvContent } from '../data/exports'
-import { purchaseHasStock } from '../data/helpers'
 import { useAuth } from './AuthContext'
 import type { DataPage, ExportFormat, PendingDelete, RecordItem, RecordModalState, RecordStatus } from '../types'
 
 type RecordsContextValue = {
   records: Record<DataPage, RecordItem[]>
+  company: CompanyProfile | null
   /** Catálogo de productos por proveedor (independiente de mi inventario). */
   catalog: RecordItem[]
   loading: boolean
@@ -29,17 +28,15 @@ type RecordsContextValue = {
   openEditor: (page: DataPage, record: RecordItem) => void
   closeRecordModal: () => void
   saveRecord: (page: DataPage, record: RecordItem | null, event: FormEvent<HTMLFormElement>) => Promise<void>
-  convertQuote: (code: string) => Promise<void>
+  convertQuote: (code: string, warehouseId: string, idempotencyKey: string) => Promise<boolean>
   pendingDelete: PendingDelete | null
   requestDelete: (page: DataPage, record: RecordItem) => void
   cancelDelete: () => void
   confirmDelete: () => Promise<void>
   exportTable: (page: DataPage, format: ExportFormat, items?: RecordItem[]) => void
-  settleAccount: (record: RecordItem, medio?: string) => Promise<void>
-  /** Marca una orden pendiente como recibida: ingresa lo comprado al inventario (+ kardex). */
-  receivePurchase: (record: RecordItem) => Promise<void>
-  /** Registra el ingreso de una orden recibida: aplica lo comprado al inventario (+ kardex). */
-  registerPurchaseIngress: (record: RecordItem) => Promise<void>
+  settleAccount: (record: RecordItem, amount: number, medio: string, idempotencyKey: string, cashShiftId?: string | null) => Promise<boolean>
+  /** Registra una recepción parcial o completa como un movimiento idempotente de almacén. */
+  receivePurchase: (record: RecordItem, warehouseId: string, lines: PurchaseReceiptInputLine[], idempotencyKey: string) => Promise<boolean>
 }
 
 const RecordsContext = createContext<RecordsContextValue | null>(null)
@@ -49,6 +46,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id
   const allowedPages = DATA_PAGES.filter(page => can(page)).join(',')
   const [records, setRecords] = useState<Record<DataPage, RecordItem[]>>(emptyRecords)
+  const [company, setCompany] = useState<CompanyProfile | null>(null)
   const [catalog, setCatalog] = useState<RecordItem[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -74,11 +72,12 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
   const loadAll = useCallback(async () => {
     const pages = allowedPages.split(',').filter(Boolean) as DataPage[]
     let catalogError = ''
-    const [snapshot, raw] = await Promise.all([
+    const [snapshot, raw, company] = await Promise.all([
       fetchRecordsSnapshot(pages),
       pages.includes('purchases') ? fetchSupplierCatalogRaw().catch(error => { catalogError = friendlyError(error); return [] }) : Promise.resolve([]),
+      fetchCompanyProfile().catch(() => null),
     ])
-    return { base: snapshot.records, errors: snapshot.errors, catalogError, catalog: enrichCatalog(raw, snapshot.records.inventory) }
+    return { base: snapshot.records, errors: snapshot.errors, catalogError, catalog: enrichCatalog(raw, snapshot.records.inventory), company }
   }, [allowedPages])
 
   const reload = useCallback(async () => {
@@ -86,9 +85,10 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     const sequence = ++loadSequence.current
     setRefreshing(true)
     try {
-      const { base, catalog: next, errors, catalogError } = await loadAll()
+      const { base, catalog: next, errors, catalogError, company } = await loadAll()
       if (sequence !== loadSequence.current) return
       setRecords(base)
+      setCompany(company)
       setCatalog(next)
       setErrors(errors)
       setCatalogError(catalogError)
@@ -103,6 +103,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     if (!userId || !profile) {
       loadSequence.current++
       setRecords(emptyRecords())
+      setCompany(null)
       setCatalog([])
       setLoading(false)
       setErrors({})
@@ -119,9 +120,10 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     setCatalog([])
     setLoading(true)
     loadAll()
-      .then(({ base, catalog: next, errors, catalogError }) => {
+      .then(({ base, catalog: next, errors, catalogError, company }) => {
         if (!active || sequence !== loadSequence.current) return
         setRecords(base)
+        setCompany(company)
         setCatalog(next)
         setErrors(errors)
         setCatalogError(catalogError)
@@ -155,26 +157,11 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
   }
   const closeRecordModal = () => { if (!saving) setRecordModal(null) }
 
-  // Ventas y compras nuevas exigen turno de caja abierto (las ediciones no).
-  // Si la tabla de caja aún no existe (migración pendiente), no se bloquea.
-  const requireOpenShift = async (): Promise<boolean> => {
-    try {
-      if (await getOpenCashShift()) return true
-    } catch (error) {
-      if (isMissingTableError(error)) return true
-      notify(friendlyError(error))
-      return false
-    }
-    notify('Abre un turno en Caja antes de registrar ventas o compras.')
-    return false
-  }
-
   const saveRecord = async (page: DataPage, record: RecordItem | null, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (saving) return
     if (!can(page, record ? 'editar' : 'crear')) return notify('Tu rol no tiene permiso para guardar este registro.')
     const form = new FormData(event.currentTarget)
-    if (!record && (page === 'sales' || page === 'purchases') && !(await requireOpenShift())) return
     const meta = pageMeta[page]
     const amountInput = String(form.get('amount') ?? '')
     const quantityInput = String(form.get('quantity') ?? '')
@@ -324,8 +311,8 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     if (page === 'sales' || page === 'purchases') {
       const paymentAction = record ? 'editar' : 'crear'
       if (!can('finance', paymentAction)) return notify(`Tu rol necesita permiso de ${paymentAction} finanzas para guardar esta operación y su cuenta vinculada.`)
-      if (lines.length && (page === 'sales' || purchaseHasStock(selectedStatus)) && !can('inventory', 'editar')) return notify('Tu rol necesita permiso de editar inventario para guardar una operación con movimiento de stock.')
-      if (page === 'purchases' && purchaseHasStock(selectedStatus) && lines.some(line => !catalog.find(item => item.rowId === line.producto_id)?.productoId) && !can('inventory', 'crear')) return notify('Tu rol necesita permiso de crear productos para recibir artículos nuevos en inventario.')
+      if (page === 'sales' && lines.length && !can('inventory', 'editar') && !can('inventory', 'crear')) return notify('Tu rol necesita permiso de crear o editar inventario para registrar una venta con productos.')
+      if (page === 'sales' && lines.length && !String(form.get('almacen_id') ?? '')) return notify('Selecciona el almacén de salida para vender productos.')
     }
     const input = {
       name,
@@ -335,9 +322,12 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       ...(meta.kind === 'money' && savedAmount !== undefined ? { amount: savedAmount } : {}),
       ...(meta.kind === 'stock' && savedQuantity !== undefined ? { quantity: savedQuantity } : {}),
       ...(page === 'inventory' && savedPrecio !== undefined ? { precio: savedPrecio } : {}),
+      ...(page === 'inventory' && form.has('categoria_id') ? { categoria_id: String(form.get('categoria_id') ?? '') || null } : {}),
+      ...(page === 'inventory' && form.has('unidad_medida_id') ? { unidad_medida_id: String(form.get('unidad_medida_id') ?? '') || null } : {}),
       ...(page === 'purchases' && savedFechaLimite !== undefined ? { fecha_limite: savedFechaLimite } : {}),
       ...(page === 'sales' ? { descuento: discount } : {}),
-      ...(page === 'sales' ? { medio_pago: saleMethod || null } : {}),
+      ...(page === 'sales' ? { medio_pago: saleMethod || null, almacen_id: String(form.get('almacen_id') ?? '') || null, cajaTurnoId: String(form.get('caja_turno_id') ?? '') || null, idempotencyKey: String(form.get('idempotency_key') ?? '') } : {}),
+      ...(page === 'purchases' ? { idempotencyKey: String(form.get('idempotency_key') ?? '') } : {}),
       ...(page === 'suppliers' ? {
         ruc: rucDigits,
         direccion: direccionInput || null,
@@ -485,18 +475,20 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const convertQuote = async (code: string) => {
-    if (saving) return
-    if (!can('sales', 'crear') || !can('quotes', 'editar') || !can('inventory', 'editar') || !can('finance', 'crear')) return notify('Convertir una cotización requiere crear ventas y cuentas financieras, editar cotizaciones y mover inventario.')
-    if (!(await requireOpenShift())) return
-    // La conversión genera una venta sin medio de pago (no consume tarjeta).
+  const convertQuote = async (code: string, warehouseId: string, idempotencyKey: string) => {
+    if (saving) return false
+    if (!can('sales', 'crear') || !can('quotes', 'editar') || (!can('inventory', 'editar') && !can('inventory', 'crear')) || !can('finance', 'crear')) { notify('Convertir una cotización requiere crear ventas y cuentas financieras, editar cotizaciones y mover inventario.'); return false }
+    // Convertir la cotización no cobra dinero; el turno solo se exige cuando
+    // se registra un movimiento de efectivo en Tesorería.
     setSaving(true)
     try {
-      const { sale } = await convertQuoteToSale(code)
+      const { sale } = await convertQuoteToSale(code, warehouseId, idempotencyKey)
       await reload()
       notify(`Cotización ${code} convertida en venta ${sale.id}. Stock y cobranza actualizados.`)
+      return true
     } catch (error) {
       notify(friendlyError(error))
+      return false
     } finally {
       setSaving(false)
     }
@@ -560,7 +552,6 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     // Reporte ejecutivo: marca, banda corporativa y tabla formal con cebra.
     // La ventana se abre en el clic (sin bloqueo) y el logo va incrustado.
     const logoUrl = await brandLogoUrl()
-    const company = readCompanyProfile(records.settings)
     const brandName = company?.razonSocial || 'EnterpriseCloud'
     const brandSub = company?.ruc ? `RUC ${company.ruc}${company.direccion ? ` · ${company.direccion}` : ''}` : ''
     const issuedAt = new Date().toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -575,66 +566,39 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     notify(`Exportación de ${title.toLocaleLowerCase()} en PDF preparada.`)
   }
 
-  const settleAccount = async (record: RecordItem, medio?: string) => {
-    if (saving || !can('finance', 'editar')) return
+  const settleAccount = async (record: RecordItem, amount: number, medio: string, idempotencyKey: string, selectedCashShiftId?: string | null) => {
+    if (saving || !can('finance', 'crear')) return false
+    if (!record.rowId) { notify('La cuenta no tiene identificador para registrar el movimiento.'); return false }
     setSaving(true)
     try {
-      await updateRecord('finance', record.id, { name: record.name, detail: record.detail, status: 'Completada', amount: record.amount, financeType: record.financeType, medio_pago: medio?.trim() ? medio.trim() : null })
-      // La operación vinculada también queda completada (venta) o pagada (compra).
-      const kind = record.financeType ?? null
-      const action = kind === 'pagar' ? 'pago' : 'cobro'
-      let mirrored: string | null = null
-      try {
-        mirrored = await completeLinkedDocument(record.id, kind)
-      } catch (error) {
-        await reload()
-        notify(`${record.id}: ${action} registrado en Supabase. ${friendlyError(error)}`)
-        return
-      }
+      const cashShiftId = medio.trim().toLocaleLowerCase('es') === 'efectivo' ? selectedCashShiftId ?? null : null
+      if (medio.trim().toLocaleLowerCase('es') === 'efectivo' && !cashShiftId) throw new Error('Selecciona una caja con turno abierto para registrar el movimiento en efectivo.')
+      await registerTreasuryPayment({ accountId: record.rowId, type: record.financeType === 'pagar' ? 'pago' : 'cobro', amount, method: medio, idempotencyKey, cashShiftId })
       await reload()
-      notify(`${record.id}: ${action} registrado en Supabase.${mirrored ? ` ${mirrored} también quedó ${kind === 'pagar' ? 'pagada' : 'completada'}.` : ''}`)
-    } catch (error) { notify(friendlyError(error)) }
+      notify(`${record.id}: movimiento de ${record.financeType === 'pagar' ? 'pago' : 'cobro'} por ${money(amount)} registrado. El saldo se recalculó en Supabase.`)
+      return true
+    } catch (error) { notify(friendlyError(error)); return false }
     finally { setSaving(false) }
   }
 
-  const receivePurchase = async (record: RecordItem) => {
-    if (saving || !can('purchases', 'editar')) return
-    if (!record.rowId) return notify('La orden no tiene identificador para recibir.')
-    if (purchaseHasStock(record.status)) return notify(`${record.id} ya está recibida.`)
+  const receivePurchase = async (record: RecordItem, warehouseId: string, lines: PurchaseReceiptInputLine[], idempotencyKey: string) => {
+    if (saving || !can('purchases', 'editar')) return false
+    if (!can('inventory', 'editar') && !can('inventory', 'crear')) { notify('Tu rol necesita permiso de crear o editar inventario para recibir la compra.'); return false }
+    if (!record.rowId) { notify('La orden no tiene identificador para recibir.'); return false }
+    if (record.estadoRecepcion === 'completa') { notify(`${record.id} ya está recibida por completo.`); return false }
     setSaving(true)
     try {
-      // Recibir aplica de una vez: la orden pasa a Recepción y lo comprado
-      // ingresa al inventario (+ kardex). Aparece en Ingreso al Kardex.
-      const previous = await fetchDocumentLines('purchases', record.rowId)
-      const lines: LineInput[] = previous.map((line) => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio }))
-      if (lines.length && !can('inventory', 'editar')) return notify('Tu rol necesita permiso de editar inventario para recibir la compra.')
-      if (lines.some((line) => !catalog.find((item) => item.rowId === line.producto_id)?.productoId) && !can('inventory', 'crear')) return notify('Tu rol necesita permiso de crear productos para recibir artículos nuevos en inventario.')
-      await updatePurchaseWithLines(record.id, { name: record.name, detail: record.detail, status: 'Recepción', amount: record.amount }, lines)
+      await registerPurchaseReceipt({ compraId: record.rowId, almacenId: warehouseId, lineas: lines, idempotencyKey, comprobanteTipo: record.comprobanteTipo, comprobanteNumero: record.comprobanteNumero })
       await reload()
-      notify(`${record.id} recibida: lo comprado ingresó al inventario (+ kardex).`)
-    } catch (error) { notify(friendlyError(error)) }
-    finally { setSaving(false) }
-  }
-
-  const registerPurchaseIngress = async (record: RecordItem) => {
-    if (saving || !can('purchases', 'editar')) return
-    if (!record.rowId) return notify('La orden no tiene identificador para registrar su ingreso.')
-    if (record.status !== 'Recibida') return notify(`${record.id} no está pendiente de ingreso.`)
-    setSaving(true)
-    try {
-      const previous = await fetchDocumentLines('purchases', record.rowId)
-      const lines: LineInput[] = previous.map((line) => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio }))
-      if (lines.length && !can('inventory', 'editar')) return notify('Tu rol necesita permiso de editar inventario para registrar el ingreso.')
-      if (lines.some((line) => !catalog.find((item) => item.rowId === line.producto_id)?.productoId) && !can('inventory', 'crear')) return notify('Tu rol necesita permiso de crear productos para ingresar artículos nuevos al inventario.')
-      await updatePurchaseWithLines(record.id, { name: record.name, detail: record.detail, status: 'Recepción', amount: record.amount }, lines)
-      await reload()
-      notify(`${record.id}: ingreso registrado, lo comprado está en el inventario (+ kardex).`)
-    } catch (error) { notify(friendlyError(error)) }
+      notify(`${record.id}: recepción registrada por almacén; stock y Kardex se actualizaron juntos.`)
+      return true
+    } catch (error) { notify(friendlyError(error)); return false }
     finally { setSaving(false) }
   }
 
   const value: RecordsContextValue = {
     records,
+    company,
     catalog,
     loading,
     saving,
@@ -658,7 +622,6 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     confirmDelete,
     exportTable,
     receivePurchase,
-    registerPurchaseIngress,
   }
 
   return <RecordsContext.Provider value={value}>{children}</RecordsContext.Provider>

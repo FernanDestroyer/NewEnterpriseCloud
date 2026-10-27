@@ -13,6 +13,7 @@ const DashboardPage = lazy(() => import('../components/DashboardPage'))
 const CajaPage = lazy(() => import('../components/CajaPage'))
 const MaintenancePage = lazy(() => import('../components/MaintenancePage'))
 const PermisosPage = lazy(() => import('../components/PermisosPage'))
+const AuditPage = lazy(() => import('../components/AuditPage'))
 const ModuloPage = lazy(() => import('../pages/ModuloPage'))
 const ReportsPage = lazy(() => import('../components/ReportsPage'))
 const ProfilePage = lazy(() => import('../components/ProfilePage'))
@@ -62,6 +63,7 @@ export default function AppRouter() {
         <Route path="/estado-cuenta" element={<Navigate to="/finance" replace />} />
         <Route path="/mantenimientos" element={<MaintenancePage />} />
         <Route path="/permisos" element={<PermisosPage />} />
+        <Route path="/auditoria" element={<AuditPage />} />
         <Route path="/caja" element={<CajaPage />} />
         <Route path="/analizador" element={<AnalyzerPage />} />
         <Route path="/settings" element={<Navigate to="/mantenimientos" replace />} />

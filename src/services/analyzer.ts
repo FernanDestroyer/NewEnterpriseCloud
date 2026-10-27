@@ -40,20 +40,31 @@ export type AnalysisRow = {
 
 const SELECT_HISTORY = 'id, nombre, fuente, origen, archivos, puntuacion_seguridad, puntuacion_escalabilidad, puntuacion_cloud, hallazgos, servicios, detalle, creado_por, created_at'
 
-export const MIGRATION_HINT = 'Falta la tabla de análisis en Supabase. Ejecuta la migración 20261101000000_analizador_proyectos.sql y recarga.'
+export const MIGRATION_HINT = 'La base de datos no tiene la estructura del analizador que esta pantalla necesita. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
 
-export const ANALYSIS_CSV_HEADER = ['Referencia', 'Área', 'Severidad', 'Hallazgo', 'Detalle', 'Recomendación', 'Archivos']
+export const ANALYSIS_CSV_HEADER = ['Referencia', 'Área', 'Severidad / prioridad', 'Hallazgo o servicio', 'Detalle', 'Recomendación', 'Archivos o señales']
 
 export function analyzerCsvRows(analysis: AnalyzerReport): (string | number)[][] {
-  return analysis.findings.map(finding => [
-    finding.id,
-    finding.area,
-    finding.severity,
-    finding.title,
-    finding.detail,
-    finding.recommendation,
-    finding.files.join(' | '),
-  ])
+  return [
+    ...analysis.findings.map(finding => [
+      finding.id,
+      finding.area,
+      finding.severity,
+      finding.title,
+      finding.detail,
+      finding.recommendation,
+      finding.files.join(' | '),
+    ]),
+    ...analysis.awsRecommendations.map(recommendation => [
+      recommendation.service,
+      'AWS',
+      recommendation.priority,
+      recommendation.service,
+      recommendation.category,
+      recommendation.reason,
+      recommendation.signals.join(' | '),
+    ]),
+  ]
 }
 
 function looksTextual(path: string): boolean {
@@ -80,13 +91,13 @@ async function mapWithLimit<T, R>(items: T[], limit: number, worker: (item: T) =
   return results
 }
 
-async function fetchText(url: string, timeoutMs = 15000): Promise<string> {
+async function fetchText(url: string, timeoutMs = 15000, notFoundMessage?: string): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(url, { signal: controller.signal })
     if (!response.ok) {
-      if (response.status === 404) throw new AnalyzerSourceError('El recurso no existe o fue movido dentro del repositorio.')
+      if (response.status === 404) throw new AnalyzerSourceError(notFoundMessage ?? 'No se encontró el archivo o recurso solicitado en el repositorio.')
       if (response.status === 401 || response.status === 403) throw new AnalyzerSourceError('El repositorio exige autenticación o se agotó el límite de consultas; inténtalo en unos minutos.')
       if (response.status === 429) throw new AnalyzerSourceError('Se alcanzó el límite de consultas del proveedor; espera unos minutos e inténtalo otra vez.')
       throw new AnalyzerSourceError(`El repositorio respondió HTTP ${response.status}.`)
@@ -118,15 +129,25 @@ async function readGitRepository(url: string): Promise<AnalyzerFile[]> {
     repo = repo.replace(/\.git$/i, '')
     const treeIndex = rest.findIndex((segment, index) => segment === 'tree' && rest[index + 1])
     if (treeIndex >= 0) branch = rest[treeIndex + 1]
-    const info = await fetchJson(`https://api.github.com/repos/${owner}/${repo}`)
+    const info = await fetchJson(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      'GitHub no permite ver este repositorio. Comprueba el propietario y el nombre, y confirma que sea público; los repositorios privados requieren iniciar sesión en GitHub.',
+    )
     branch = branch || String(info.default_branch ?? 'main')
-    const tree = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`)
+    const tree = await fetchJson(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+      `GitHub no encontró la rama «${branch}» en este repositorio. Abre el enlace sin /tree/... para usar la rama predeterminada, o verifica el nombre de la rama.`,
+    )
     const entries: Array<{ path: string; size?: number }> = (Array.isArray(tree.tree) ? tree.tree : [])
       .filter(entry => entry.type === 'blob' && !SKIP_PATH.test(entry.path) && looksTextual(entry.path) && (entry.size ?? 0) <= MAX_TEXT_BYTES)
       .slice(0, MAX_REMOTE_FILES)
     const contents = await mapWithLimit(entries, 8, async entry => ({
       entry,
-      text: await fetchText(`https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${entry.path.split('/').map(encodeURIComponent).join('/')}`),
+      text: await fetchText(
+        `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
+        15000,
+        `GitHub listó «${entry.path}» en la rama «${branch}», pero no permitió descargarlo. Intenta con el ZIP del repositorio.`,
+      ),
     }))
     for (const { entry, text } of contents) files.push({ path: entry.path.slice(0, 400), bytes: entry.size ?? text.length, text })
   } else {
@@ -164,8 +185,8 @@ async function readGitRepository(url: string): Promise<AnalyzerFile[]> {
   return files
 }
 
-async function fetchJson(url: string): Promise<Record<string, unknown>> {
-  const text = await fetchText(url)
+async function fetchJson(url: string, notFoundMessage?: string): Promise<Record<string, unknown>> {
+  const text = await fetchText(url, 15000, notFoundMessage)
   try {
     return JSON.parse(text) as Record<string, unknown>
   } catch {
@@ -252,8 +273,8 @@ export async function saveAnalysisReport(analysis: AnalyzerReport, createdBy: st
       puntuacion_escalabilidad: analysis.scores.scalability,
       puntuacion_cloud: analysis.scores.cloudReadiness,
       hallazgos: analysis.findings,
-      servicios: analysis.aws,
-      detalle: { total: analysis.scores.total, stack: analysis.stack, idiomas: analysis.stats.languages, tamano: analysis.stats.bytes },
+      servicios: analysis.awsRecommendations,
+      detalle: { total: analysis.scores.total, stack: analysis.stack, idiomas: analysis.stats.languages, tamano: analysis.stats.bytes, versionAnalisis: analysis.recommendationsVersion ?? 2 },
       creado_por: createdBy,
       created_at: analysis.generatedAt,
     })

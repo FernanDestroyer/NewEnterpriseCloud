@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react'
-import { AlertTriangle, Boxes, CheckCircle2, Cloud, Gauge, Info, Link2, Printer, RefreshCw, Save, ScanSearch, ShieldCheck, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Boxes, CheckCircle2, Cloud, Gauge, History, Info, Link2, Printer, RefreshCw, Save, ScanSearch, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
-import { formatBytes, scoreTone, severityTone, type AnalyzerArea, type AnalyzerReport } from '../data/analyzer'
+import { formatBytes, scoreTone, severityTone, type AnalyzerArea, type AnalyzerReport, type AwsRecommendation } from '../data/analyzer'
 import { fetchAnalysisHistory, analyzerCsvRows, ANALYSIS_CSV_HEADER, analyzeRepositoryLink, analyzeZipArchive, deleteAnalysisById, exportAnalyzerReport, saveAnalysisReport, type AnalysisRow } from '../services/analyzer'
 import { displayDate } from '../data/workspace'
 import { csvContent, downloadCsv } from '../data/exports'
 
 type AnalysisTab = 'todo' | AnalyzerArea
+type AnalyzerView = 'analizar' | 'historial'
 
 type HistoryDetail = {
   total?: number
   stack?: string[]
   idiomas?: string[]
   tamano?: number
+  versionAnalisis?: number
 }
 
 function sourceLabel(kind: AnalysisRow['fuente']) {
@@ -29,7 +31,8 @@ function rebuildReport(row: AnalysisRow): AnalyzerReport {
     stats: { files: row.archivos, bytes: detail.tamano ?? 0, languages: detail.idiomas ?? [] },
     stack: detail.stack ?? [],
     findings: (row.hallazgos ?? []) as AnalyzerReport['findings'],
-    aws: (row.servicios ?? []) as AnalyzerReport['aws'],
+    awsRecommendations: detail.versionAnalisis === 2 ? (row.servicios ?? []) as AwsRecommendation[] : [],
+    recommendationsVersion: detail.versionAnalisis ?? 1,
     scores: {
       security: row.puntuacion_seguridad,
       scalability: row.puntuacion_escalabilidad,
@@ -48,6 +51,7 @@ function ScoreCard({ title, score, detail, icon }: { title: string; score: numbe
 export default function AnalyzerPage() {
   const { can, session } = useAuth()
   const { notify } = useRecords()
+  const [mainTab, setMainTab] = useState<AnalyzerView>('analizar')
   const [tab, setTab] = useState<AnalysisTab>('todo')
   const [source, setSource] = useState<'zip' | 'enlace'>('zip')
   const [link, setLink] = useState('')
@@ -86,6 +90,7 @@ export default function AnalyzerPage() {
     setStep('')
     setRunning(false)
     setTab('todo')
+    setMainTab('analizar')
     notify(`Análisis de «${next.name}» listo: ${next.findings.length} hallazgos en ${next.stats.files} archivos.`)
   }
 
@@ -130,7 +135,7 @@ export default function AnalyzerPage() {
   const exportCsv = () => {
     if (!report) return
     downloadCsv(`analisis-${report.name.toLocaleLowerCase('en').replace(/[^a-z0-9]+/g, '-')}.csv`, ANALYSIS_CSV_HEADER, analyzerCsvRows(report))
-    notify('Los hallazgos se descargaron como CSV.')
+    notify('El análisis y sus recomendaciones se descargaron como CSV.')
   }
 
   const printReport = () => {
@@ -171,6 +176,7 @@ export default function AnalyzerPage() {
   const openRow = (row: AnalysisRow) => {
     setReport(rebuildReport(row))
     setTab('todo')
+    setMainTab('analizar')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -200,9 +206,13 @@ export default function AnalyzerPage() {
   const criticalCount = report?.findings.filter(finding => finding.severity === 'Critica').length ?? 0
 
   return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">DESARROLLO / TECNOLOGÍA</span><h1>Analizador de proyectos</h1><p>Comparte un ZIP o el enlace de un repositorio y evalúa seguridad, escalabilidad y servicios AWS con recomendaciones accionables.</p></div><div className="ws-heading-actions">{report && <button className="ws-button ws-button-secondary" disabled={running} onClick={exportCsv}><Boxes size={16} />Descargar CSV</button>}{report && <button className="ws-button ws-button-secondary" disabled={running || busyRow === 'print'} onClick={printReport}><Printer size={16} />{busyRow === 'print' ? 'Preparando…' : 'Imprimir informe'}</button>}{report && can('analizador', 'crear') && <button className="ws-button" disabled={running || busyRow === 'save'} onClick={() => void saveToSupabase()}><Save size={16} />{busyRow === 'save' ? 'Guardando…' : 'Guardar análisis'}</button>}</div></section>
+    <section className="ws-page-heading"><div><span className="ws-eyebrow">DESARROLLO / TECNOLOGÍA</span><h1>Analizador de proyectos</h1><p>Comparte un ZIP o el enlace de un repositorio y evalúa seguridad, escalabilidad y servicios AWS con recomendaciones accionables.</p></div><div className="ws-heading-actions">{mainTab === 'analizar' && report && <button className="ws-button ws-button-secondary" disabled={running} onClick={exportCsv}><Boxes size={16} />Descargar CSV</button>}{mainTab === 'analizar' && report && <button className="ws-button ws-button-secondary" disabled={running || busyRow === 'print'} onClick={printReport}><Printer size={16} />{busyRow === 'print' ? 'Preparando…' : 'Imprimir informe'}</button>}{mainTab === 'analizar' && report && can('analizador', 'crear') && <button className="ws-button" disabled={running || busyRow === 'save'} onClick={() => void saveToSupabase()}><Save size={16} />{busyRow === 'save' ? 'Guardando…' : 'Guardar análisis'}</button>}</div></section>
+    <div className="ws-tabs an-main-tabs" role="tablist" aria-label="Secciones del analizador">
+      <button id="an-tab-analizar" role="tab" aria-selected={mainTab === 'analizar'} aria-controls="an-panel-analizar" onClick={() => setMainTab('analizar')}><ScanSearch size={14} />Analizar</button>
+      <button id="an-tab-historial" role="tab" aria-selected={mainTab === 'historial'} aria-controls="an-panel-historial" onClick={() => setMainTab('historial')}><History size={14} />Historial de análisis{history.length > 0 && <b>{history.length}</b>}</button>
+    </div>
+    {mainTab === 'analizar' ? <div className="an-layout" id="an-panel-analizar" role="tabpanel" aria-labelledby="an-tab-analizar">
     {error && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={18} /><span>{error}</span></div>}
-    <div className="an-layout">
     <section className="ws-card"><div className="ws-card-heading"><div><h2>Origen del análisis</h2><p>Los archivos no salen de tu navegador, salvo la lectura del repositorio público indicado.</p></div><ScanSearch size={19} /></div>
       <div className="ws-form">
       <div className="ws-tabs" role="tablist" aria-label="Origen del análisis">
@@ -218,16 +228,18 @@ export default function AnalyzerPage() {
           <button className="ws-button" type="button" disabled={running} onClick={() => inputRef.current?.click()}>Elegir archivo</button>
         </div>
       ) : (
-        <form onSubmit={submitLink}>
-          <label>Enlace del repositorio público
-            <input value={link} onChange={event => setLink(event.target.value)} placeholder="https://github.com/usuario/repo" inputMode="url" disabled={running} />
-          </label>
+        <form className="an-link-form" onSubmit={submitLink}>
+          <div className="an-link-row">
+            <label>Enlace del repositorio público
+              <input value={link} onChange={event => setLink(event.target.value)} placeholder="https://github.com/usuario/repo" inputMode="url" disabled={running} />
+            </label>
+            <button className="ws-button" type="submit" disabled={running || !link.trim()}><Link2 size={16} />{running ? 'Analizando…' : 'Analizar repositorio'}</button>
+          </div>
           <p className="relation-hint"><Info size={15} />Compatible con GitHub y GitLab públicos (rama por defecto). Para otros orígenes, descarga el ZIP y súbelo.</p>
-          <div className="ws-heading-actions"><button className="ws-button" type="submit" disabled={running || !link.trim()}><Link2 size={16} />{running ? 'Analizando…' : 'Analizar repositorio'}</button></div>
         </form>
       )}
       {running && <div className="ws-source-note" role="status"><RefreshCw size={16} className="ws-spin" /><span>{step || 'Analizando proyecto…'}</span></div>}
-      {!report && !running && !error && <p className="relation-hint"><CheckCircle2 size={15} />El informe incluye puntuaciones, hallazgos por severidad, servicios AWS detectados y un plan de recomendaciones accionables.</p>}
+      {!report && !running && !error && <p className="relation-hint"><CheckCircle2 size={15} />El informe evalúa seguridad, escalabilidad y preparación cloud, e incluye servicios AWS recomendados según el stack y los archivos del proyecto.</p>}
       </div>
     </section>
 
@@ -238,12 +250,12 @@ export default function AnalyzerPage() {
             <ScoreCard title="Puntuación general" score={report.scores.total} detail="Media ponderada 40/30/30" icon={Gauge} />
             <ScoreCard title="Seguridad" score={report.scores.security} detail={`${report.findings.filter(finding => finding.area === 'Seguridad').length} hallazgos · ${criticalCount} críticos`} icon={ShieldCheck} />
             <ScoreCard title="Escalabilidad" score={report.scores.scalability} detail={`${report.findings.filter(finding => finding.area === 'Escalabilidad').length} hallazgos`} icon={Boxes} />
-            <ScoreCard title="Preparación cloud" score={report.scores.cloudReadiness} detail={report.aws.length ? `${report.aws.length} servicios AWS evidenciados` : 'Sin evidencias AWS'} icon={Cloud} />
+            <ScoreCard title="Preparación cloud" score={report.scores.cloudReadiness} detail="Despliegue, infraestructura, CI y pruebas" icon={Cloud} />
           </div>
           <div className="an-summary-foot"><span><strong>{report.stats.files}</strong> archivos · {formatBytes(report.stats.bytes)}</span>{report.stack.length > 0 && <span className="an-stack">{report.stack.map(item => <code key={item}>{item}</code>)}</span>}{report.stats.languages.length > 0 && <span className="an-languages"><Info size={13} />{report.stats.languages.join(' · ')}</span>}</div>
         </section>
-        <section className="ws-card"><div className="ws-card-heading"><div><h2>Servicios AWS detectados</h2><p>Evidencias por patrón de uso del código e infraestructura definida.</p></div><Cloud size={19} /></div>
-          <div className="ws-form">{report.aws.length ? <div className="an-aws-list">{report.aws.map(insight => <div className="an-aws" key={insight.service}><span className="ws-soft-icon blue"><Cloud size={17} /></span><span className="an-aws-copy"><strong>{insight.service}</strong><small>{insight.category}{insight.evidence.length ? ` · ${insight.evidence.length} coincidencias` : ''}</small></span></div>)}</div> : <p className="relation-hint"><Info size={15} />No se encontraron pistas de servicios AWS. Si el sistema corre en la nube, documenta los manifiestos (SAM, Terraform) para que el analizador mapee la arquitectura.</p>}</div>
+        <section className="ws-card"><div className="ws-card-heading"><div><h2>Servicios AWS recomendados</h2><p>Opciones sugeridas según el stack y las señales encontradas; cada recomendación explica su motivo.</p></div><Cloud size={19} /></div>
+          <div className="ws-form">{report.awsRecommendations.length ? <div className="an-aws-list">{report.awsRecommendations.map(recommendation => <article className="an-aws" key={recommendation.service}><span className="ws-soft-icon blue"><Cloud size={17} /></span><span className="an-aws-copy"><span className="an-aws-title"><strong>{recommendation.service}</strong><em className={`an-priority ${recommendation.priority.toLocaleLowerCase('es')}`}>{recommendation.priority}</em></span><small>{recommendation.category}</small><p>{recommendation.reason}</p>{recommendation.signals.length > 0 && <span className="an-aws-signals">Señales: {recommendation.signals.join(' · ')}</span>}</span></article>)}</div> : report.recommendationsVersion !== 2 ? <p className="relation-hint"><Info size={15} />Este análisis histórico se generó antes de incluir recomendaciones AWS. Vuelve a analizar el proyecto para obtener sugerencias basadas en su stack.</p> : <p className="relation-hint"><Info size={15} />No hay suficientes señales para sugerir un servicio concreto. Confirma el tipo de aplicación, dónde necesita ejecutarse y qué servicios de datos o archivos requiere.</p>}</div>
         </section>
         <section className="ws-card">
           <div className="ws-card-heading"><div><h2>Hallazgos</h2><p>{report.findings.length} observaciones con severidad y recomendación.</p></div><AlertTriangle size={19} /></div>
@@ -263,7 +275,7 @@ export default function AnalyzerPage() {
       }
     </>}
 
-    <section className="ws-card"><div className="ws-card-heading"><div><h2>Historial de análisis</h2><p>Guardados en Supabase para comparar la evolución del proyecto.</p></div><RefreshCw size={19} /></div>
+    </div> : <section className="ws-card" id="an-panel-historial" role="tabpanel" aria-labelledby="an-tab-historial"><div className="ws-card-heading"><div><h2>Historial de análisis</h2><p>Guardados en Supabase para comparar la evolución del proyecto.</p></div><button className="ws-icon-button" aria-label="Actualizar historial de análisis" title="Actualizar historial" disabled={historyLoading} onClick={() => void loadHistory()}><RefreshCw size={19} className={historyLoading ? 'ws-spin' : ''} /></button></div>
       <div className="ws-form">
       {historyError && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={18} /><span>{historyError}</span><button className="ws-text-button" onClick={() => void loadHistory()}>Reintentar</button></div>}
       {historyLoading && !historyError ? <div className="ws-empty-compact"><RefreshCw size={26} className="ws-spin" /><strong>Consultando historial…</strong></div> : history.length ? <div className="table-scroll"><table className="record-table"><thead><tr><th>Proyecto</th><th>Origen</th><th className="ws-align-right">Seguridad</th><th className="ws-align-right">Escalabilidad</th><th className="ws-align-right">Cloud</th><th className="ws-align-right">Hallazgos</th><th className="ws-align-right">Total</th><th>Fecha</th><th><span className="sr-only">Acciones</span></th></tr></thead><tbody>{history.map(row => <tr key={row.id}>
@@ -278,7 +290,6 @@ export default function AnalyzerPage() {
         <td><div className="row-actions"><button className="row-action" title="Abrir este análisis" aria-label={`Abrir análisis de ${row.nombre}`} disabled={busyRow === row.id} onClick={() => openRow(row)}><ScanSearch size={15} /></button>{can('analizador', 'eliminar') && <button className="row-action" title="Eliminar análisis" aria-label={`Eliminar análisis de ${row.nombre}`} disabled={busyRow === row.id} onClick={() => void removeRow(row)}><Trash2 size={15} /></button>}</div></td>
       </tr>)}</tbody></table></div> : <div className="ws-empty-compact"><ScanSearch size={26} /><strong>Historial vacío</strong><span>Guarda tu primer análisis con «Guardar análisis».</span></div>}
       </div>
-    </section>
-    </div>
+    </section>}
   </>
 }
