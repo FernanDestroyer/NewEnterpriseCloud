@@ -933,3 +933,544 @@
 .ec-applied-flow .ws-section-heading { margin-bottom: 8px; }
 .ec-module-page [id] { scroll-margin-top: 80px; }
 .ec-currency-summary { font-size: clamp(12px, 1.15vw, 16px) !important; line-height: 1.45; overflow-wrap: anywhere; }
+
+
+/* ==========================================
+   MEJORA VISUAL: SUCURSALES, ALMACENES Y ZONAS
+   ========================================== */
+
+.ws-organization-setup {
+  --org-accent: #087f8c;
+  --org-accent-hover: #066873;
+  --org-border: #dce5ef;
+  --org-surface: var(--ws-surface);
+  --org-raised: var(--ws-raised);
+
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  color: var(--ws-text);
+}
+
+/* Pestañas principales */
+.ws-organization-setup > .ws-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  flex-wrap: wrap;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px;
+  background: var(--org-raised);
+  border: 1px solid var(--org-border);
+  border-radius: 12px;
+}
+
+.ws-organization-setup > .ws-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 10px 17px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ws-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.ws-organization-setup > .ws-tabs button:hover {
+  color: var(--org-accent);
+  background: color-mix(
+    in srgb,
+    var(--org-accent) 7%,
+    var(--org-surface)
+  );
+}
+
+.ws-organization-setup > .ws-tabs button[aria-selected="true"] {
+  color: var(--org-accent);
+  background: var(--org-surface);
+  border-color: var(--org-border);
+  box-shadow: 0 2px 5px rgb(15 23 42 / 5%);
+}
+
+/* Distribución de formularios */
+.ws-organization-setup .ws-organization-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 20px;
+  margin: 0;
+}
+
+.ws-organization-setup .ws-organization-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+  padding: 24px;
+  background: var(--org-surface);
+  border: 1px solid var(--org-border);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 3%);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ws-organization-setup .ws-organization-form:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--org-accent) 28%,
+    var(--org-border)
+  );
+  box-shadow: 0 8px 24px rgb(15 23 42 / 5%);
+}
+
+/* Encabezados */
+.ws-organization-setup .ws-section-heading {
+  margin: 0;
+}
+
+.ws-organization-setup .ws-section-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--ws-text);
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.ws-organization-setup .ws-section-heading h3 svg {
+  width: 21px;
+  height: 21px;
+  color: var(--org-accent);
+}
+
+.ws-organization-setup .ws-section-heading p {
+  margin: 8px 0 0;
+  color: var(--ws-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* Campos de los formularios */
+.ws-organization-setup .ws-organization-fields {
+  width: 100%;
+  min-width: 0;
+}
+
+.ws-organization-setup .ws-organization-fields > .ws-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px 16px;
+  width: 100%;
+}
+
+.ws-organization-setup .ws-organization-fields label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ws-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.ws-organization-setup .ws-organization-fields label > svg {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-bottom: -3px;
+  color: var(--org-accent);
+}
+
+.ws-organization-setup .ws-organization-fields input,
+.ws-organization-setup .ws-organization-fields select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 43px;
+  padding: 10px 12px;
+  border: 1px solid var(--org-border);
+  border-radius: 9px;
+  background: var(--org-surface);
+  color: var(--ws-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 450;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ws-organization-setup .ws-organization-fields input::placeholder {
+  color: var(--ws-muted);
+  opacity: 0.8;
+}
+
+.ws-organization-setup .ws-organization-fields input:hover,
+.ws-organization-setup .ws-organization-fields select:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--org-accent) 45%,
+    var(--org-border)
+  );
+}
+
+.ws-organization-setup .ws-organization-fields input:focus,
+.ws-organization-setup .ws-organization-fields select:focus {
+  border-color: var(--org-accent);
+  box-shadow: 0 0 0 3px color-mix(
+    in srgb,
+    var(--org-accent) 13%,
+    transparent
+  );
+}
+
+.ws-organization-setup .ws-organization-fields input:disabled,
+.ws-organization-setup .ws-organization-fields select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Botones de los formularios */
+.ws-organization-setup .ws-organization-form > .ws-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.ws-organization-setup .ws-organization-form .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 43px;
+  padding: 11px 17px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--org-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.ws-organization-setup .ws-organization-form .primary-button:hover:not(:disabled) {
+  background: var(--org-accent-hover);
+  transform: translateY(-1px);
+}
+
+.ws-organization-setup .ws-organization-form .primary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Listados de sucursales, almacenes y zonas */
+.ws-organization-setup .ws-organization-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 22px;
+  background: var(--org-surface);
+  border: 1px solid var(--org-border);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 3%);
+}
+
+.ws-organization-setup .ws-organization-lists > h3 {
+  margin: 0 0 7px;
+  color: var(--ws-text);
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.ws-organization-setup .ws-organization-lists > p {
+  margin: 0;
+  padding: 18px 14px;
+  border: 1px dashed var(--org-border);
+  border-radius: 10px;
+  color: var(--ws-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.ws-organization-setup .ws-organization-lists .supplier-product-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--org-border);
+  border-radius: 11px;
+  background: var(--org-surface);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.ws-organization-setup .ws-organization-lists .supplier-product-row:hover {
+  background: var(--org-raised);
+  border-color: color-mix(
+    in srgb,
+    var(--org-accent) 25%,
+    var(--org-border)
+  );
+}
+
+.ws-organization-setup .supplier-product-copy {
+  flex: 1;
+  min-width: 0;
+  gap: 5px;
+}
+
+.ws-organization-setup .supplier-product-copy strong {
+  color: var(--ws-text);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.ws-organization-setup .supplier-product-copy small {
+  color: var(--ws-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ws-organization-setup .ws-organization-lists .ws-text-button {
+  flex-shrink: 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  color: var(--org-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ws-organization-setup .ws-organization-lists .ws-text-button:hover {
+  background: color-mix(
+    in srgb,
+    var(--org-accent) 9%,
+    var(--org-surface)
+  );
+}
+
+/* Asignación de clientes y sucursales */
+.ws-organization-setup .ws-zone-assignment {
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid var(--org-border);
+  border-radius: 16px;
+  background: var(--org-surface);
+  box-shadow: 0 4px 16px rgb(15 23 42 / 3%);
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar {
+  grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1.2fr);
+  gap: 14px;
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar > label:not(.ws-table-search) {
+  gap: 8px;
+  color: var(--ws-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar select,
+.ws-organization-setup .ws-zone-assignment-toolbar .ws-table-search {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--org-border);
+  border-radius: 10px;
+  background: var(--org-surface);
+  color: var(--ws-text);
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar select {
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar .ws-table-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar .ws-table-search svg {
+  color: var(--ws-muted);
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar .ws-table-search input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ws-text);
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.ws-organization-setup .ws-zone-assignment-toolbar select:focus,
+.ws-organization-setup .ws-zone-assignment-toolbar .ws-table-search:focus-within {
+  border-color: var(--org-accent);
+  box-shadow: 0 0 0 3px color-mix(
+    in srgb,
+    var(--org-accent) 12%,
+    transparent
+  );
+}
+
+.ws-organization-setup .ws-zone-assignment-grid {
+  gap: 16px;
+}
+
+.ws-organization-setup .ws-zone-assignment-list {
+  border-color: var(--org-border);
+  border-radius: 12px;
+  background: var(--org-surface);
+}
+
+.ws-organization-setup .ws-zone-assignment-list > div:first-child {
+  padding: 17px;
+  background: var(--org-raised);
+}
+
+.ws-organization-setup .ws-zone-assignment-list h4 {
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.ws-organization-setup .ws-zone-assignment-list p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ws-organization-setup .ws-zone-assignment-items {
+  max-height: 340px;
+  padding: 5px 14px;
+}
+
+.ws-organization-setup .ws-zone-assignment-item {
+  gap: 12px;
+  padding: 13px 3px;
+  border-bottom-color: var(--org-border);
+  cursor: pointer;
+}
+
+.ws-organization-setup .ws-zone-assignment-item input {
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  accent-color: var(--org-accent);
+  flex-shrink: 0;
+}
+
+.ws-organization-setup .ws-zone-assignment-item span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ws-organization-setup .ws-zone-assignment-item strong {
+  color: var(--ws-text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ws-organization-setup .ws-zone-assignment-item small {
+  color: var(--ws-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ws-organization-setup .relation-hint {
+  color: var(--ws-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* Adaptación para tablets y móviles */
+@media (max-width: 900px) {
+  .ws-organization-setup .ws-organization-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ws-organization-setup .ws-zone-assignment-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ws-organization-setup .ws-zone-assignment-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .ws-organization-setup {
+    gap: 14px;
+  }
+
+  .ws-organization-setup > .ws-tabs {
+    display: flex;
+    align-self: stretch;
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .ws-organization-setup > .ws-tabs button {
+    flex: 0 0 auto;
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .ws-organization-setup .ws-organization-form,
+  .ws-organization-setup .ws-organization-lists,
+  .ws-organization-setup .ws-zone-assignment {
+    padding: 17px;
+    border-radius: 12px;
+  }
+
+  .ws-organization-setup .ws-organization-fields > .ws-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 15px;
+  }
+
+  .ws-organization-setup .ws-section-heading h3 {
+    font-size: 17px;
+  }
+
+  .ws-organization-setup .ws-organization-form > .ws-heading-actions {
+    justify-content: stretch;
+  }
+
+  .ws-organization-setup .ws-organization-form .primary-button {
+    width: 100%;
+  }
+
+  .ws-organization-setup .ws-organization-lists .supplier-product-row {
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+}
