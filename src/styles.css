@@ -1905,3 +1905,19 @@ button.supplier-product-row.supplier-result .gicon { color: #86f6f2; font-size: 
 .erp-shell[data-theme='light'] .linked-badge { color: #166a43; background: #def3e7; border-color: #b9e5cc; }
 .erp-shell[data-theme='light'] .linked-badge.muted { color: #5f6e82; background: #f1f5f9; border-color: #d5e0e6; }
 .erp-shell[data-theme='light'] .linked-badge.muted .gicon { color: #5f6e82; }
+.ws-receipt-state { color: #83cbc8; font-size: 9px; }
+.ws-receipt-modal { width: min(680px, 100%); max-height: 90vh; overflow: auto; }
+.ws-receipt-lines { display: grid; gap: 8px; max-height: 42vh; overflow-y: auto; margin-top: 15px; }
+.ws-receipt-line { display: grid; grid-template-columns: minmax(0,1fr) 112px; align-items: center; gap: 14px; padding: 12px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.075); border-radius: 9px; }
+.ws-receipt-line span { display: grid; gap: 5px; min-width: 0; }
+.ws-receipt-line strong { color: #e8f1f7; font-size: 11px; }
+.ws-receipt-line small { color: #91a2b5; font-size: 10px; }
+.ws-receipt-line input, .ws-confirm-field input { min-width: 0; height: 39px; padding: 0 11px; color: #edf4f9; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 8px; outline: 0; font-size: 11px; }
+.ws-receipt-line input:focus, .ws-confirm-field input:focus { border-color: rgba(134,246,242,.52); }
+.ws-receipt-line input:disabled { opacity: .5; }
+.erp-shell[data-theme='light'] .ws-receipt-state { color: #187650; }
+.erp-shell[data-theme='light'] .ws-receipt-line { background: #f7f9fc; border-color: #dce5ed; }
+.erp-shell[data-theme='light'] .ws-receipt-line strong { color: #1d2d42; }
+.erp-shell[data-theme='light'] .ws-receipt-line small { color: #526b82; }
+.erp-shell[data-theme='light'] .ws-receipt-line input, .erp-shell[data-theme='light'] .ws-confirm-field input { color: #1d2d42; background: #f7f9fc; border-color: #dce5ed; }
+@media (max-width: 520px) { .ws-receipt-line { grid-template-columns: minmax(0,1fr) 84px; gap: 9px; padding: 10px; } }

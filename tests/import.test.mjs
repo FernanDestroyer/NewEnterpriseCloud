@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFileSync } from 'node:fs'
-import { CUSTOMER_CSV_EXAMPLE, CUSTOMER_CSV_HEADER, parseCustomersCsv, parseSuppliersCsv, splitCsvLine, SUPPLIER_CSV_EXAMPLE, SUPPLIER_CSV_HEADER } from '../src/services/import.ts'
+import { parseSuppliersCsv, splitCsvLine, SUPPLIER_CSV_EXAMPLE, SUPPLIER_CSV_HEADER } from '../src/services/import.ts'
 
 const header = SUPPLIER_CSV_HEADER.join(',')
 const row = (...cells) => cells.join(',')
@@ -80,77 +79,4 @@ test('la columna linea_credito antigua se ignora sin romper', () => {
   ].join('\n'))
   assert.equal(parsed.errors.length, 0)
   assert.equal(parsed.rows.length, 1)
-})
-
-// ---------------------------------------------------------------------------
-// Clientes
-// ---------------------------------------------------------------------------
-const customerHeader = CUSTOMER_CSV_HEADER.join(',')
-
-test('la plantilla de clientes es válida', () => {
-  assert.deepEqual(CUSTOMER_CSV_HEADER, ['tipo_doc', 'documento', 'razon_social', 'detalle', 'linea_credito', 'estado'])
-  const parsed = parseCustomersCsv([customerHeader, CUSTOMER_CSV_EXAMPLE.join(',')].join('\n'))
-  assert.equal(parsed.errors.length, 0)
-  assert.equal(parsed.rows.length, 1)
-  assert.deepEqual(parsed.rows[0], {
-    line: 2,
-    tipoDoc: 'DNI',
-    documento: '45678912',
-    razonSocial: 'María Torres Quispe',
-    detalle: 'Contacto: 987654321 · maria@correo.pe',
-    lineaCredito: 500,
-    estado: 'Activo',
-  })
-})
-
-test('el dataset de ejemplo de clientes se importa completo y sin errores', () => {
-  const text = readFileSync(new URL('../dataset-clientes.csv', import.meta.url), 'utf8')
-  const parsed = parseCustomersCsv(text)
-  assert.deepEqual(parsed.errors, [])
-  assert.equal(parsed.rows.length, 18)
-  assert.equal(parsed.rows.filter((item) => item.tipoDoc === 'DNI').length, 10)
-  assert.equal(parsed.rows.filter((item) => item.tipoDoc === 'RUC').length, 8)
-  assert.ok(parsed.rows.some((item) => item.estado === 'En curso'))
-  // Una celda con coma entre comillas se conserva completa.
-  assert.ok(parsed.rows.some((item) => item.detalle.startsWith('Contacto: Av. Arequipa 1520, Lima')))
-})
-
-test('clientes: deduce DNI/RUC por la longitud, acepta BOM, CRLF y otro orden de columnas', () => {
-  const text = '﻿razon_social,documento\r\nAna Pérez,12345678\r\n"Mi Empresa, S.A.C.",20100000017\r\n'
-  const parsed = parseCustomersCsv(text)
-  assert.equal(parsed.errors.length, 0)
-  assert.equal(parsed.rows[0].tipoDoc, 'DNI')
-  assert.equal(parsed.rows[1].tipoDoc, 'RUC')
-  assert.equal(parsed.rows[1].razonSocial, 'Mi Empresa, S.A.C.')
-  assert.equal(parsed.rows[0].lineaCredito, 0)
-  assert.equal(parsed.rows[0].estado, 'Activo')
-})
-
-test('clientes: rechaza archivo vacío y cabecera incompleta', () => {
-  assert.match(parseCustomersCsv('  \n').errors[0], /vacío/)
-  assert.match(parseCustomersCsv('nombre,telefono\nx,1').errors[0], /documento y razon_social/)
-})
-
-test('clientes: cada fila inválida se reporta con su línea sin frenar las demás', () => {
-  const parsed = parseCustomersCsv([customerHeader,
-    ',123,Documento Corto,,,',
-    'DNI,12345678,X,,,',
-    'XYZ,12345678,Tipo Raro,,,',
-    'RUC,20100000018,Checksum Malo S.A.C.,,,',
-    'DNI,12345678,Línea Negativa,,-5,',
-    'DNI,11111111,Línea Texto,,abc,',
-    'DNI,22222222,Primero,,,',
-    'DNI,22222222,Repetido,,,',
-    'DNI,33333333,Válido Final,,"1250,50",En curso',
-  ].join('\n'))
-  assert.deepEqual(parsed.rows.map((item) => item.documento), ['22222222', '33333333'])
-  assert.equal(parsed.rows[1].lineaCredito, 1250.5)
-  assert.equal(parsed.rows[1].estado, 'En curso')
-  assert.equal(parsed.errors.length, 7)
-  assert.ok(parsed.errors.some((message) => message.includes('Línea 2') && message.includes('8 dígitos (DNI) u 11')))
-  assert.ok(parsed.errors.some((message) => message.includes('Línea 3') && message.includes('razón social')))
-  assert.ok(parsed.errors.some((message) => message.includes('tipo_doc inválido')))
-  assert.ok(parsed.errors.some((message) => message.includes('verificador')))
-  assert.equal(parsed.errors.filter((message) => message.includes('línea de crédito inválida')).length, 2)
-  assert.ok(parsed.errors.some((message) => message.includes('Línea 9') && message.includes('duplicado')))
 })

@@ -1,49 +1,44 @@
 # Base de datos de ERP EnterpriseCloud en Supabase
 
-## 1. Crear la base de datos
-1. Entra a <https://supabase.com/dashboard> y crea un proyecto (o abre el que ya tengas).
-2. Ve a **SQL Editor → New query**, pega el contenido de
-   `migrations/20261009000000_erp_enterprisecloud.sql` y pulsa **Run**.
-   Crea las 17 tablas del Documento Maestro (sección 13) más 3 de apoyo (`rol_permisos`, `reportes`
-   y `configuracion`, que necesitan los módulos de la interfaz), con los roles/permisos, la
-   auditoría y las políticas de seguridad (RLS).
-3. Ejecuta las migraciones incrementales **una vez y en orden de nombre**: producto-proveedor, precio, cotizaciones, catálogo de proveedores, fases de compra, RUC, foto de perfil y documento del cliente. La aplicación actual utiliza sus tablas y columnas.
-4. La instalación arranca sin datos de negocio: el panel muestra los módulos vacíos hasta que registres tus primeros clientes, proveedores, productos y operaciones. Solo `roles` y `permisos` traen datos del sistema (necesarios para el acceso).
+## Estado remoto verificado al 26 de octubre de 2026
 
-La migración del catálogo cambia la estructura de `detalle_compras`; revisa cuáles ya están aplicadas antes de volver a ejecutar migraciones antiguas. La conexión de la aplicación no ejecuta SQL ni modifica el esquema automáticamente.
+Proyecto: ERP EnterpriseCloud, ref auxqjoxnsasnmtnakgmg, organización Free. La base remota contiene 40 tablas públicas con RLS, 9 cuentas Auth y 9 perfiles.
 
-## 2. Conectar la aplicación
-1. En Supabase: **Project Settings → API** (o el botón **Connect**) y copia la *Project URL* y la clave
-   *anon / publishable*. **No uses la `service_role`.**
-2. Copia `.env.example` como `.env` y pega los dos valores.
-3. `npm install` y luego `npm run dev`.
+Hay 23 migraciones registradas en remoto y 48 archivos locales: 23 versiones coincidentes y 25 archivos sin versión remota correspondiente. De esos 25, 18 tienen fecha hasta el 26 de octubre y requieren conciliación; siete tienen fechas posteriores y son migraciones futuras locales, no ausencias que deban repararse en remoto. Diez migraciones forward-only se aplicaron el 26 de octubre. La última retiró el permiso DELETE sobre `empresas` para `authenticated`; la política RLS ya impedía el borrado y se comprobó que las nueve cuentas siguen intactas. La matriz detalla por qué las 18 versiones históricas no se pueden ejecutar como bloque.
 
-## 3. Cómo funciona el registro de usuarios
-- La pantalla **/registro** llama a `supabase.auth.signUp`. Al instante se crea la cuenta en
-  `auth.users` y un trigger (`handle_new_user`) inserta su fila en `public.usuarios`.
-  Compruébalo en **Table Editor → usuarios**.
-- La **primera** cuenta registrada queda como *Administrador*; las siguientes como *Operador*.
-  Un administrador puede cambiar roles en la tabla `usuarios` (columna `rol_id`).
-- Por defecto Supabase exige **confirmar el correo** antes de iniciar sesión. Para pruebas puedes
-  desactivarlo en **Authentication → Providers → Email → Confirm email**. La fila en `usuarios`
-  aparece igual, con o sin confirmación.
+Documentos de trabajo:
+- ../docs/DIAGNOSTICO_ACTUAL_Y_RUTA_DE_IMPLEMENTACION.md
+- ../docs/GUIA_PASO_A_PASO_ENTERPRISECLOUD.md
+- ../docs/ARQUITECTURA_OBJETIVO_ENTERPRISECLOUD.md
+- ../docs/RECONCILIACION_MIGRACIONES.md
 
-## 4. Qué se guarda y dónde
-| Módulo de la app | Tabla |
-|---|---|
-| Ventas | `ventas` (+ `detalle_ventas`) |
-| Cotizaciones | `cotizaciones` (+ `detalle_cotizaciones`) |
-| Compras | `compras` (+ `detalle_compras`) |
-| Inventario | `productos` (+ `inventarios`, `movimientos_inventario` = kardex automático) |
-| Clientes / Proveedores | `clientes` / `proveedores` |
-| Finanzas (CxC / CxP) | `pagos` |
-| Documentos | `documentos` |
-| Reportes / Configuración | `reportes` / `configuracion` |
-| Seguridad | `usuarios`, `roles`, `permisos`, `rol_permisos` |
-| Auditoría | `auditoria` (se llena sola con cada alta, cambio o baja) |
+Las diez migraciones aplicadas y sus versiones son: `20261026182059_privilegios_api_minimos.sql`, `20261026182706_un_solo_turno_abierto.sql`, `20261026182720_orden_compra_atomica.sql`, `20261026182728_venta_credito_permisos.sql`, `20261026195955_cajas_multisucursal.sql`, `20261026200116_cajas_indices_fk.sql`, `20261026200340_unificar_lectura_sucursales.sql`, `20261026200923_almacenes_por_sucursal.sql`, `20261026202241_registrar_auto_rls.sql` y `20261026203451_empresas_sin_borrado_api.sql`. La última retira DELETE sobre el maestro de empresas; el resto de la aplicación conserva sus permisos sujetos a RLS. Se comprobó que `authenticated` ya no puede borrar filas de `empresas`. Los `DEFAULT PRIVILEGES` de `postgres` están corregidos. El rol `supabase_admin` mantiene defaults propios, así que las migraciones de aplicación deben seguir creándose como `postgres`.
 
-## 5. Seguridad
-- RLS activo en todas las tablas; el rol anónimo no puede leer nada.
-- Cada acción (ver / crear / editar / eliminar) se autoriza según el rol del usuario (`tiene_permiso`).
-- Nadie puede cambiarse el rol a sí mismo y el rol nunca se toma de lo que envía el navegador.
-- La tabla `auditoria` solo la leen quienes tengan ese permiso (Administrador, Gerente, Auditor).
+Toda tabla pública futura requiere revisar deliberadamente sus grants y RLS; no confiar en concesiones implícitas. El esquema `app_private` debe quedar fuera de los esquemas expuestos. La función pública de compras es un wrapper `SECURITY INVOKER`; la lógica privilegiada vive en `app_private` y vuelve a validar usuario/permisos.
+
+## CLI y protección de migraciones
+
+La CLI oficial está fijada en dependencias de desarrollo y supabase/config.toml existe. La CLI local necesita inicio de sesión interactivo del usuario. En el terminal local:
+
+1. Ejecuta npx supabase login.
+2. Ejecuta npx supabase link --project-ref auxqjoxnsasnmtnakgmg.
+3. Ejecuta npx supabase migration list --linked y guarda la salida.
+4. Compara una por una las versiones locales con esquema, funciones, triggers y RLS remotos.
+5. Reproduce en una base local desechable antes de reparar el historial.
+6. Exporta y comprueba una restauración antes de cualquier escritura remota.
+7. Registra como aplicada solo una migración cuyo SQL ya se demostró en remoto.
+
+No ejecutes db push, db reset --linked ni migration repair antes de completar la comparación y reproducción. migration repair cambia el historial; no aplica ni revierte SQL. Nunca reiniciar el proyecto remoto ni borrar usuarios Auth como modo de limpieza.
+
+No compartas tokens, contraseña de base de datos o clave service_role. Esa clave nunca debe estar en VITE ni en el navegador. Referencia: https://supabase.com/docs/guides/deployment/database-migrations
+
+## Desarrollo local
+
+- Variables de cliente: VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY. Mantener el .env existente privado, no mostrarlo ni subirlo.
+- npm install instala dependencias; npm run dev inicia Vite.
+- Docker Desktop no tiene motor activo. Las 47 migraciones anteriores se reprodujeron cronológicamente en PostgreSQL 17 desechable con stubs de Auth. La nueva migración de revocación se aplicó en Supabase y se confirmó `authenticated_can_delete=false`; falta repetir la reproducción local de las 48. Esto no es un dump ni una restauración del esquema/datos remotos. `migration list --linked` continúa indicando que la CLI no está enlazada al proyecto. No se ejecutaron compras/ventas de prueba en la base viva.
+- Las nuevas modificaciones se crean en una migración pequeña y revisada, incluyendo RLS, grants y restricciones.
+
+## Plan Free y límites
+
+Protección contra contraseñas filtradas de Auth requiere Pro o superior según Supabase; no se cambió el plan. El asesor de seguridad solo reporta esa limitación del plan Free. Rendimiento presenta 51 INFO de índices todavía no usados, 0 claves foráneas sin índice y ya no reporta políticas de lectura duplicadas. No borrar índices automáticamente. Empresa, sucursales, almacenes, cajas e inventarios por almacén estaban vacíos al verificar; no crear ubicaciones ficticias ni abrir stock sin conteo. La auditoría registra cambios en las 39 tablas de negocio/configuración; la propia bitácora no tiene trigger. `caja_turnos.caja_id` separa los turnos nuevos por caja y conserva el turno abierto previo sin asignarle una ubicación inventada.

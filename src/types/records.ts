@@ -47,9 +47,14 @@ export type RecordItem = {
   updatedAt?: string
   dueAt?: string | null
   amount?: number
+  /** Obligación original para cuentas con abonos; amount representa el saldo abierto. */
+  obligationAmount?: number
   quantity?: number
   /** Productos: precio de venta referencial. undefined = columna aún no migrada o sin definir. */
   precio?: number
+  /** Productos: categorías y unidad seleccionadas en Maestros. */
+  categoriaId?: string | null
+  unidadMedidaId?: string | null
   status: RecordStatus
   /** Ventas/Cotizaciones: UUID del cliente vinculado (clientes.id). NULL = sin vincular. */
   cliente_id?: string | null
@@ -74,6 +79,14 @@ export type RecordItem = {
   comprobanteTipo?: string | null
   /** Compras: número del comprobante de recepción. */
   comprobanteNumero?: string | null
+  /** Compras: avance real de recepción, independiente del estado comercial. */
+  estadoRecepcion?: 'pendiente' | 'parcial' | 'completa'
+  /** Compras: false para servicios/gastos que no generan entrada de almacén. */
+  requiereRecepcion?: boolean
+  /** Ventas: almacén del que se descontó el stock. */
+  almacenId?: string | null
+  /** Tesorería: turno de caja elegido para registrar un cobro inmediato en efectivo. */
+  cajaTurnoId?: string | null
   /** Etiqueta legible del registro vinculado (razón social). Solo lectura. */
   relatedName?: string
   /** Código legible del registro vinculado (CLI-001 / PRV-082). Solo lectura. */
@@ -89,6 +102,8 @@ export type RecordItem = {
 
 /** Línea de venta/compra: un producto del inventario en X cantidad y precio. */
 export type DocumentLine = {
+  /** UUID de detalle_compras para registrar recepciones por línea. */
+  rowId?: string
   /** UUID del producto (productos.id). */
   producto_id: string
   /** Código legible (PRD-001). Solo lectura. */

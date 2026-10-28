@@ -36,14 +36,6 @@ En PowerShell con restricciones de ejecución puedes utilizar `npm.cmd`.
 
 La imagen se guarda en `configuracion` con código `YAPE_QR`. El cliente ingresa el monto en su app; este QR habitual no recibe un monto dinámico ni confirma el abono automáticamente. Registra el estado Completada después de revisar el pago en Yape.
 
-## Importar clientes desde un dataset CSV
-
-1. Asegúrate de haber ejecutado `supabase/migrations/20261017000000_cliente_documento.sql` (guarda el documento del cliente).
-2. En **Clientes** pulsa **Importar CSV**, descarga la plantilla o usa `dataset-clientes.csv` (18 clientes de ejemplo) y selecciona el archivo.
-3. Revisa la vista previa (cada fila se valida: DNI de 8 dígitos o RUC de 11 con dígito verificador, crédito ≥ 0, sin duplicados) y pulsa **Confirmar importación**.
-
-Columnas: `tipo_doc,documento,razon_social,detalle,linea_credito,estado`. Si falta `tipo_doc` se deduce por la longitud del documento. Los clientes cuyo documento ya existe se omiten y se informan en el reporte final.
-
 ## Consulta RENIEC/SUNAT
 
 1. Configura en `.env` tu `VITE_PERU_API_TOKEN` (y `VITE_PERU_API_URL`, por defecto `https://dniruc.apisperu.com/api/v1`; también compatible con `https://api.apis.net.pe/v1`). Reinicia el servidor.

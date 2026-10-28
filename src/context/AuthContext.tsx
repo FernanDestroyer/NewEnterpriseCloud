@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { permissionModule } from '../data/workspace'
-import type { DataPage } from '../types'
+import { permissionModule, type PermissionModuleKey } from '../data/workspace'
 
 export type Profile = {
   id: string
@@ -14,7 +13,7 @@ export type Profile = {
 }
 
 type SignUpResult = { error: string | null; needsConfirmation: boolean }
-type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar' | 'importar'
+export type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar' | 'importar'
 
 type AuthContextValue = {
   session: Session | null
@@ -23,7 +22,7 @@ type AuthContextValue = {
   configured: boolean
   error: string
   permissions: string[]
-  can: (page: DataPage, action?: PermissionAction) => boolean
+  can: (page: PermissionModuleKey, action?: PermissionAction) => boolean
   refreshProfile: () => Promise<void>
   updateProfile: (nombre: string, avatarUrl?: string | null) => Promise<void>
   signIn: (email: string, password: string) => Promise<string | null>
@@ -91,6 +90,23 @@ async function loadProfile(session: Session): Promise<{ profile: Profile; permis
       const values = Array.isArray(entry.permisos) ? entry.permisos : entry.permisos ? [entry.permisos] : []
       for (const permission of values) permissions.push(`${permission.modulo}:${permission.accion}`)
     }
+  }
+  // Overrides are optional until the permissions-customization migration is installed.
+  const overrides = await supabase.from('usuario_permisos').select('permitido, permisos(modulo, accion)').eq('usuario_id', session.user.id)
+  if (!overrides.error) {
+    for (const entry of overrides.data as unknown as Array<{ permitido: boolean; permisos: { modulo: string; accion: string } | { modulo: string; accion: string }[] | null }>) {
+      const values = Array.isArray(entry.permisos) ? entry.permisos : entry.permisos ? [entry.permisos] : []
+      for (const permission of values) {
+        const key = `${permission.modulo}:${permission.accion}`
+        if (entry.permitido) permissions.push(key)
+        else {
+          const index = permissions.indexOf(key)
+          if (index >= 0) permissions.splice(index, 1)
+        }
+      }
+    }
+  } else if (!['42P01', 'PGRST205'].includes(String((overrides.error as { code?: string }).code ?? ''))) {
+    throw new Error(`No se pudieron cargar tus permisos personalizados: ${overrides.error.message}`)
   }
   return { profile: { id: row.id, nombre: row.nombre, email: row.email ?? session.user.email ?? '', rol: role?.nombre ?? 'Sin rol', activo: row.activo, avatarUrl: row.avatar_url ?? null }, permissions }
 }
@@ -205,14 +221,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await supabase.from('usuarios').update(payload).eq('id', session.user.id).select('id').single()
     if (result.error) {
       if (avatarUrl !== undefined && isMissingAvatarColumn(result.error)) {
-        throw new Error('Falta la columna avatar_url en Supabase. Ejecuta la migración 20261016000000_perfil_avatar.sql y vuelve a intentarlo. Tu nombre no se modificó.')
+        throw new Error('No se pudo guardar el cambio de perfil porque falta una columna en Supabase. Revisa el historial y aplica solo la migración aprobada antes de reintentar. Tu nombre no se modificó.')
       }
       throw result.error
     }
     setProfile(current => current ? { ...current, nombre: name, avatarUrl: avatarUrl === undefined ? current.avatarUrl : avatarUrl } : current)
   }, [session])
 
-  const can = useCallback((page: DataPage, action: PermissionAction = 'ver') => Boolean(profile?.activo && permissions.includes(`${permissionModule[page]}:${action}`)), [profile, permissions])
+  const can = useCallback((page: PermissionModuleKey, action: PermissionAction = 'ver') => Boolean(profile?.activo && permissions.includes(`${permissionModule[page]}:${action}`)), [profile, permissions])
 
   const value = useMemo<AuthContextValue>(
     () => ({ session, profile, loading, error, permissions, can, refreshProfile, updateProfile, configured: isSupabaseConfigured, signIn, signUp, signOut }),

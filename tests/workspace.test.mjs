@@ -88,3 +88,17 @@ test('el crédito del cliente solo lo consume lo pagado con Tarjeta', () => {
   const noLimit = customerCredit({ ...customer, amount: 0 }, sales, finance)
   assert.equal(noLimit.hasLimit, false)
 })
+
+test('el crédito de Tarjeta se libera cuando se completa la cuenta por cobrar', () => {
+  const customer = { id: 'CLI-002', rowId: 'uuid-cli-2', name: 'Cliente Crédito', detail: '', date: '', status: 'Activo', amount: 500 }
+  const sales = [
+    { id: 'V-010', rowId: 'uuid-v10', name: customer.name, detail: '', date: '', status: 'Completada', amount: 300, medio: 'Tarjeta', cliente_id: customer.rowId },
+  ]
+  const finance = [
+    { id: 'FIN-010', name: customer.name, detail: '', date: '', status: 'Completada', amount: 300, saleId: 'uuid-v10' },
+  ]
+
+  const credit = customerCredit(customer, sales, finance)
+  assert.equal(credit.consumidoTarjeta, 0)
+  assert.equal(credit.disponible, 500)
+})

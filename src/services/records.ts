@@ -1,14 +1,19 @@
 import { requireSupabase } from '../lib/supabase'
 import { salePayableTotal } from '../data/payments'
+import { consumesCreditLine } from '../data/workspace'
 import { DATA_PAGES } from '../data/catalog'
-import { formatWhen, purchaseHasStock, totalWithIgv } from '../data/helpers'
-import type { CustomerImportReport, CustomerImportRow, SupplierImportReport, SupplierImportRow } from './import'
+import { formatWhen, totalWithIgv } from '../data/helpers'
+import type { CustomerImportRow, PurchaseImportRow, SalesImportRow, SupplierImportReport, SupplierImportRow } from './import'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 
 type Row = Record<string, unknown>
 
 // Datos que captura el formulario (RecordModal).
 export type RecordInput = {
+  /** Código de origen conservado en importaciones; se prefija para no colisionar con códigos internos. */
+  reference?: string
+  /** Fecha de origen para importación de registros históricos. */
+  created_at?: string
   name: string
   detail: string
   status: RecordStatus
@@ -16,6 +21,8 @@ export type RecordInput = {
   quantity?: number
   /** Productos: precio de venta referencial. undefined = no tocar la columna. */
   precio?: number
+  categoria_id?: string | null
+  unidad_medida_id?: string | null
   /** UUID del cliente (ventas) o proveedor (compras/productos). null = sin vínculo. */
   cliente_id?: string | null
   proveedor_id?: string | null
@@ -41,6 +48,14 @@ export type RecordInput = {
   /** Compras: número del comprobante de recepción. */
   comprobante_numero?: string | null
   financeType?: 'cobrar' | 'pagar' | null
+  /** Ventas: almacén origen cuando la operación tiene líneas. */
+  almacen_id?: string | null
+  /** Ventas: turno asociado al cobro inmediato en efectivo. */
+  cajaTurnoId?: string | null
+  /** Metadatos de las operaciones transaccionales, no columnas editables. */
+  idempotencyKey?: string
+  quote_id?: string | null
+  source?: 'manual' | 'import'
 }
 
 // Cómo cada módulo de la interfaz se corresponde con una tabla de Supabase.
@@ -105,6 +120,7 @@ function toRecord(page: DataPage, row: Row): RecordItem {
   }
   // Medio de pago de la venta (si su migración ya se ejecutó).
   if (page === 'sales') {
+    item.almacenId = typeof row.almacen_id === 'string' ? row.almacen_id : null
     item.medio = typeof row.medio_pago === 'string' && row.medio_pago ? row.medio_pago : null
   }
   // Descuento de la venta (si su migración ya se ejecutó).
@@ -113,8 +129,11 @@ function toRecord(page: DataPage, row: Row): RecordItem {
     else if ('descuento' in row) item.descuento = Number((row.descuento as number | null) ?? 0) || 0
   }
   if (config.amount && row[config.amount] !== null && row[config.amount] !== undefined) item.amount = Number(row[config.amount])
+  if (page === 'finance' && row.monto !== null && row.monto !== undefined) item.obligationAmount = Number(row.monto)
   if (config.quantity && row[config.quantity] !== null && row[config.quantity] !== undefined) item.quantity = Number(row[config.quantity])
   if (page === 'purchases') {
+    if (row.estado_recepcion === 'pendiente' || row.estado_recepcion === 'parcial' || row.estado_recepcion === 'completa') item.estadoRecepcion = row.estado_recepcion
+    if (typeof row.requiere_recepcion === 'boolean') item.requiereRecepcion = row.requiere_recepcion
     if (typeof row.fecha_limite === 'string') item.fechaLimite = row.fecha_limite
     else if (row.fecha_limite === null) item.fechaLimite = null
     if (typeof row.comprobante_tipo === 'string') item.comprobanteTipo = row.comprobante_tipo
@@ -124,6 +143,10 @@ function toRecord(page: DataPage, row: Row): RecordItem {
   }
   // Precio del producto (si la migración de precio ya se ejecutó).
   if (config.price && row[config.price] !== null && row[config.price] !== undefined) item.precio = Number(row[config.price])
+  if (page === 'inventory') {
+    item.categoriaId = typeof row.categoria_id === 'string' ? row.categoria_id : null
+    item.unidadMedidaId = typeof row.unidad_medida_id === 'string' ? row.unidad_medida_id : null
+  }
   // RUC del proveedor (si su migración ya se ejecutó).
   if (config.taxId && config.taxId in row) item.ruc = (row[config.taxId] as string | null) ?? null
   // Contacto del proveedor (si su migración ya se ejecutó).
@@ -166,15 +189,22 @@ function toRecord(page: DataPage, row: Row): RecordItem {
 function toRow(page: DataPage, input: RecordInput): Row {
   const config = pageConfig[page]
   const row: Row = { [config.name]: input.name, detalle: input.detail, estado: input.status }
+  if ((page === 'sales' || page === 'purchases') && input.reference) row.codigo = `IMP-${input.reference.trim()}`
+  if ((page === 'sales' || page === 'purchases') && input.created_at) row.created_at = input.created_at
   if (page === 'finance' && input.financeType !== undefined) row.tipo = input.financeType
   if (page === 'finance' && input.medio_pago !== undefined) row.medio_pago = input.medio_pago || null
   // Medio de pago de la venta (solo ese módulo lo usa).
   if (page === 'sales' && input.medio_pago !== undefined) row.medio_pago = input.medio_pago || null
   // Descuento de la venta (solo ese módulo lo usa).
   if (page === 'sales' && input.descuento !== undefined) row.descuento = Math.min(100, Math.max(0, Number(input.descuento) || 0))
+  if (page === 'sales' && input.almacen_id !== undefined) row.almacen_id = input.almacen_id
   if (config.amount && input.amount !== undefined) row[config.amount] = input.amount
   if (config.quantity && input.quantity !== undefined) row[config.quantity] = input.quantity
   if (config.price && input.precio !== undefined) row[config.price] = input.precio
+  if (page === 'inventory') {
+    if (input.categoria_id !== undefined) row.categoria_id = input.categoria_id
+    if (input.unidad_medida_id !== undefined) row.unidad_medida_id = input.unidad_medida_id
+  }
   if (config.taxId && input.ruc !== undefined) row[config.taxId] = input.ruc
   // Contacto del proveedor (solo ese módulo los usa).
   if (page === 'suppliers') {
@@ -223,7 +253,7 @@ function withoutColumn(row: Row, column: string): Row {
 }
 
 /** Columnas nuevas que pueden faltar si su migración aún no se ejecutó. */
-const PENDING_COLUMNS = ['ruc', 'precio', 'proveedor_id', 'tipo_doc', 'documento', 'direccion', 'correo', 'telefono', 'forma_pago', 'descuento', 'medio_pago']
+const PENDING_COLUMNS = ['ruc', 'precio', 'proveedor_id', 'tipo_doc', 'documento', 'direccion', 'correo', 'telefono', 'forma_pago', 'descuento', 'medio_pago', 'categoria_id', 'unidad_medida_id']
 
 async function insertWithColumnFallback(table: string, payload: Row, required: string[] = []) {
   const client = requireSupabase()
@@ -265,19 +295,19 @@ export function friendlyError(error: unknown): string {
   if (err?.code === '23505') return 'Ya existe un registro con esos datos.'
   if (err?.code === '23514') return 'Alguno de los valores no es válido (revisa montos y estado).'
   if (err?.code === '42703' || err?.code === 'PGRST204' || (/proveedor_id|precio|\bruc\b|tipo_doc|documento|direccion|correo|telefono|forma_pago|descuento|medio_pago/i.test(haystack) && /column|schema cache/i.test(haystack))) {
-    if (/precio/i.test(haystack)) return 'Falta la columna precio en productos. Ejecuta en Supabase la migración 20261011000000_producto_precio.sql y recarga.'
-    if (/\bruc\b/i.test(haystack)) return 'Falta la columna RUC en proveedores. Ejecuta en Supabase la migración 20261015000000_proveedor_ruc.sql y recarga.'
-    if (/tipo_doc|documento/i.test(haystack)) return 'Falta la columna de documento en clientes. Ejecuta en Supabase la migración 20261017000000_cliente_documento.sql y recarga.'
-    if (/direccion|correo|telefono|forma_pago/i.test(haystack)) return 'Faltan las columnas de contacto en proveedores. Ejecuta en Supabase la migración 20261018000000_proveedor_contacto.sql y recarga.'
-    if (/descuento|medio_pago/i.test(haystack)) return 'Faltan columnas nuevas en Supabase. Ejecuta en Supabase las migraciones 20261021000000_centro_mantenimiento.sql y 20261025000000_venta_medio_pago.sql y recarga.'
-    return 'Falta una columna nueva en Supabase. Ejecuta las migraciones pendientes y recarga.'
+    if (/precio/i.test(haystack)) return 'La base de datos no tiene la columna de precio que necesita productos. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
+    if (/\bruc\b/i.test(haystack)) return 'La base de datos no tiene la columna RUC que necesita proveedores. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
+    if (/tipo_doc|documento/i.test(haystack)) return 'La base de datos no tiene las columnas de documento que necesita clientes. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
+    if (/direccion|correo|telefono|forma_pago/i.test(haystack)) return 'La base de datos no tiene las columnas de contacto que necesita proveedores. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
+    if (/descuento|medio_pago/i.test(haystack)) return 'La base de datos no tiene todas las columnas que necesita este flujo. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
+    return 'La base de datos no tiene una columna que necesita este flujo. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
   }
   if (err?.code === '23503') return 'El cliente o proveedor seleccionado ya no existe. Elige otro de la lista.'
   if ((err?.code === '42P01' || err?.code === 'PGRST205') && /proveedor_productos|cotizacion/i.test(haystack)) {
-    return 'Falta una tabla nueva en Supabase. Ejecuta las migraciones pendientes (20261012000000_cotizaciones.sql, 20261013000000_catalogo_proveedores.sql) y recarga.'
+    return 'La base de datos no tiene una tabla que necesita este flujo. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
   }
   if ((err?.code === '42P01' || err?.code === 'PGRST205') && /metodos_pago|caja_turnos/i.test(haystack)) {
-    return 'Falta una tabla nueva en Supabase. Ejecuta la migración 20261021000000_centro_mantenimiento.sql y recarga.'
+    return 'La base de datos no tiene una tabla de Tesorería que necesita este flujo. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
   }
   if (err?.message && /fetch|network/i.test(err.message)) return 'No se pudo conectar con la base de datos. Revisa tu conexión.'
   return err?.message || 'Ocurrió un error inesperado con la base de datos.'
@@ -472,71 +502,6 @@ export async function importSuppliersWithProducts(rows: SupplierImportRow[]): Pr
   return { created: createdList.length, updated: toUpdate.length, products: catalogRows.length, omitted, failed, skippedProducts }
 }
 
-/**
- * Alta masiva de clientes (importación CSV).
- * Omite los documentos repetidos en el archivo o que ya están registrados y
- * reporta cada caso sin abortar el resto. Si un lote es rechazado por la base
- * de datos, reintenta fila por fila para saber exactamente cuáles fallaron.
- */
-export async function importCustomers(rows: CustomerImportRow[]): Promise<CustomerImportReport> {
-  const client = requireSupabase()
-  const omitted: CustomerImportReport['omitted'] = []
-  const failed: CustomerImportReport['failed'] = []
-  const seenFile = new Set<string>()
-  const fresh = rows.filter((row) => {
-    if (seenFile.has(row.documento)) {
-      omitted.push({ line: row.line, documento: row.documento, reason: 'Documento duplicado dentro del archivo' })
-      return false
-    }
-    seenFile.add(row.documento)
-    return true
-  })
-  if (!fresh.length) return { created: 0, omitted, failed }
-
-  // Documentos que ya existen en la base (se consulta por tandas para no
-  // exceder el largo de la URL ni el límite de filas por respuesta).
-  const existingDocs = new Set<string>()
-  const documents = fresh.map((row) => row.documento)
-  for (let start = 0; start < documents.length; start += 100) {
-    const { data, error } = await client.from('clientes').select('documento').in('documento', documents.slice(start, start + 100))
-    if (error) throw error
-    for (const item of ((data ?? []) as Array<{ documento: string | null }>)) {
-      if (item.documento) existingDocs.add(item.documento)
-    }
-  }
-  const toInsert = fresh.filter((row) => {
-    if (!existingDocs.has(row.documento)) return true
-    omitted.push({ line: row.line, documento: row.documento, reason: 'Ya existe un cliente con este documento' })
-    return false
-  })
-
-  const toPayload = (row: CustomerImportRow): Row => ({
-    razon_social: row.razonSocial,
-    detalle: row.detalle,
-    linea_credito: row.lineaCredito,
-    estado: row.estado,
-    tipo_doc: row.tipoDoc,
-    documento: row.documento,
-  })
-
-  let created = 0
-  for (let start = 0; start < toInsert.length; start += 100) {
-    const chunk = toInsert.slice(start, start + 100)
-    const batch = await client.from('clientes').insert(chunk.map(toPayload)).select('id')
-    if (!batch.error) {
-      created += chunk.length
-      continue
-    }
-    // El lote completo se revierte: se prueba cada fila para aislar la que falla.
-    for (const row of chunk) {
-      const single = await client.from('clientes').insert(toPayload(row)).select('id')
-      if (single.error) failed.push({ line: row.line, documento: row.documento, reason: friendlyError(single.error) })
-      else created += 1
-    }
-  }
-  return { created, omitted, failed }
-}
-
 /** Enriquece ventas/compras/productos con el nombre del cliente/proveedor vinculado. */
 function enrichRelations(records: Record<DataPage, RecordItem[]>): Record<DataPage, RecordItem[]> {
   const customersById = new Map<string, RecordItem>()
@@ -565,7 +530,22 @@ function enrichRelations(records: Record<DataPage, RecordItem[]>): Record<DataPa
   }
 }
 
+let sessionCheck: Promise<void> | null = null
+
+/** Evita enviar consultas del ERP cuando Auth perdió o aún no recuperó la sesión. */
+async function ensureAuthenticatedSession(): Promise<void> {
+  if (!sessionCheck) {
+    sessionCheck = (async () => {
+      const { data, error } = await requireSupabase().auth.getSession()
+      if (error) throw error
+      if (!data.session?.access_token) throw new Error('Tu sesión expiró o dejó de ser válida. Vuelve a iniciar sesión para consultar los datos.')
+    })().finally(() => { sessionCheck = null })
+  }
+  await sessionCheck
+}
+
 async function fetchTableRows(table: string): Promise<Row[]> {
+  await ensureAuthenticatedSession()
   const rows: Row[] = []
   const size = 500
   for (let offset = 0; ; offset += size) {
@@ -584,6 +564,22 @@ export async function fetchRecordsSnapshot(pages: DataPage[] = DATA_PAGES) {
     try { records[page] = (await fetchTableRows(pageConfig[page].table)).map(row => toRecord(page, row)) }
     catch (error) { errors[page] = friendlyError(error) }
   }))
+  if (pages.includes('finance') && records.finance.length) {
+    try {
+      const accountIds = records.finance.flatMap(item => item.rowId ? [item.rowId] : [])
+      const balances = await fetchAccountBalances(accountIds)
+      records.finance = records.finance.map(item => {
+        const balance = item.rowId ? balances.get(item.rowId) : undefined
+        if (!balance) return item
+        // Las cuentas cerradas antes del libro de tesorería siguen siendo históricas;
+        // no se convierten en deuda nueva por no tener movimientos retroactivos.
+        if (item.status === 'Completada' && balance.montoAplicado === 0) return item
+        return { ...item, amount: balance.saldoPendiente, status: balance.saldoPendiente === 0 ? 'Completada' : balance.montoAplicado > 0 ? 'En curso' : item.status }
+      })
+    } catch (error) {
+      errors.finance = friendlyError(error)
+    }
+  }
   return { records: enrichRelations(records), errors }
 }
 
@@ -595,6 +591,16 @@ export async function fetchAllRecords(): Promise<Record<DataPage, RecordItem[]>>
 }
 
 export async function insertRecord(page: DataPage, input: RecordInput): Promise<RecordItem> {
+  if (page === 'inventory' && Number(input.quantity ?? 0) > 0) {
+    const client = requireSupabase()
+    const [inventory, opening] = await Promise.all([
+      client.from('inventarios').select('id', { count: 'exact', head: true }),
+      client.from('aperturas_inventario').select('id', { count: 'exact', head: true }),
+    ])
+    if (inventory.error) throw inventory.error
+    if (opening.error) throw opening.error
+    if ((inventory.count ?? 0) > 0 || (opening.count ?? 0) > 0) throw new Error('Después de abrir existencias por almacén, las altas con stock inicial se registran mediante un movimiento de inventario.')
+  }
   const payload = toRow(page, input)
   // Inventario (precio), proveedores (ruc) y clientes (documento) tienen
   // columnas nuevas: ahí se aplica el fallback. El RUC es obligatorio en el
@@ -606,7 +612,103 @@ export async function insertRecord(page: DataPage, input: RecordInput): Promise<
   return toRecord(page, attempt.data as Row)
 }
 
+export type ModuleImportIssue = { line: number; reference: string; reason: string }
+export type ModuleImportReport = { created: number; skipped: ModuleImportIssue[]; failed: ModuleImportIssue[] }
+
+/** Importa clientes en modo append-only y evita duplicar documentos existentes. */
+export async function importCustomers(rows: CustomerImportRow[]): Promise<ModuleImportReport> {
+  const client = requireSupabase()
+  const report: ModuleImportReport = { created: 0, skipped: [], failed: [] }
+  const documents = [...new Set(rows.map(row => row.documento).filter(Boolean))]
+  const existingDocuments = new Set<string>()
+  if (documents.length) {
+    const { data, error } = await client.from('clientes').select('documento').in('documento', documents)
+    if (error) throw error
+    for (const row of (data ?? []) as Array<{ documento: string | null }>) if (row.documento) existingDocuments.add(row.documento)
+  }
+  for (const row of rows) {
+    if (row.documento && existingDocuments.has(row.documento)) {
+      report.skipped.push({ line: row.line, reference: row.documento, reason: 'El documento ya está registrado.' })
+      continue
+    }
+    try {
+      await insertRecord('customers', { name: row.razonSocial, detail: row.detalle, status: row.estado, tipo_doc: row.tipoDoc, documento: row.documento || null, amount: row.lineaCredito })
+      if (row.documento) existingDocuments.add(row.documento)
+      report.created++
+    } catch (error) { report.failed.push({ line: row.line, reference: row.documento || row.razonSocial, reason: friendlyError(error) }) }
+  }
+  return report
+}
+
+/** Importa ventas históricas de cabecera; los códigos de origen se conservan como IMP-<código>. */
+export async function importSales(rows: SalesImportRow[]): Promise<ModuleImportReport> {
+  const client = requireSupabase()
+  const report: ModuleImportReport = { created: 0, skipped: [], failed: [] }
+  const codes = [...new Set(rows.map(row => `IMP-${row.codigo.trim()}`))]
+  const { data: existing, error: existingError } = await client.from('ventas').select('codigo').in('codigo', codes)
+  if (existingError) throw existingError
+  const existingCodes = new Set(((existing ?? []) as Array<{ codigo: string }>).map(row => row.codigo))
+  const relationCodes = [...new Set(rows.map(row => row.clienteCodigo).filter(Boolean))]
+  const clientIds = new Map<string, string>()
+  if (relationCodes.length) {
+    const { data, error } = await client.from('clientes').select('id,codigo').in('codigo', relationCodes)
+    if (error) throw error
+    for (const row of (data ?? []) as Array<{ id: string; codigo: string }>) clientIds.set(row.codigo, row.id)
+  }
+  for (const row of rows) {
+    const reference = `IMP-${row.codigo.trim()}`
+    if (existingCodes.has(reference)) { report.skipped.push({ line: row.line, reference: row.codigo, reason: 'El código ya fue importado.' }); continue }
+    if (row.clienteCodigo && !clientIds.has(row.clienteCodigo)) { report.failed.push({ line: row.line, reference: row.codigo, reason: `No existe el cliente ${row.clienteCodigo}.` }); continue }
+    try {
+      await insertSaleWithLines({ reference: row.codigo, created_at: row.fecha ? `${row.fecha}T12:00:00.000Z` : undefined, name: row.clienteNombre, detail: row.detalle, status: row.estado, amount: row.monto, medio_pago: row.medioPago || null, cliente_id: row.clienteCodigo ? clientIds.get(row.clienteCodigo) : null }, [])
+      existingCodes.add(reference)
+      report.created++
+    } catch (error) { report.failed.push({ line: row.line, reference: row.codigo, reason: friendlyError(error) }) }
+  }
+  return report
+}
+
+/** Importa compras históricas de cabecera; no genera movimientos de stock sin líneas de producto. */
+export async function importPurchases(rows: PurchaseImportRow[]): Promise<ModuleImportReport> {
+  const client = requireSupabase()
+  const report: ModuleImportReport = { created: 0, skipped: [], failed: [] }
+  const codes = [...new Set(rows.map(row => `IMP-${row.codigo.trim()}`))]
+  const { data: existing, error: existingError } = await client.from('compras').select('codigo').in('codigo', codes)
+  if (existingError) throw existingError
+  const existingCodes = new Set(((existing ?? []) as Array<{ codigo: string }>).map(row => row.codigo))
+  const relationCodes = [...new Set(rows.map(row => row.proveedorCodigo).filter(Boolean))]
+  const supplierIds = new Map<string, string>()
+  if (relationCodes.length) {
+    const { data, error } = await client.from('proveedores').select('id,codigo').in('codigo', relationCodes)
+    if (error) throw error
+    for (const row of (data ?? []) as Array<{ id: string; codigo: string }>) supplierIds.set(row.codigo, row.id)
+  }
+  for (const row of rows) {
+    const reference = `IMP-${row.codigo.trim()}`
+    if (existingCodes.has(reference)) { report.skipped.push({ line: row.line, reference: row.codigo, reason: 'El código ya fue importado.' }); continue }
+    if (row.proveedorCodigo && !supplierIds.has(row.proveedorCodigo)) { report.failed.push({ line: row.line, reference: row.codigo, reason: `No existe el proveedor ${row.proveedorCodigo}.` }); continue }
+    try {
+      await insertPurchaseWithLines({ reference: row.codigo, created_at: row.fecha ? `${row.fecha}T12:00:00.000Z` : undefined, name: row.proveedorNombre, detail: row.detalle, status: row.estado, amount: row.monto, proveedor_id: row.proveedorCodigo ? supplierIds.get(row.proveedorCodigo) : null, fecha_limite: row.fechaLimite || null, comprobante_tipo: row.comprobanteTipo || null, comprobante_numero: row.comprobanteNumero || null }, [])
+      existingCodes.add(reference)
+      report.created++
+    } catch (error) { report.failed.push({ line: row.line, reference: row.codigo, reason: friendlyError(error) }) }
+  }
+  return report
+}
+
 export async function updateRecord(page: DataPage, code: string, input: RecordInput): Promise<RecordItem> {
+  if (page === 'inventory' && input.quantity !== undefined) {
+    const client = requireSupabase()
+    const [{ data: product, error: productError }, { count, error: inventoryError }, { count: openingCount, error: openingError }] = await Promise.all([
+      client.from('productos').select('stock').eq('codigo', code).single(),
+      client.from('inventarios').select('id', { count: 'exact', head: true }),
+      client.from('aperturas_inventario').select('id', { count: 'exact', head: true }),
+    ])
+    if (productError) throw productError
+    if (inventoryError) throw inventoryError
+    if (openingError) throw openingError
+    if (((count ?? 0) > 0 || (openingCount ?? 0) > 0) && Number((product as { stock: number }).stock) !== Number(input.quantity)) throw new Error('Con existencias por almacén, ajusta stock desde un movimiento de inventario; editar el producto solo cambia sus datos maestros.')
+  }
   const payload = toRow(page, input)
   // La edición siempre refresca updated_at (trazabilidad y ventanas de caja).
   payload.updated_at = new Date().toISOString()
@@ -716,17 +818,24 @@ function assertValidLines(lines: LineInput[]) {
   }
 }
 
-/** Últimos movimientos de auditoría (quién hizo qué, solo lectura). */
+/** Bitácora paginada; la política RLS limita la consulta a auditoria:ver. */
 export type AuditEntry = { id: number; email: string | null; accion: string; modulo: string; registro: string | null; resultado: string; createdAt: string }
+export type AuditTrailPage = { entries: AuditEntry[]; total: number }
 
-export async function fetchAuditTrail(limit = 20): Promise<AuditEntry[]> {
-  const { data, error } = await requireSupabase()
+export async function fetchAuditTrail(input: { limit?: number; offset?: number; modulo?: string; accion?: string } = {}): Promise<AuditTrailPage> {
+  const limit = Math.max(1, Math.min(100, Math.trunc(input.limit ?? 50)))
+  const offset = Math.max(0, Math.trunc(input.offset ?? 0))
+  let query = requireSupabase()
     .from('auditoria')
-    .select('id, usuario_email, accion, modulo, registro_id, resultado, created_at')
+    .select('id, usuario_email, accion, modulo, registro_id, resultado, created_at', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1)
+  if (input.modulo) query = query.eq('modulo', input.modulo)
+  if (input.accion) query = query.eq('accion', input.accion)
+  const { data, error, count } = await query
   if (error) throw error
-  return ((data ?? []) as Row[]).map((row) => ({
+  return { entries: ((data ?? []) as Row[]).map((row) => ({
     id: Number(row.id),
     email: typeof row.usuario_email === 'string' ? row.usuario_email : null,
     accion: String(row.accion ?? ''),
@@ -734,7 +843,13 @@ export async function fetchAuditTrail(limit = 20): Promise<AuditEntry[]> {
     registro: typeof row.registro_id === 'string' ? row.registro_id : null,
     resultado: String(row.resultado ?? ''),
     createdAt: typeof row.created_at === 'string' ? row.created_at : '',
-  }))
+  })), total: count ?? 0 }
+}
+
+export async function fetchAuditModules(): Promise<string[]> {
+  const { data, error } = await requireSupabase().from('auditoria').select('modulo').order('modulo').limit(1000)
+  if (error) throw error
+  return [...new Set((data ?? []).map(row => String(row.modulo ?? '')).filter(Boolean))]
 }
 
 /** Líneas guardadas de una venta, cotización o compra (para precargar el editor). */
@@ -776,18 +891,115 @@ export async function fetchDocumentLines(page: 'sales' | 'purchases' | 'quotes',
   }
   const { data, error } = await client
     .from('detalle_compras')
-    .select('proveedor_producto_id, cantidad, costo_unitario, proveedor_productos(codigo, nombre)')
+    .select('id, proveedor_producto_id, cantidad, costo_unitario, proveedor_productos(codigo, nombre)')
     .eq('compra_id', docRowId)
   if (error) throw error
-  return (data as unknown as Array<{ proveedor_producto_id: string | null; cantidad: number; costo_unitario: number; proveedor_productos: { codigo: string; nombre: string } | null }>)
+  return (data as unknown as Array<{ id: string; proveedor_producto_id: string | null; cantidad: number; costo_unitario: number; proveedor_productos: { codigo: string; nombre: string } | null }>)
     .filter((row) => row.proveedor_producto_id)
     .map((row) => ({
+      rowId: row.id,
       producto_id: row.proveedor_producto_id as string,
       cantidad: Number(row.cantidad),
       precio: Number(row.costo_unitario),
       codigo: row.proveedor_productos?.codigo,
       nombre: row.proveedor_productos?.nombre,
     }))
+}
+
+export type PurchaseReceiptInputLine = { detalle_compra_id: string; cantidad: number }
+export type ActiveWarehouse = { id: string; nombre: string; sucursal_id: string }
+
+export async function fetchActiveWarehouses(): Promise<ActiveWarehouse[]> {
+  const { data, error } = await requireSupabase()
+    .from('almacenes').select('id,nombre,sucursal_id').eq('activo', true).order('nombre')
+  if (error) throw error
+  return (data ?? []) as ActiveWarehouse[]
+}
+
+export async function fetchWarehouseStocks(almacenId: string): Promise<Map<string, number>> {
+  const { data, error } = await requireSupabase().from('inventarios').select('producto_id,cantidad').eq('almacen_id', almacenId)
+  if (error) throw error
+  return new Map(((data ?? []) as Array<{ producto_id: string; cantidad: number }>).map(row => [row.producto_id, Number(row.cantidad)]))
+}
+
+export async function fetchPurchaseReceiptProgress(compraId: string): Promise<Map<string, number>> {
+  const client = requireSupabase()
+  const { data: receipts, error: receiptsError } = await client.from('recepciones_compra').select('id').eq('compra_id', compraId)
+  if (receiptsError) throw receiptsError
+  const ids = (receipts ?? []).map(row => String((row as { id: string }).id))
+  if (!ids.length) return new Map()
+  const { data, error } = await client.from('detalle_recepciones_compra').select('detalle_compra_id,cantidad').in('recepcion_id', ids)
+  if (error) throw error
+  const progress = new Map<string, number>()
+  for (const row of (data ?? []) as Array<{ detalle_compra_id: string; cantidad: number }>) {
+    progress.set(row.detalle_compra_id, (progress.get(row.detalle_compra_id) ?? 0) + Number(row.cantidad))
+  }
+  return progress
+}
+
+export async function registerPurchaseReceipt(input: {
+  compraId: string
+  almacenId: string
+  lineas: PurchaseReceiptInputLine[]
+  idempotencyKey: string
+  comprobanteTipo?: string | null
+  comprobanteNumero?: string | null
+}): Promise<string> {
+  const { data, error } = await requireSupabase().rpc('registrar_recepcion_compra', {
+    p_compra_id: input.compraId,
+    p_almacen_id: input.almacenId,
+    p_lineas: input.lineas,
+    p_idempotency_key: input.idempotencyKey,
+    p_comprobante_tipo: input.comprobanteTipo ?? null,
+    p_comprobante_numero: input.comprobanteNumero ?? null,
+    p_referencia: null,
+  })
+  if (error) throw error
+  return String(data)
+}
+
+export type AccountBalance = { montoOriginal: number; montoAplicado: number; saldoPendiente: number }
+
+export async function fetchAccountBalances(accountIds: string[]): Promise<Map<string, AccountBalance>> {
+  const ids = [...new Set(accountIds)]
+  if (!ids.length) return new Map()
+  const { data, error } = await requireSupabase().rpc('obtener_saldos_cuentas', { p_cuenta_ids: ids })
+  if (error) throw error
+  return new Map(((data ?? []) as Array<{ cuenta_id: string; monto_original: number; monto_aplicado: number; saldo_pendiente: number }>).map(row => [row.cuenta_id, {
+    montoOriginal: Number(row.monto_original),
+    montoAplicado: Number(row.monto_aplicado),
+    saldoPendiente: Number(row.saldo_pendiente),
+  }]))
+}
+
+export async function fetchAccountOutstanding(pagoId: string): Promise<number> {
+  const balances = await fetchAccountBalances([pagoId])
+  const balance = balances.get(pagoId)
+  if (!balance) throw new Error('No se pudo calcular el saldo pendiente de la cuenta.')
+  return balance.saldoPendiente
+}
+
+export async function registerTreasuryPayment(input: {
+  accountId: string
+  type: 'cobro' | 'pago'
+  amount: number
+  method: string
+  idempotencyKey: string
+  note?: string
+  cashShiftId?: string | null
+}): Promise<string> {
+  const { data, error } = await requireSupabase().rpc('registrar_pago_parcial_en_turno', {
+    p_tipo: input.type,
+    p_monto: input.amount,
+    p_medio_pago: input.method,
+    p_referencia: null,
+    p_aplicaciones: [{ cuenta_id: input.accountId, monto: input.amount }],
+    p_idempotency_key: input.idempotencyKey,
+    p_nota: input.note ?? null,
+    p_caja_turno_id: input.cashShiftId ?? null,
+  })
+  if (error) throw error
+  return String(data)
 }
 
 async function getStocks(productIds: string[]): Promise<Map<string, number>> {
@@ -918,6 +1130,61 @@ export async function setCurrencyActive(id: string, activo: boolean): Promise<vo
   if (error) throw error
 }
 
+export type ProductCategory = { id: string; nombre: string; descripcion: string; activo: boolean }
+export type MeasurementUnit = { id: string; codigo: string; nombre: string; simbolo: string; precisionDecimales: number; activo: boolean }
+
+export async function fetchProductCategories(): Promise<ProductCategory[]> {
+  const { data, error } = await requireSupabase().from('categorias').select('id,nombre,descripcion,activo').order('nombre')
+  if (error) throw error
+  return ((data ?? []) as Array<{ id: string; nombre: string; descripcion: string | null; activo: boolean }>).map(row => ({
+    id: row.id,
+    nombre: row.nombre,
+    descripcion: row.descripcion ?? '',
+    activo: Boolean(row.activo),
+  }))
+}
+
+export async function saveProductCategory(input: { nombre: string; descripcion: string }): Promise<void> {
+  const nombre = input.nombre.trim()
+  if (nombre.length < 2) throw new Error('La categoría necesita al menos 2 caracteres.')
+  const { error } = await requireSupabase().from('categorias').insert({ nombre, descripcion: input.descripcion.trim() || null })
+  if (error) throw error
+}
+
+export async function setProductCategoryActive(id: string, activo: boolean): Promise<void> {
+  const { error } = await requireSupabase().from('categorias').update({ activo }).eq('id', id)
+  if (error) throw error
+}
+
+export async function fetchMeasurementUnits(): Promise<MeasurementUnit[]> {
+  const { data, error } = await requireSupabase().from('unidades_medida').select('id,codigo,nombre,simbolo,precision_decimales,activo').order('nombre')
+  if (error) throw error
+  return ((data ?? []) as Array<{ id: string; codigo: string; nombre: string; simbolo: string; precision_decimales: number; activo: boolean }>).map(row => ({
+    id: row.id,
+    codigo: row.codigo,
+    nombre: row.nombre,
+    simbolo: row.simbolo,
+    precisionDecimales: Number(row.precision_decimales),
+    activo: Boolean(row.activo),
+  }))
+}
+
+export async function saveMeasurementUnit(input: { codigo: string; nombre: string; simbolo: string }): Promise<void> {
+  const codigo = input.codigo.trim().toUpperCase()
+  const nombre = input.nombre.trim()
+  const simbolo = input.simbolo.trim()
+  if (!/^[A-Z0-9_-]{2,12}$/.test(codigo)) throw new Error('El código debe tener 2 a 12 caracteres alfanuméricos.')
+  if (nombre.length < 2) throw new Error('La unidad necesita un nombre de al menos 2 caracteres.')
+  if (!simbolo || simbolo.length > 12) throw new Error('El símbolo es obligatorio y debe tener hasta 12 caracteres.')
+  const { error } = await requireSupabase().from('unidades_medida').insert({ codigo, nombre, simbolo, precision_decimales: 0 })
+  if (error) throw error
+}
+
+export async function setMeasurementUnitActive(id: string, activo: boolean): Promise<void> {
+  const { error } = await requireSupabase().from('unidades_medida').update({ activo }).eq('id', id)
+  if (error) throw error
+}
+
 /** Costo promedio ponderado por producto desde las líneas de compra. */
 export async function fetchInventoryValuation(): Promise<Map<string, { cantidad: number; costoPromedio: number }>> {
   const client = requireSupabase()
@@ -953,7 +1220,8 @@ async function createRelatedPago(kind: 'sale' | 'purchase', header: Row, total: 
   const client = requireSupabase()
   const codigo = String(header.codigo)
   const isSale = kind === 'sale'
-  const pagoEstado: RecordStatus = estado === 'Completada' || estado === 'Pagada' ? 'Completada' : estado === 'En curso' || estado === 'En tránsito' ? 'En curso' : 'Pendiente'
+  const isCreditSale = isSale && consumesCreditLine(String(header.medio_pago ?? ''))
+  const pagoEstado: RecordStatus = isCreditSale ? 'Pendiente' : estado === 'Completada' || estado === 'Pagada' ? 'Completada' : estado === 'En curso' || estado === 'En tránsito' ? 'En curso' : 'Pendiente'
   const { error } = await client.from('pagos').insert({
     contraparte: isSale ? String(header.cliente_nombre) : String(header.proveedor_nombre),
     detalle: isSale ? `Cuenta por cobrar · ${codigo}` : `Cuenta por pagar · ${codigo}`,
@@ -962,6 +1230,7 @@ async function createRelatedPago(kind: 'sale' | 'purchase', header: Row, total: 
     tipo: isSale ? 'cobrar' : 'pagar',
     venta_id: isSale ? String(header.id) : null,
     compra_id: isSale ? null : String(header.id),
+    ...(typeof header.created_at === 'string' ? { created_at: header.created_at } : {}),
     ...(isSale && header.medio_pago !== undefined ? { medio_pago: header.medio_pago || null } : {}),
   })
   if (error) throw error
@@ -980,7 +1249,8 @@ async function syncRelatedPago(kind: 'sale' | 'purchase', headerId: string, tota
     if (header) await createRelatedPago(kind, header as Row, total, estado)
     return
   }
-  const nextEstado = estado === 'Completada' || estado === 'Pagada' ? 'Completada' : existing.estado
+  const isCreditSale = kind === 'sale' && consumesCreditLine(medioPago)
+  const nextEstado = isCreditSale ? existing.estado : estado === 'Completada' || estado === 'Pagada' ? 'Completada' : existing.estado
   const result = await client.from('pagos').update({
     monto: total,
     estado: nextEstado,
@@ -993,54 +1263,48 @@ async function syncRelatedPago(kind: 'sale' | 'purchase', headerId: string, tota
 export async function insertSaleWithLines(input: RecordInput, lines: LineInput[]): Promise<RecordItem> {
   assertValidLines(lines)
   const client = requireSupabase()
-  // Descuento % sobre el subtotal de productos (0-100). Sin líneas no aplica.
   const discount = lines.length ? Math.min(100, Math.max(0, Number(input.descuento) || 0)) : 0
   const total = salePayableTotal(lineTotal(lines), discount, input.amount ?? 0, lines.length > 0)
-  const headerInput: RecordInput = { ...input, descuento: discount, amount: total }
+  const idempotencyKey = input.idempotencyKey || `venta:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+  if (lines.length && !input.almacen_id) throw new Error('Selecciona el almacén del que saldrá el stock.')
 
-  // 1. Valida stock antes de tocar nada (evita dejar la venta a medias).
-  // Nunca permite vender más del disponible: el formulario lo topa y aquí se revalida.
-  const stocks = await getStocks(lines.map((line) => line.producto_id))
-  const labels = await getProductLabels(lines.map((line) => line.producto_id))
-  for (const line of lines) {
-    const available = stocks.get(line.producto_id) ?? 0
-    if (line.cantidad > available) {
-      const name = labels.get(line.producto_id) ?? line.producto_id
-      throw new Error(`Stock insuficiente para ${name}: disponible ${available}, pedido ${line.cantidad}. Reduce la cantidad.`)
-    }
+  // Las importaciones sin detalle conservan su código y fecha históricos. No
+  // crean movimientos actuales de caja ni pretenden inventar líneas/almacén.
+  if (input.source === 'import' && !lines.length) {
+    const { data: header, error } = await client.from('ventas').insert(toRow('sales', { ...input, descuento: discount, amount: total })).select('*').single()
+    if (error) throw error
+    const row = header as Row
+    await createRelatedPago('sale', row, total, input.status)
+    return toRecord('sales', row)
   }
 
-  // 2. Cabecera.
-  const { data: header, error: headerError } = await client.from('ventas').insert(toRow('sales', headerInput)).select('*').single()
+  let cashShiftId: string | null = null
+  if (input.status === 'Completada' && (input.medio_pago ?? '').trim().toLocaleLowerCase('es') === 'efectivo') {
+    if (!input.cajaTurnoId) throw new Error('Selecciona una caja con turno abierto para registrar el cobro en efectivo.')
+    const { data, error } = await client.from('caja_turnos').select('id').eq('id', input.cajaTurnoId).eq('estado', 'Abierto').maybeSingle()
+    if (error) throw error
+    if (!data) throw new Error('La caja elegida ya no tiene un turno abierto. Actualiza las cajas y vuelve a intentarlo.')
+    cashShiftId = String((data as { id: string }).id)
+  }
+
+  const { data: saleId, error: saleError } = await client.rpc('registrar_venta_operativa', {
+    p_cliente_id: input.cliente_id ?? null,
+    p_cliente_nombre: input.name,
+    p_detalle: input.detail,
+    p_estado: input.status,
+    p_monto_manual: input.amount ?? 0,
+    p_descuento: discount,
+    p_medio_pago: input.medio_pago ?? null,
+    p_almacen_id: input.almacen_id ?? null,
+    p_lineas: lines.map(line => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio })),
+    p_idempotency_key: idempotencyKey,
+    p_caja_turno_id: cashShiftId,
+    p_cotizacion_id: input.quote_id ?? null,
+  })
+  if (saleError) throw saleError
+  const { data: header, error: headerError } = await client.from('ventas').select('*').eq('id', String(saleId)).single()
   if (headerError) throw headerError
-  const headerRow = header as Row
-
-  try {
-    // 3. Líneas.
-    if (lines.length) {
-      const { error: linesError } = await client.from('detalle_ventas').insert(
-        lines.map((line) => ({
-          venta_id: String(headerRow.id),
-          producto_id: line.producto_id,
-          cantidad: line.cantidad,
-          precio_unitario: line.precio,
-        })),
-      )
-      if (linesError) throw linesError
-      // 4. Descuenta stock (el kardex se genera solo por trigger).
-      for (const line of lines) {
-        await setStock(line.producto_id, (stocks.get(line.producto_id) ?? 0) - line.cantidad)
-      }
-    }
-    // 5. Cobranza automática (CxC).
-    await createRelatedPago('sale', headerRow, total, input.status)
-  } catch (error) {
-    // Limpieza: si algo falló, no dejar cabecera huérfana.
-    await client.from('detalle_ventas').delete().eq('venta_id', String(headerRow.id))
-    await client.from('ventas').delete().eq('id', String(headerRow.id))
-    throw error
-  }
-  return toRecord('sales', headerRow)
+  return toRecord('sales', header as Row)
 }
 
 type CatalogRow = { id: string; nombre: string; detalle: string; costo: number; producto_id: string | null }
@@ -1069,74 +1333,38 @@ async function assertCatalogLines(lines: LineInput[]): Promise<Map<string, Catal
   return catalog
 }
 
-/**
- * Ingresa unidades a MI inventario desde el catálogo del proveedor: si el
- * producto ya existe suma stock; si es nuevo lo crea (precio inicial = costo)
- * y lo vincula para futuras compras. El kardex se genera solo por trigger.
- */
-async function ingressCatalogLines(lines: LineInput[], catalog: Map<string, CatalogRow>): Promise<void> {
-  for (const line of lines) {
-    const entry = catalog.get(line.producto_id)
-    if (!entry) throw new Error('Un producto del catálogo ya no existe. Recarga y vuelve a elegir.')
-    if (entry.producto_id) {
-      const stocks = await getStocks([entry.producto_id])
-      await setStock(entry.producto_id, (stocks.get(entry.producto_id) ?? 0) + line.cantidad)
-    } else {
-      const { data, error } = await requireSupabase()
-        .from('productos')
-        .insert({
-          nombre: entry.nombre,
-          detalle: entry.detalle || `Ingresado por compra · ${entry.nombre}`,
-          stock: line.cantidad,
-          precio: line.precio,
-          estado: 'Estable',
-        })
-        .select('*')
-        .single()
-      if (error) throw error
-      const newId = String((data as Row).id)
-      const { error: linkError } = await requireSupabase()
-        .from('proveedor_productos')
-        .update({ producto_id: newId })
-        .eq('id', entry.id)
-      if (linkError) throw linkError
-      entry.producto_id = newId
-    }
-  }
-}
-
-/** Revierte un ingreso previo (al reabrir una compra completada). */
-async function revertCatalogLines(lines: LineInput[], catalog: Map<string, CatalogRow>): Promise<void> {
-  const mapped = lines.filter((line) => catalog.get(line.producto_id)?.producto_id)
-  const labels = await getProductLabels(mapped.map((line) => catalog.get(line.producto_id)?.producto_id as string))
-  for (const line of lines) {
-    const entry = catalog.get(line.producto_id)
-    if (!entry?.producto_id) continue
-    const stocks = await getStocks([entry.producto_id])
-    const available = stocks.get(entry.producto_id) ?? 0
-    if (line.cantidad > available) {
-      const name = labels.get(entry.producto_id) ?? entry.nombre
-      throw new Error(`No se puede reabrir: "${name}" solo tiene ${available} und. en inventario (parte ya se vendió).`)
-    }
-    await setStock(entry.producto_id, available - line.cantidad)
-  }
-}
-
 export async function insertPurchaseWithLines(input: RecordInput, lines: LineInput[]): Promise<RecordItem> {
   assertValidLines(lines)
   const client = requireSupabase()
   const total = lines.length ? lineTotal(lines) : (input.amount ?? 0)
   const headerInput: RecordInput = { ...input, amount: total }
+
+  // Las órdenes ingresadas desde el formulario se registran atómicamente.
+  // Las importaciones históricas conservan su código y flujo de legado.
+  if (input.source !== 'import' && !input.reference) {
+    if (!input.proveedor_id) throw new Error('Selecciona un proveedor registrado para crear la orden.')
+    if (!input.idempotencyKey) throw new Error('No se pudo identificar esta solicitud. Cierra y vuelve a abrir el formulario.')
+    const { data: purchaseId, error } = await client.rpc('crear_orden_compra_operativa', {
+      p_proveedor_id: input.proveedor_id,
+      p_detalle: input.detail,
+      p_fecha_limite: input.fecha_limite || null,
+      p_monto_manual: input.amount ?? 0,
+      p_lineas: lines.map(line => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio })),
+      p_idempotency_key: input.idempotencyKey,
+    })
+    if (error) throw error
+    const { data: header, error: readError } = await client.from('compras').select('*').eq('id', String(purchaseId)).single()
+    if (readError) throw readError
+    return toRecord('purchases', header as Row)
+  }
+
   // Las líneas referencian al CATÁLOGO del proveedor, no a mi inventario.
-  const catalog = await assertCatalogLines(lines)
+  await assertCatalogLines(lines)
 
   const { data: header, error: headerError } = await client.from('compras').insert(toRow('purchases', headerInput)).select('*').single()
   if (headerError) throw headerError
   const headerRow = header as Row
 
-  // El inventario solo se mueve al llegar a Recepción (o más): mientras la orden
-  // está en Solicitud u Orden, las unidades están "por ingresar".
-  const ingressNow = purchaseHasStock(input.status)
   // La cuenta por pagar incluye IGV (total a pagar al proveedor).
   const pagoTotal = totalWithIgv(total)
   try {
@@ -1150,7 +1378,6 @@ export async function insertPurchaseWithLines(input: RecordInput, lines: LineInp
         })),
       )
       if (linesError) throw linesError
-      if (ingressNow) await ingressCatalogLines(lines, catalog)
     }
     await createRelatedPago('purchase', headerRow, pagoTotal, input.status)
   } catch (error) {
@@ -1164,6 +1391,9 @@ export async function insertPurchaseWithLines(input: RecordInput, lines: LineInp
 export async function updateSaleWithLines(code: string, input: RecordInput, lines: LineInput[]): Promise<RecordItem> {
   assertValidLines(lines)
   const client = requireSupabase()
+  const { count: warehouseStockCount, error: warehouseStockError } = await client.from('inventarios').select('id', { count: 'exact', head: true })
+  if (warehouseStockError) throw warehouseStockError
+  if ((warehouseStockCount ?? 0) > 0) throw new Error('Las ventas vinculadas a existencias por almacén no se editan hasta habilitar el flujo de reversa. Usa la gestión de devoluciones cuando esté disponible.')
   const { data: current, error: currentError } = await client.from('ventas').select('*').eq('codigo', code).single()
   if (currentError) throw currentError
   const headerId = String((current as Row).id)
@@ -1240,11 +1470,14 @@ export async function updatePurchaseWithLines(code: string, input: RecordInput, 
   const { data: current, error: currentError } = await client.from('compras').select('*').eq('codigo', code).single()
   if (currentError) throw currentError
   const headerId = String((current as Row).id)
-  const hadStock = purchaseHasStock(String((current as Row).estado))
-  const hasStock = purchaseHasStock(input.status)
   const oldLines = await fetchDocumentLines('purchases', headerId)
-  // Las líneas (viejas y nuevas) referencian al catálogo del proveedor.
-  const catalog = await assertCatalogLines([...oldLines, ...lines].map((line) => ({ producto_id: line.producto_id, cantidad: 1, precio: 0 })))
+  // La recepción es un movimiento separado. Una orden con recepciones no puede
+  // cambiar cantidades ni productos y nunca suma stock al editar su estado.
+  const { count: receiptCount, error: receiptError } = await client.from('recepciones_compra').select('id', { count: 'exact', head: true }).eq('compra_id', headerId)
+  if (receiptError) throw receiptError
+  if ((receiptCount ?? 0) > 0 && !sameLines(oldLines, lines)) throw new Error('La orden ya tiene recepciones registradas. Conserva sus líneas y registra los ajustes con una devolución o recepción adicional.')
+  if (input.status === 'Pagada' && String((current as Row).estado) !== 'Pagada') throw new Error('No marques la orden como pagada desde Compras. Registra el pago y su aplicación en Tesorería.')
+  await assertCatalogLines([...oldLines, ...lines].map((line) => ({ producto_id: line.producto_id, cantidad: 1, precio: 0 })))
   const total = lines.length ? lineTotal(lines) : (input.amount ?? Number((current as Row).monto ?? 0))
   const pagoTotal = totalWithIgv(total)
 
@@ -1261,33 +1494,6 @@ export async function updatePurchaseWithLines(code: string, input: RecordInput, 
     if (deleted.error) throw deleted.error
     if (oldLines.length && deleted.data.length < oldLines.length) throw new Error('Tu rol necesita permiso de eliminar líneas de compra para editar sus productos.')
   }
-  // Ingreso a MI inventario según transición de fase (las líneas son del catálogo):
-  // - sin stock→con stock (ej. Orden→Recepción): ingresa lo nuevo.
-  // - con stock→sin stock: revierte lo anterior (valida que no se haya vendido).
-  // - con stock→con stock: ajusta la diferencia por ítem del catálogo.
-  // - sin stock→sin stock: sin movimiento (seguimiento puro).
-  if (!hadStock && hasStock) {
-    await ingressCatalogLines(lines, catalog)
-  } else if (hadStock && !hasStock) {
-    await revertCatalogLines(oldLines, catalog)
-  } else if (hadStock && hasStock) {
-    const deltas = new Map<string, number>()
-    for (const line of oldLines) deltas.set(line.producto_id, (deltas.get(line.producto_id) ?? 0) - line.cantidad)
-    for (const line of lines) deltas.set(line.producto_id, (deltas.get(line.producto_id) ?? 0) + line.cantidad)
-    for (const [catalogId, delta] of deltas) {
-      if (!delta) continue
-      const entry = catalog.get(catalogId)
-      if (!entry) throw new Error('Un producto del catálogo ya no existe. Recarga y vuelve a elegir.')
-      if (entry.producto_id) {
-        const stocks = await getStocks([entry.producto_id])
-        await setStock(entry.producto_id, (stocks.get(entry.producto_id) ?? 0) + delta)
-      } else if (delta > 0) {
-        await ingressCatalogLines([{ producto_id: catalogId, cantidad: delta, precio: lines.find((l) => l.producto_id === catalogId)?.precio ?? entry.costo }], catalog)
-      } else {
-        throw new Error(`No se puede ajustar "${entry.nombre}": aún no ingresa a inventario.`)
-      }
-    }
-  }
   if (lines.length && !sameLines(oldLines, lines)) {
     const { error: linesError } = await client.from('detalle_compras').insert(
       lines.map((line) => ({ compra_id: headerId, proveedor_producto_id: line.producto_id, cantidad: line.cantidad, costo_unitario: line.precio })),
@@ -1295,8 +1501,7 @@ export async function updatePurchaseWithLines(code: string, input: RecordInput, 
     if (linesError) throw linesError
   }
   const previous = current as Row
-  const paymentStateChanged = (input.status === 'Pagada') !== (String(previous.estado) === 'Pagada')
-  if (total !== Number(previous.monto) || paymentStateChanged || input.name !== String(previous.proveedor_nombre)) {
+  if (total !== Number(previous.monto) || input.name !== String(previous.proveedor_nombre)) {
     await syncRelatedPago('purchase', headerId, pagoTotal, input.status)
   }
   return toRecord('purchases', updated as Row)
@@ -1369,30 +1574,13 @@ export async function updateQuoteWithLines(code: string, input: RecordInput, lin
 }
 
 /** Convierte una cotización aprobada/pendiente en venta: descuenta stock, genera CxC y la marca Completada. */
-export async function convertQuoteToSale(code: string): Promise<{ sale: RecordItem }> {
+export async function convertQuoteToSale(code: string, warehouseId: string, idempotencyKey: string): Promise<{ sale: RecordItem }> {
   const client = requireSupabase()
-  const { data: header, error: headerError } = await client.from('cotizaciones').select('*').eq('codigo', code).single()
-  if (headerError) throw headerError
-  const headerRow = header as Row
-  const estado = String(headerRow.estado)
-  if (estado === 'Completada') throw new Error('La cotización ya fue convertida en venta.')
-  if (estado === 'Rechazada' || estado === 'Vencida') {
-    throw new Error('Solo se pueden convertir cotizaciones pendientes, en curso o aprobadas.')
-  }
-  const headerId = String(headerRow.id)
-  const quoteLines = await fetchDocumentLines('quotes', headerId)
-  if (!quoteLines.length) throw new Error('La cotización no tiene productos para convertir.')
-  const lines: LineInput[] = quoteLines.map((line) => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio }))
-  const sale = await insertSaleWithLines(
-    {
-      name: String(headerRow.cliente_nombre),
-      detail: `Convertida de ${code}${headerRow.detalle ? ` · ${String(headerRow.detalle)}` : ''}`,
-      status: 'Pendiente',
-      cliente_id: (headerRow.cliente_id as string | null) ?? null,
-    },
-    lines,
-  )
-  const { error: updateError } = await client.from('cotizaciones').update({ estado: 'Completada' }).eq('id', headerId)
-  if (updateError) throw updateError
+  const { data: quote, error } = await client.from('cotizaciones').select('id').eq('codigo', code).single()
+  if (error) throw error
+  const sale = await insertSaleWithLines({
+    name: '', detail: '', status: 'Pendiente', amount: 0,
+    almacen_id: warehouseId, quote_id: String((quote as { id: string }).id), idempotencyKey,
+  }, [])
   return { sale }
 }

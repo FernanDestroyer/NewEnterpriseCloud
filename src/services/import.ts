@@ -10,7 +10,7 @@
 // Si un CSV antiguo la trae, se ignora.
 // -----------------------------------------------------------------------------
 
-import { isValidDni, isValidRuc } from './peru.ts'
+import { isValidRuc } from './peru.ts'
 
 export const SUPPLIER_CSV_HEADER = ['ruc', 'razon_social', 'direccion', 'correo', 'telefono', 'forma_pago', 'estado', 'productos']
 
@@ -26,6 +26,118 @@ export const SUPPLIER_CSV_EXAMPLE = [
   'Activo',
   'Tubo Demo | 12.50 | Tuberías // Codo Demo | 16.75 | Conexiones',
 ]
+
+export const CUSTOMER_CSV_HEADER = ['razon_social', 'tipo_doc', 'documento', 'detalle', 'linea_credito', 'estado']
+export const CUSTOMER_CSV_EXAMPLE = ['Cliente Ejemplo S.A.C.', 'RUC', '20123456786', 'Cliente mayorista', '5000', 'Activo']
+export const SALES_CSV_HEADER = ['codigo', 'fecha', 'cliente_codigo', 'cliente_nombre', 'detalle', 'monto', 'estado', 'medio_pago']
+export const SALES_CSV_EXAMPLE = ['VEN-EXT-001', '2026-10-22', 'CLI-001', 'Cliente Ejemplo S.A.C.', 'Factura F001-25', '250.00', 'Pendiente', '']
+export const PURCHASES_CSV_HEADER = ['codigo', 'fecha', 'proveedor_codigo', 'proveedor_nombre', 'detalle', 'monto', 'estado', 'fecha_limite', 'comprobante_tipo', 'comprobante_numero']
+export const PURCHASES_CSV_EXAMPLE = ['OC-EXT-001', '2026-10-22', 'PRV-001', 'Proveedor Ejemplo S.A.C.', 'Orden de compra', '120.00', 'Solicitud', '', '', '']
+
+export type CustomerImportRow = { line: number; razonSocial: string; tipoDoc: 'DNI' | 'RUC' | null; documento: string; detalle: string; lineaCredito: number; estado: 'Activo' | 'En curso' }
+export type SalesImportRow = { line: number; codigo: string; fecha: string; clienteCodigo: string; clienteNombre: string; detalle: string; monto: number; estado: 'Pendiente' | 'En curso' | 'Completada'; medioPago: string }
+export type PurchaseImportRow = { line: number; codigo: string; fecha: string; proveedorCodigo: string; proveedorNombre: string; detalle: string; monto: number; estado: 'Pendiente' | 'Solicitud' | 'Orden' | 'Recibida' | 'Recepción' | 'Factura' | 'Pagada'; fechaLimite: string; comprobanteTipo: string; comprobanteNumero: string }
+
+function validIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+export type SimpleImportParse<T> = { rows: T[]; errors: string[] }
+
+function parseTabular<T>(text: string, required: string[], mapRow: (cell: (name: string) => string, line: number, fail: (reason: string) => void) => T | null): SimpleImportParse<T> {
+  const errors: string[] = []
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (!lines.length) return { rows: [], errors: ['El archivo está vacío. Descarga la plantilla para ver el formato.'] }
+  const header = splitCsvLine(lines[0]).map(cell => cell.toLowerCase())
+  const missing = required.filter(name => !header.includes(name))
+  if (missing.length) return { rows: [], errors: [`Faltan columnas obligatorias: ${missing.join(', ')}.`] }
+  const rows: T[] = []
+  lines.slice(1).forEach((raw, index) => {
+    const line = index + 2
+    const cells = splitCsvLine(raw)
+    const cell = (name: string) => cells[header.indexOf(name)]?.trim() ?? ''
+    let invalid = false
+    const fail = (reason: string) => { errors.push(`Línea ${line}: ${reason}`); invalid = true }
+    const row = mapRow(cell, line, fail)
+    if (row && !invalid) rows.push(row)
+  })
+  return { rows, errors }
+}
+
+function parseAmount(raw: string, label: string, fail: (reason: string) => void, fallback = 0) {
+  if (!raw) return fallback
+  const normalized = raw.includes(',') && !raw.includes('.') ? raw.replace(',', '.') : raw
+  const value = Number(normalized)
+  if (!Number.isFinite(value) || value < 0) { fail(`${label} debe ser un número igual o mayor a cero.`); return fallback }
+  return Math.round(value * 100) / 100
+}
+
+export function parseCustomersCsv(text: string): SimpleImportParse<CustomerImportRow> {
+  const seen = new Set<string>()
+  return parseTabular(text, ['razon_social'], (cell, line, fail) => {
+    const razonSocial = cell('razon_social')
+    if (razonSocial.length < 2) fail('razon_social debe tener al menos 2 caracteres.')
+    let tipoDoc = cell('tipo_doc').toUpperCase()
+    const documento = cell('documento').replace(/\D/g, '')
+    if (!tipoDoc && documento) tipoDoc = documento.length === 11 ? 'RUC' : documento.length === 8 ? 'DNI' : ''
+    if (tipoDoc && tipoDoc !== 'DNI' && tipoDoc !== 'RUC') fail('tipo_doc debe ser DNI o RUC.')
+    if (documento && tipoDoc === 'DNI' && !/^\d{8}$/.test(documento)) fail('El DNI debe tener 8 dígitos.')
+    if (documento && tipoDoc === 'RUC' && (!/^\d{11}$/.test(documento) || !isValidRuc(documento))) fail('El RUC debe tener 11 dígitos y un verificador válido.')
+    if (tipoDoc && !documento) fail('documento es obligatorio cuando se especifica tipo_doc.')
+    const duplicateKey = documento ? `${tipoDoc}:${documento}` : razonSocial.toLocaleLowerCase('es')
+    if (duplicateKey && seen.has(duplicateKey)) fail('Cliente duplicado dentro del archivo.')
+    if (duplicateKey) seen.add(duplicateKey)
+    const lineaCredito = parseAmount(cell('linea_credito'), 'linea_credito', fail)
+    const estadoRaw = cell('estado') || 'Activo'
+    if (estadoRaw !== 'Activo' && estadoRaw !== 'En curso') fail('estado debe ser Activo o En curso.')
+    const estado = estadoRaw === 'Activo' || estadoRaw === 'En curso' ? estadoRaw : 'Activo'
+    return { line, razonSocial, tipoDoc: tipoDoc === 'DNI' || tipoDoc === 'RUC' ? tipoDoc : null, documento, detalle: cell('detalle'), lineaCredito, estado }
+  })
+}
+
+export function parseSalesCsv(text: string): SimpleImportParse<SalesImportRow> {
+  const seen = new Set<string>()
+  return parseTabular(text, ['codigo', 'cliente_nombre', 'detalle', 'monto'], (cell, line, fail) => {
+    const codigo = cell('codigo')
+    const clienteNombre = cell('cliente_nombre')
+    if (codigo.length < 2) fail('codigo es obligatorio y debe tener al menos 2 caracteres.')
+    if (seen.has(codigo.toLocaleLowerCase('es'))) fail('codigo duplicado dentro del archivo.')
+    seen.add(codigo.toLocaleLowerCase('es'))
+    if (clienteNombre.length < 2) fail('cliente_nombre debe tener al menos 2 caracteres.')
+    if (!cell('monto')) fail('monto es obligatorio.')
+    const monto = parseAmount(cell('monto'), 'monto', fail)
+    const fecha = cell('fecha')
+    if (fecha && !validIsoDate(fecha)) fail('fecha debe ser una fecha válida con formato AAAA-MM-DD.')
+    const estadoRaw = cell('estado') || 'Pendiente'
+    const allowed = ['Pendiente', 'En curso', 'Completada'] as const
+    if (!allowed.includes(estadoRaw as typeof allowed[number])) fail(`estado debe ser uno de: ${allowed.join(', ')}.`)
+    return { line, codigo, fecha, clienteCodigo: cell('cliente_codigo'), clienteNombre, detalle: cell('detalle'), monto, estado: allowed.includes(estadoRaw as typeof allowed[number]) ? estadoRaw as SalesImportRow['estado'] : 'Pendiente', medioPago: cell('medio_pago') }
+  })
+}
+
+export function parsePurchasesCsv(text: string): SimpleImportParse<PurchaseImportRow> {
+  const seen = new Set<string>()
+  return parseTabular(text, ['codigo', 'proveedor_nombre', 'detalle', 'monto'], (cell, line, fail) => {
+    const codigo = cell('codigo')
+    const proveedorNombre = cell('proveedor_nombre')
+    if (codigo.length < 2) fail('codigo es obligatorio y debe tener al menos 2 caracteres.')
+    if (seen.has(codigo.toLocaleLowerCase('es'))) fail('codigo duplicado dentro del archivo.')
+    seen.add(codigo.toLocaleLowerCase('es'))
+    if (proveedorNombre.length < 2) fail('proveedor_nombre debe tener al menos 2 caracteres.')
+    if (!cell('monto')) fail('monto es obligatorio.')
+    const monto = parseAmount(cell('monto'), 'monto', fail)
+    const fecha = cell('fecha')
+    if (fecha && !validIsoDate(fecha)) fail('fecha debe ser una fecha válida con formato AAAA-MM-DD.')
+    const allowed = ['Pendiente', 'Solicitud', 'Orden', 'Recibida', 'Recepción', 'Factura', 'Pagada'] as const
+    const estadoRaw = cell('estado') || 'Solicitud'
+    if (!allowed.includes(estadoRaw as typeof allowed[number])) fail(`estado debe ser uno de: ${allowed.join(', ')}.`)
+    const fechaLimite = cell('fecha_limite')
+    if (fechaLimite && !validIsoDate(fechaLimite)) fail('fecha_limite debe ser una fecha válida con formato AAAA-MM-DD.')
+    return { line, codigo, fecha, proveedorCodigo: cell('proveedor_codigo'), proveedorNombre, detalle: cell('detalle'), monto, estado: allowed.includes(estadoRaw as typeof allowed[number]) ? estadoRaw as PurchaseImportRow['estado'] : 'Solicitud', fechaLimite, comprobanteTipo: cell('comprobante_tipo'), comprobanteNumero: cell('comprobante_numero') }
+  })
+}
 
 export type SupplierProductDraft = { nombre: string; costo: number; detalle: string }
 
@@ -176,123 +288,4 @@ export function parseSuppliersCsv(text: string): SupplierImportParse {
     })
   })
   return { rows, errors, productIssues }
-}
-
-// -----------------------------------------------------------------------------
-// Importación masiva de clientes (CSV).
-// Formato esperado (coma como separador, comillas estándar para celdas con coma):
-//   tipo_doc,documento,razon_social,detalle,linea_credito,estado
-// - tipo_doc: DNI o RUC. Si se deja vacío se deduce por la longitud del documento
-//   (8 dígitos = DNI, 11 dígitos = RUC).
-// - documento: 8 dígitos (DNI) u 11 dígitos con dígito verificador válido (RUC).
-// - detalle: contacto, correo o segmento (texto libre, opcional).
-// - linea_credito: monto en soles (opcional, 0 si se omite).
-// - estado: Activo o En curso (cualquier otro valor cae a Activo).
-// Ejemplo:
-//   DNI,45678912,María Torres Quispe,"Contacto: 987654321, maria@correo.pe",500.00,Activo
-// -----------------------------------------------------------------------------
-
-export const CUSTOMER_CSV_HEADER = ['tipo_doc', 'documento', 'razon_social', 'detalle', 'linea_credito', 'estado']
-
-export const CUSTOMER_CSV_EXAMPLE = ['DNI', '45678912', 'María Torres Quispe', 'Contacto: 987654321 · maria@correo.pe', '500.00', 'Activo']
-
-export type CustomerImportRow = {
-  line: number
-  tipoDoc: 'DNI' | 'RUC'
-  documento: string
-  razonSocial: string
-  detalle: string
-  lineaCredito: number
-  estado: 'Activo' | 'En curso'
-}
-
-export type CustomerImportIssue = { line: number; documento: string; reason: string }
-
-export type CustomerImportParse = {
-  rows: CustomerImportRow[]
-  errors: string[]
-}
-
-export type CustomerImportReport = {
-  created: number
-  /** Clientes que ya existían (mismo documento) o repetidos dentro del archivo. */
-  omitted: CustomerImportIssue[]
-  /** Filas que la base de datos rechazó. */
-  failed: CustomerImportIssue[]
-}
-
-/** Valida el archivo completo de clientes sin tocar la base de datos. */
-export function parseCustomersCsv(text: string): CustomerImportParse {
-  const errors: string[] = []
-  const rows: CustomerImportRow[] = []
-  const content = text.replace(/^﻿/, '')
-  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0)
-  if (!lines.length) return { rows, errors: ['El archivo está vacío. Descarga la plantilla para ver el formato.'] }
-  const header = splitCsvLine(lines[0]).map((cell) => cell.toLowerCase())
-  const indexOf = (name: string) => header.indexOf(name)
-  if (indexOf('documento') === -1 || indexOf('razon_social') === -1) {
-    return { rows, errors: ['La cabecera debe incluir al menos las columnas documento y razon_social. Descarga la plantilla.'] }
-  }
-  const seen = new Set<string>()
-  lines.slice(1).forEach((line, position) => {
-    const lineNumber = position + 2
-    const cells = splitCsvLine(line)
-    const cell = (name: string) => cells[indexOf(name)] ?? ''
-    const documento = cell('documento').replace(/\D/g, '')
-    const razonSocial = cell('razon_social').trim()
-    const fail = (reason: string) => errors.push(`Línea ${lineNumber} (documento ${documento || '¿?'}): ${reason}`)
-    const tipoRaw = cell('tipo_doc').trim().toUpperCase()
-    if (tipoRaw && tipoRaw !== 'DNI' && tipoRaw !== 'RUC') {
-      fail(`tipo_doc inválido ("${cell('tipo_doc').trim()}"): usa DNI o RUC.`)
-      return
-    }
-    const tipoDoc: CustomerImportRow['tipoDoc'] | null = tipoRaw === 'DNI' || tipoRaw === 'RUC'
-      ? tipoRaw
-      : documento.length === 8 ? 'DNI' : documento.length === 11 ? 'RUC' : null
-    if (!tipoDoc) {
-      fail('documento inválido: debe tener 8 dígitos (DNI) u 11 dígitos (RUC).')
-      return
-    }
-    if (tipoDoc === 'DNI' && !isValidDni(documento)) {
-      fail('DNI inválido: debe tener 8 dígitos.')
-      return
-    }
-    if (tipoDoc === 'RUC') {
-      if (!/^\d{11}$/.test(documento)) {
-        fail('RUC inválido: debe tener 11 dígitos.')
-        return
-      }
-      if (!isValidRuc(documento)) {
-        fail('RUC con dígito verificador inválido.')
-        return
-      }
-    }
-    if (seen.has(documento)) {
-      fail('documento duplicado dentro del archivo.')
-      return
-    }
-    if (razonSocial.length < 2) {
-      fail('razón social muy corta (mínimo 2 caracteres).')
-      return
-    }
-    const creditRaw = cell('linea_credito').trim()
-    const lineaCredito = creditRaw === '' ? 0 : Number(creditRaw.replace(',', '.'))
-    if (!Number.isFinite(lineaCredito) || lineaCredito < 0) {
-      fail(`línea de crédito inválida ("${creditRaw}"): debe ser un monto igual o mayor a 0.`)
-      return
-    }
-    const estadoRaw = cell('estado').trim().toLowerCase()
-    const estado: CustomerImportRow['estado'] = estadoRaw === 'en curso' ? 'En curso' : 'Activo'
-    seen.add(documento)
-    rows.push({
-      line: lineNumber,
-      tipoDoc,
-      documento,
-      razonSocial,
-      detalle: cell('detalle').trim(),
-      lineaCredito: Math.round(lineaCredito * 100) / 100,
-      estado,
-    })
-  })
-  return { rows, errors }
 }
