@@ -4,15 +4,18 @@ import { pageMeta } from '../data/catalog'
 import { defaultStatus, LOW_STOCK_THRESHOLD, money, statusesForPage, totalWithIgv } from '../data/helpers'
 import { useRecords } from '../context/RecordsContext'
 import { useAuth } from '../context/AuthContext'
-import { fetchDocumentLines, fetchPaymentMethods, friendlyError } from '../services/records'
-import { customerCredit } from '../data/workspace'
+import { fetchActiveWarehouses, fetchDocumentLines, fetchMeasurementUnits, fetchPaymentMethods, fetchProductCategories, fetchWarehouseStocks, friendlyError, type ActiveWarehouse, type MeasurementUnit, type ProductCategory } from '../services/records'
+import { consumesCreditLine, customerCredit } from '../data/workspace'
 import { isPeruLookupConfigured, lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
-import { isYapeMethod, salePayableTotal, type YapeSettings } from '../data/payments'
+import { isYapeMethod, isPlinMethod, isBankTransferMethod, salePayableTotal, type YapeSettings, type PlinSettings, type BankTransferSettings } from '../data/payments'
 import { fetchYapeSettings } from '../services/yape'
+import { fetchPlinSettings, fetchBankTransferSettings } from '../services/paymentSettings'
 import YapePaymentPanel from './YapePaymentPanel'
+import { BankTransferPaymentPanel, WalletPaymentPanel } from './AdditionalPaymentPanels'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 import { useDialog } from './useDialog'
+import { fetchCashSetup, getOpenCashShifts, type CashBox, type CashShift } from '../services/caja'
 
 /** Comprobante de venta: tipos con su serie y correlativo automático (editable). */
 const SALE_DOC_TYPES = ['Factura', 'Boleta', 'Cotización', 'Nota de venta'] as const
@@ -68,11 +71,66 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   // Medios de pago para elegir cómo pagará el cliente (llega solo).
   const [saleMethods, setSaleMethods] = useState<string[]>(['Efectivo'])
   const [saleMethod, setSaleMethod] = useState(record?.medio || 'Efectivo')
+  const [openCashShifts, setOpenCashShifts] = useState<CashShift[]>([])
+  const [cashBoxes, setCashBoxes] = useState<CashBox[]>([])
+  const [cashShiftId, setCashShiftId] = useState('')
+  const [cashShiftLoading, setCashShiftLoading] = useState(false)
+  const [cashShiftError, setCashShiftError] = useState('')
+  const [warehouses, setWarehouses] = useState<ActiveWarehouse[]>([])
+  const [warehouseId, setWarehouseId] = useState(record?.almacenId ?? '')
+  const [warehouseStocks, setWarehouseStocks] = useState<Map<string, number>>(new Map())
+  const [warehouseStockLoading, setWarehouseStockLoading] = useState(false)
+  const [saleRequestKey, setSaleRequestKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
+  const [purchaseRequestKey, setPurchaseRequestKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
+  const saleUsesCreditLine = page === 'sales' && consumesCreditLine(saleMethod)
   const [manualAmount, setManualAmount] = useState(record?.amount === undefined ? '' : String(record.amount))
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([])
+  const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnit[]>([])
+  const [productMastersLoading, setProductMastersLoading] = useState(false)
+  const [productCategoryError, setProductCategoryError] = useState('')
+  const [measurementUnitError, setMeasurementUnitError] = useState('')
+  const [productCategoryId, setProductCategoryId] = useState(record?.categoriaId ?? '')
+  const [measurementUnitId, setMeasurementUnitId] = useState(record?.unidadMedidaId ?? '')
   const [yapeSettings, setYapeSettings] = useState<YapeSettings | null>(null)
   const [yapeLoading, setYapeLoading] = useState(false)
   const [yapeError, setYapeError] = useState('')
   const [yapeReload, setYapeReload] = useState(0)
+  const [plinSettings, setPlinSettings] = useState<PlinSettings | null>(null)
+  const [plinLoading, setPlinLoading] = useState(false)
+  const [plinError, setPlinError] = useState('')
+  const [plinReload, setPlinReload] = useState(0)
+  const [bankSettings, setBankSettings] = useState<BankTransferSettings | null>(null)
+  const [bankLoading, setBankLoading] = useState(false)
+  const [bankError, setBankError] = useState('')
+  const [bankReload, setBankReload] = useState(0)
+  useEffect(() => {
+    setProductCategoryId(record?.categoriaId ?? '')
+    setMeasurementUnitId(record?.unidadMedidaId ?? '')
+  }, [page, record?.rowId, record?.categoriaId, record?.unidadMedidaId])
+  useEffect(() => {
+    setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
+  }, [page, record?.rowId])
+  useEffect(() => {
+    if (page !== 'inventory') { setProductCategories([]); setMeasurementUnits([]); setProductCategoryError(''); setMeasurementUnitError(''); setProductMastersLoading(false); return }
+    let active = true
+    const load = async () => {
+      setProductMastersLoading(true)
+      setProductCategoryError('')
+      setMeasurementUnitError('')
+      const [categoryResult, unitResult] = await Promise.allSettled([
+        fetchProductCategories(),
+        can('settings', 'ver') ? fetchMeasurementUnits() : Promise.resolve([] as MeasurementUnit[]),
+      ])
+      if (!active) return
+      if (categoryResult.status === 'fulfilled') setProductCategories(categoryResult.value)
+      else { setProductCategories([]); setProductCategoryError(friendlyError(categoryResult.reason)) }
+      if (unitResult.status === 'fulfilled') setMeasurementUnits(unitResult.value)
+      else { setMeasurementUnits([]); setMeasurementUnitError(friendlyError(unitResult.reason)) }
+      setProductMastersLoading(false)
+    }
+    void load()
+    return () => { active = false }
+  }, [page, lastSyncedAt, can])
   useEffect(() => {
     if (page !== 'sales') return
     let active = true
@@ -92,6 +150,41 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
     }
   }, [page, record?.medio])
   useEffect(() => {
+    if (page !== 'sales') return
+    let active = true
+    fetchActiveWarehouses().then(items => {
+      if (!active) return
+      setWarehouses(items)
+      setWarehouseId(current => current && items.some(item => item.id === current) ? current : items[0]?.id ?? '')
+    }).catch(error => active && setLineError(friendlyError(error)))
+    return () => { active = false }
+  }, [page, record?.almacenId])
+  useEffect(() => {
+    if (page !== 'sales') return
+    let active = true
+    setCashShiftLoading(true)
+    setCashShiftError('')
+    Promise.all([getOpenCashShifts(), fetchCashSetup()])
+      .then(([shifts, setup]) => {
+        if (!active) return
+        setOpenCashShifts(shifts)
+        setCashBoxes(setup.boxes)
+        setCashShiftId(current => current && shifts.some(shift => shift.id === current) ? current : shifts.length === 1 ? shifts[0].id : '')
+      })
+      .catch(error => active && setCashShiftError(friendlyError(error)))
+      .finally(() => active && setCashShiftLoading(false))
+    return () => { active = false }
+  }, [page])
+  useEffect(() => {
+    if (page !== 'sales' || !warehouseId) { setWarehouseStocks(new Map()); setWarehouseStockLoading(false); return }
+    let active = true
+    setWarehouseStockLoading(true)
+    fetchWarehouseStocks(warehouseId).then(stock => active && setWarehouseStocks(stock))
+      .catch(error => active && setLineError(friendlyError(error)))
+      .finally(() => active && setWarehouseStockLoading(false))
+    return () => { active = false }
+  }, [page, warehouseId, lastSyncedAt])
+  useEffect(() => {
     if (page !== 'sales' || !isYapeMethod(saleMethod)) {
       setYapeSettings(null)
       setYapeError('')
@@ -107,6 +200,18 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
       .finally(() => { if (active) setYapeLoading(false) })
     return () => { active = false }
   }, [page, saleMethod, lastSyncedAt, yapeReload])
+  useEffect(() => {
+    if (page !== 'sales' || !isPlinMethod(saleMethod)) { setPlinSettings(null); setPlinError(''); setPlinLoading(false); return }
+    let active = true; setPlinSettings(null); setPlinLoading(true); setPlinError('')
+    fetchPlinSettings().then(settings => { if (active) setPlinSettings(settings) }).catch(error => { if (active) setPlinError(friendlyError(error)) }).finally(() => { if (active) setPlinLoading(false) })
+    return () => { active = false }
+  }, [page, saleMethod, lastSyncedAt, plinReload])
+  useEffect(() => {
+    if (page !== 'sales' || !isBankTransferMethod(saleMethod)) { setBankSettings(null); setBankError(''); setBankLoading(false); return }
+    let active = true; setBankSettings(null); setBankLoading(true); setBankError('')
+    fetchBankTransferSettings().then(settings => { if (active) setBankSettings(settings) }).catch(error => { if (active) setBankError(friendlyError(error)) }).finally(() => { if (active) setBankLoading(false) })
+    return () => { active = false }
+  }, [page, saleMethod, lastSyncedAt, bankReload])
   const dialogRef = useDialog<HTMLFormElement>(onClose, saving)
 
   const hasClientRelation = page === 'sales' || page === 'quotes'
@@ -178,7 +283,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   // Ventas/cotizaciones eligen de MI inventario; compras del CATÁLOGO del proveedor.
   const lineSource = page === 'purchases' ? catalog : inventory
   const lineUnitPrice = (item: RecordItem) => (page === 'purchases' ? (item.amount ?? 0) : (item.precio ?? 0))
-  const availableStock = (item?: RecordItem) => (item?.quantity ?? 0) + (page === 'sales' && record && item?.rowId ? originalQuantities[item.rowId] ?? 0 : 0)
+  const availableStock = (item?: RecordItem) => (page === 'sales' ? (item?.rowId ? warehouseStocks.get(item.rowId) ?? 0 : 0) : item?.quantity ?? 0) + (page === 'sales' && record && item?.rowId ? originalQuantities[item.rowId] ?? 0 : 0)
   const options = hasClientRelation ? customers : hasSupplierRelation ? suppliers : []
 
   const linkedTarget = relatedId ? options.find((item) => item.rowId === relatedId) : undefined
@@ -493,7 +598,9 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
 
   // Completada en cotizaciones solo se alcanza con «Convertir en venta».
   // Si el registro trae un estado antiguo (En curso), se conserva en la lista.
-  const statusOptions = page === 'quotes'
+  const statusOptions = page === 'purchases'
+    ? ['Pendiente', 'Solicitud', 'Orden', 'Rechazada'] as RecordStatus[]
+    : page === 'quotes'
     ? record?.status === 'Completada'
       ? ['Completada']
       : record && !statusesForPage(page).includes(record.status)
@@ -503,9 +610,12 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => !saving && event.target === event.currentTarget && onClose()}>
-      <form ref={dialogRef} className={`record-modal record-modal--wide${page === 'purchases' || page === 'sales' || page === 'quotes' ? ' record-modal--split' : ''}`} onSubmit={onSave} role="dialog" aria-modal="true" aria-label={editing ? `Editar ${meta.title}` : meta.action}>
+      <form ref={dialogRef} className={`record-modal record-modal--wide${page === 'purchases' || page === 'sales' || page === 'quotes' ? ' record-modal--split' : ''}`} onChange={() => page === 'sales' && setSaleRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)} onSubmit={onSave} role="dialog" aria-modal="true" aria-label={editing ? `Editar ${meta.title}` : meta.action}>
         <div className="modal-heading"><div><span className="section-kicker"><i /> {meta.eyebrow}</span><h2>{editing ? `Editar registro de ${meta.title.toLocaleLowerCase()}` : meta.action}</h2><p>{editing ? 'Los cambios se guardarán en la base de datos.' : 'El registro se guardará en la base de datos.'}</p></div><button className="modal-close" type="button" aria-label="Cerrar" onClick={onClose}><GoogleIcon name="close" /></button></div>
         <div className="modal-fields">
+          {page === 'sales' && <input type="hidden" name="idempotency_key" value={saleRequestKey} />}
+          {page === 'sales' && <input type="hidden" name="caja_turno_id" value={cashShiftId} />}
+          {page === 'purchases' && <input type="hidden" name="idempotency_key" value={purchaseRequestKey} />}
           {(hasClientRelation || hasSupplierRelation) && (page === 'purchases' ? (
             <div className="relation-field">
               <label>Proveedor de la orden</label>
@@ -607,13 +717,13 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     <GoogleIcon name="link" className="small" />
                     Vinculado a {linkedTarget.name} ({linkedTarget.id}). Datos del cliente agregados a la {page === 'sales' ? 'venta' : 'cotización'}.
                   </small>
-                  {page === 'sales' && Number(linkedTarget.amount ?? 0) > 0 && (() => {
+                  {page === 'sales' && (Number(linkedTarget.amount ?? 0) > 0 || saleUsesCreditLine) && (() => {
                     const credit = customerCredit(linkedTarget, records.sales, records.finance, record?.rowId ?? null)
                     return (
                       <small className={`relation-hint${credit.disponible > 0 ? ' linked' : ''}`}>
                         <GoogleIcon name="payments" className="small" />
                         Línea {money(credit.linea)} · Consumido con tarjeta {money(credit.consumidoTarjeta)} · Disponible {money(credit.disponible)}
-                        {credit.disponible <= 0 ? ' · Sin cupo en tarjeta: solo efectivo/Yape.' : ' · Solo Tarjeta descuenta de la línea.'}
+                        {credit.linea <= 0 ? ' · No tiene crédito configurado.' : credit.disponible <= 0 ? ' · Sin cupo en tarjeta: solo efectivo/Yape.' : ' · Solo Tarjeta descuenta de la línea.'}
                       </small>
                     )
                   })()}
@@ -713,22 +823,55 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
           )}
           {page === 'sales' && (
             <div className="relation-field yape-method-field">
+              <label>Almacén de salida
+                <select name="almacen_id" value={warehouseId} required={selectedLines.length > 0} onChange={event => { setWarehouseId(event.target.value); setSaleRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }}>
+                  <option value="">{warehouses.length ? 'Selecciona un almacén' : 'No hay almacenes activos'}</option>
+                  {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.nombre}</option>)}
+                </select>
+              </label>
+              <small className="relation-hint">El stock disponible se consulta en este almacén. {warehouseStockLoading ? 'Actualizando existencias…' : ''}</small>
+              {!warehouses.length && <small className="relation-hint">Configura sucursal y almacén en Maestros antes de vender productos.</small>}
               <label>Medio de pago
                 <select name="medio_pago" value={saleMethod} onChange={event => setSaleMethod(event.target.value)}>
                   {saleMethods.map((method) => <option key={method} value={method}>{method}</option>)}
                 </select>
               </label>
+              {!editing && statusValue === 'Completada' && saleMethod.trim().toLocaleLowerCase('es') === 'efectivo' && saleTotal > 0 && (
+                <label>Caja que recibe el efectivo
+                  <select value={cashShiftId} required disabled={cashShiftLoading} onChange={event => setCashShiftId(event.target.value)}>
+                    <option value="">{cashShiftLoading ? 'Consultando turnos…' : 'Selecciona un turno abierto'}</option>
+                    {openCashShifts.map(shift => {
+                      const box = cashBoxes.find(item => item.id === shift.cajaId)
+                      return <option key={shift.id} value={shift.id}>{box ? `${box.nombre} · ${box.codigo}` : 'Turno legado sin caja'} · {new Date(shift.abiertoEn).toLocaleString('es-PE', { timeZone: 'America/Lima' })}</option>
+                    })}
+                  </select>
+                </label>
+              )}
+              {!editing && statusValue === 'Completada' && saleMethod.trim().toLocaleLowerCase('es') === 'efectivo' && saleTotal > 0 && (
+                <small className="relation-hint">{cashShiftError || (openCashShifts.length ? 'El cobro quedará asociado al turno elegido.' : 'No hay una caja abierta. Abre un turno en Tesorería antes de confirmar el cobro.')}</small>
+              )}
+              {saleUsesCreditLine && !linkedTarget && <small className="relation-hint">Vincula la venta a un cliente registrado para descontar su crédito.</small>}
               {isYapeMethod(saleMethod) && <YapePaymentPanel settings={yapeSettings} total={saleTotal} loading={yapeLoading} totalLoading={linesLoading} error={yapeError} onRetry={() => setYapeReload(value => value + 1)} />}
+              {isPlinMethod(saleMethod) && <WalletPaymentPanel brand="Plin" settings={plinSettings} total={saleTotal} loading={plinLoading} totalLoading={linesLoading} error={plinError} onRetry={() => setPlinReload(value => value + 1)} />}
+              {isBankTransferMethod(saleMethod) && <BankTransferPaymentPanel settings={bankSettings} total={saleTotal} loading={bankLoading} error={bankError} onRetry={() => setBankReload(value => value + 1)} />}
             </div>
           )}
           {page === 'sales' ? (
             <div className="split-duo">
               <label>{meta.detailLabel}<input name="detail" required value={detailValue} readOnly title="Comprobante automático: cambia el tipo o la ciudad para generarlo" placeholder={meta.detailLabel} /></label>
-              <label>Estado
-                <select name="status" value={statusValue} onChange={(event) => setStatusValue(event.target.value as RecordStatus)}>
-                  {statusOptions.map((status) => <option key={status}>{status}</option>)}
-                </select>
-              </label>
+              {saleUsesCreditLine ? (
+                <label>Estado
+                  <input value="Completada" readOnly aria-describedby="sale-credit-status-help" />
+                  <input type="hidden" name="status" value="Completada" />
+                  <small id="sale-credit-status-help" className="relation-hint linked">El total se descuenta del crédito disponible. La cuenta por cobrar seguirá pendiente hasta registrar el cobro.</small>
+                </label>
+              ) : (
+                <label>Estado
+                  <select name="status" value={statusValue} onChange={(event) => setStatusValue(event.target.value as RecordStatus)}>
+                    {statusOptions.map((status) => <option key={status}>{status}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
           ) : (
             <label>{meta.detailLabel}<input name="detail" required={page !== 'suppliers'} value={detailValue} onChange={(event) => setDetailValue(event.target.value)} placeholder={page === 'suppliers' ? '(opcional)' : meta.detailLabel} /></label>
@@ -762,10 +905,12 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     ? 'Cotizas de MI inventario con precio fijo. No mueve stock hasta convertir en venta.'
                     : relatedId
                       ? supplierHasRelated
-                        ? 'Solo los productos de este proveedor, con su costo fijo. Al completar, lo comprado ingresa a tu inventario.'
+                        ? 'Solo los productos de este proveedor, con su costo fijo sin IGV. Al completar, lo comprado ingresa a tu inventario.'
                         : 'Este proveedor aún no tiene catálogo: cárgalo desde Proveedores y vuelve aquí.'
                       : 'Selecciona un proveedor arriba para ver sus productos.'}
                 </small>
+              {page === 'purchases' && <small className="relation-hint">Si no seleccionas artículos, se guardará como servicio o gasto: no generará recepción ni movimiento de almacén. Indica el importe base sin IGV en el campo de la orden.</small>}
+              {page === 'purchases' && <small className="relation-hint">Alcance V1: el cálculo aplica IGV estándar del 18%. No registres aquí comprobantes exonerados, inafectos, mixtos o con otra tasa.</small>}
               {page === 'purchases' && (
                 <div className="ws-tabs" role="tablist" aria-label="Filtrar productos">
                   <button type="button" role="tab" aria-selected={productFilter === 'all'} onClick={() => setProductFilter('all')}>Todos ({productCounts.total})</button>
@@ -814,8 +959,8 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                             type="checkbox"
                             name={`sel_${uuid}`}
                             checked={checked}
-                            disabled={(noStock && !checked) || (page === 'quotes' && record?.status === 'Completada')}
-                            title={noStock && !checked ? 'Sin stock disponible para vender' : `Seleccionar ${product.name}`}
+                            disabled={(noStock && !checked) || (page === 'sales' && warehouseStockLoading) || (page === 'quotes' && record?.status === 'Completada')}
+                            title={noStock && !checked ? 'Sin stock en el almacén seleccionado' : `Seleccionar ${product.name}`}
                             onChange={() => toggleLine(uuid)}
                           />
                           <span className="line-copy">
@@ -839,7 +984,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                             max={page === 'sales' ? Math.max(1, stock) : undefined}
                             step={1}
                             value={draft?.qty ?? 1}
-                            disabled={!checked || (page === 'quotes' && record?.status === 'Completada')}
+                            disabled={!checked || (page === 'sales' && warehouseStockLoading) || (page === 'quotes' && record?.status === 'Completada')}
                             aria-label={isCatalogLine ? `Cantidad de ${product.name}` : undefined}
                             onChange={(event) => {
                               const raw = Math.max(1, Math.floor(Number(event.target.value) || 1))
@@ -859,7 +1004,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                             readOnly
                             aria-label={isCatalogLine ? `Precio de ${product.name}` : undefined}
                             title={page === 'purchases'
-                              ? 'Costo fijo del catálogo: se define en Proveedores y no se edita aquí'
+                              ? 'Costo fijo sin IGV del catálogo: se define en Proveedores y no se edita aquí'
                               : 'Precio fijo del producto: se define en Inventario y no se edita aquí'}
                           />
                         </label>
@@ -913,14 +1058,13 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                 <p className="relation-hint"><GoogleIcon name="search_off" className="small" /> Sin coincidencias en productos: ajusta la búsqueda o el filtro.</p>
               )}
               {page === 'purchases' ? (() => {
-                const untaxed = Math.round(linesTotal / 1.18 * 100) / 100
-                const igvAmount = Math.round((linesTotal - untaxed) * 100) / 100
+                const baseImponible = selectedLines.length ? linesTotal : Math.max(0, Number(manualAmount) || 0)
+                const igvAmount = Math.round(baseImponible * 0.18 * 100) / 100
                 return (
                   <div className="lines-summary purchase-totals">
-                    <div><span>Subtotal</span><span>{money(linesTotal)}</span></div>
-                    <div><span>Op. gravada</span><span>{money(untaxed)}</span></div>
+                    <div><span>Base sin IGV</span><span>{money(baseImponible)}</span></div>
                     <div><span>IGV (18%)</span><span>{money(igvAmount)}</span></div>
-                    <div className="grand"><span>Total a pagar</span><strong>{money(totalWithIgv(linesTotal))}</strong></div>
+                    <div className="grand"><span>Total a pagar</span><strong>{money(totalWithIgv(baseImponible))}</strong></div>
                   </div>
                 )
               })() : (() => {
@@ -948,12 +1092,12 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     ? 'La cantidad nunca supera el stock. Al guardar descuenta stock y genera cuenta por cobrar si no está completada.'
                     : page === 'quotes'
                       ? 'La cotización no mueve stock. Al convertirla en venta descuenta stock y genera la cobranza.'
-                      : 'El inventario se actualiza al llegar a Recepción. La cuenta por pagar incluye IGV y se completa al marcar Pagada.'
-                  : 'Sin productos marcados: se guardará solo la cabecera con el monto manual (si lo indicas abajo).'}
+                      : 'La recepción se registra por separado en el almacén elegido. El pago y los abonos se registran desde Tesorería.'
+                  : 'Sin artículos: se guardará como servicio o gasto, sin recepción ni movimiento de almacén.'}
               </p>
               )}
               {!selectedLines.length && (
-                <label>{meta.amountLabel}<input name="amount" min="0" step="0.01" type="number" value={manualAmount} onChange={event => setManualAmount(event.target.value)} placeholder="0.00" /></label>
+                <label>{page === 'purchases' ? 'Importe base sin IGV (S/)' : meta.amountLabel}<input name="amount" min="0" step="0.01" type="number" value={manualAmount} onChange={event => setManualAmount(event.target.value)} placeholder="0.00" /></label>
               )}
             </div>
           ) : (
@@ -1002,7 +1146,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     )}
                     <div className="supplier-link-bar">
                       <input aria-label="Nombre del producto ofrecido" value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Nombre del producto" />
-                      <input aria-label="Costo del producto ofrecido" type="number" min={0} step={0.01} value={draftCosto} onChange={(event) => setDraftCosto(event.target.value)} placeholder="Costo S/" />
+                      <input aria-label="Costo del producto ofrecido sin IGV" type="number" min={0} step={0.01} value={draftCosto} onChange={(event) => setDraftCosto(event.target.value)} placeholder="Costo sin IGV S/" />
                       <input aria-label="Detalle del producto ofrecido" value={draftDetail} onChange={(event) => setDraftDetail(event.target.value)} placeholder="Detalle (opcional)" />
                       <button className="primary-button" type="button" onClick={addDraftProduct}>Agregar</button>
                     </div>
@@ -1032,9 +1176,21 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                       : <small className="relation-hint"><GoogleIcon name="badge" className="small" />Escribe el documento y pulsa {docKind} para traer los datos oficiales. Se guardan con el cliente para reutilizarlos en ventas.</small>}
                 </>
               )}
-              {meta.kind === 'money' && <label>{meta.amountLabel}<input name="amount" min="0" step="0.01" type="number" defaultValue={record?.amount} placeholder="0.00" /></label>}
+          {meta.kind === 'money' && <label>{meta.amountLabel}<input name="amount" min="0" step="0.01" type="number" defaultValue={record?.amount} placeholder="0.00" /></label>}
               {meta.kind === 'stock' && (
                 <>
+                  {page === 'inventory' && !productCategoryError && <label>Categoría<select name="categoria_id" className="ws-control" value={productCategoryId} onChange={event => setProductCategoryId(event.target.value)} disabled={productMastersLoading}>
+                    <option value="">Sin categoría</option>
+                    {productCategories.filter(item => item.activo || item.id === productCategoryId).map(item => <option key={item.id} value={item.id} disabled={!item.activo}>{item.nombre}{item.activo ? '' : ' · desactivada'}</option>)}
+                  </select></label>}
+                  {page === 'inventory' && can('settings', 'ver') && !measurementUnitError && <label>Unidad de medida<select name="unidad_medida_id" className="ws-control" value={measurementUnitId} onChange={event => setMeasurementUnitId(event.target.value)} disabled={productMastersLoading}>
+                    <option value="">Sin definir</option>
+                    {measurementUnits.filter(item => (item.activo && item.precisionDecimales === 0) || item.id === measurementUnitId).map(item => <option key={item.id} value={item.id} disabled={!item.activo || item.precisionDecimales !== 0}>{item.nombre} ({item.simbolo}){item.precisionDecimales !== 0 ? ' · requiere soporte decimal' : item.activo ? '' : ' · desactivada'}</option>)}
+                  </select></label>}
+                  {page === 'inventory' && productMastersLoading && <small className="relation-hint">Cargando categorías y unidades…</small>}
+                  {page === 'inventory' && can('settings', 'ver') && !productMastersLoading && !measurementUnitError && measurementUnits.length === 0 && <small className="relation-hint">Aún no hay unidades. Configúralas en Maestros → Catálogos compartidos.</small>}
+                  {page === 'inventory' && productCategoryError && <small className="relation-hint">No se pudieron cargar las categorías; conserva los datos existentes y recarga antes de cambiar la clasificación.</small>}
+                  {page === 'inventory' && can('settings', 'ver') && measurementUnitError && <small className="relation-hint">No se pudieron cargar las unidades; conserva la unidad actual y recarga antes de cambiarla.</small>}
                   <label>Unidades iniciales<input name="quantity" min="0" step="1" type="number" defaultValue={record?.quantity} placeholder="0" /></label>
                   {page === 'inventory' && (
                     <>

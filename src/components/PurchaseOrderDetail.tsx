@@ -30,6 +30,7 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
   const { can } = useAuth()
   const navigate = useNavigate()
   const supplier = order.proveedor_id ? records.suppliers.find((item) => item.rowId === order.proveedor_id) : undefined
+  const requiereRecepcion = order.requiereRecepcion !== false
   const supplierOffers = supplier?.rowId ? catalog.filter((item) => item.proveedor_id === supplier.rowId).length : 0
   const [lines, setLines] = useState<DocumentLine[]>([])
   const [loadingLines, setLoadingLines] = useState(true)
@@ -156,7 +157,7 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
 
       <section className="table-panel panel">
         <div className="table-header">
-          <div><span className="panel-label">SOLICITUD DE COMPRA</span><h2>Productos, cantidades e IGV</h2></div>
+          <div><span className="panel-label">SOLICITUD DE COMPRA</span><h2>{requiereRecepcion ? 'Productos, cantidades e IGV' : 'Servicio o gasto e IGV'}</h2></div>
         </div>
         <div className="po-datos">
           <label>Fecha límite o aproximada<input type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>
@@ -181,14 +182,14 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
                   <td className="record-value">{money(line.cantidad * line.precio)}</td>
                 </tr>
               ))}
-              {!lines.length && <tr><td colSpan={4}><div className="empty-table"><GoogleIcon name="inventory_2" />{loadingLines ? <><strong>Cargando productos…</strong></> : <><strong>Sin productos</strong><span>Edita la compra para agregar su catálogo.</span></>}</div></td></tr>}
+              {!lines.length && <tr><td colSpan={4}><div className="empty-table"><GoogleIcon name={requiereRecepcion ? 'inventory_2' : 'receipt_long'} />{loadingLines ? <><strong>Cargando detalle…</strong></> : requiereRecepcion ? <><strong>Sin productos</strong><span>Edita la compra para agregar su catálogo.</span></> : <><strong>No requiere ingreso a almacén</strong><span>El importe corresponde a un servicio o gasto y no genera movimientos de inventario.</span></>}</div></td></tr>}
             </tbody>
           </table>
         </div>
         <div className="po-totals">
           <div className="lines-summary">
             <span className="lines-summary-title"><GoogleIcon name="receipt_long" className="small" /> Resumen</span>
-            <span>{lines.length} {lines.length === 1 ? 'producto' : 'productos'} · {qtyTotal} und.</span>
+            <span>{requiereRecepcion ? `${lines.length} ${lines.length === 1 ? 'producto' : 'productos'} · ${qtyTotal} und.` : 'Sin líneas de inventario'}</span>
             <strong>Subtotal {money(subtotal)}</strong>
           </div>
           <div className="po-tax">
@@ -197,7 +198,7 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
             <span className="po-grand">Total <strong>{money(total)}</strong></span>
           </div>
         </div>
-        <p className="po-foot"><GoogleIcon name="schedule" className="small" /> Actualización: {order.date} · La CxP se genera por el total con IGV.</p>
+        <p className="po-foot"><GoogleIcon name="schedule" className="small" /> Actualización: {order.date} · La CxP se genera por el total con IGV estándar del 18%; esta versión no admite comprobantes exonerados, inafectos, mixtos ni con otra tasa.</p>
       </section>
     </>
   )

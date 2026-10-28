@@ -2,20 +2,19 @@ import { useState } from 'react'
 import { BookOpenCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
-import { readCompanyProfile } from '../services/company'
 import { exportSystemGuide } from '../services/systemGuide'
 
 /** Botón llamativo "Guía del sistema": descarga el manual formal y ejecutivo con el logo. */
 export default function SystemGuideButton({ variant = 'default' }: { variant?: 'sidebar' | 'heading' | 'topbar' | 'default' }) {
   const { profile } = useAuth()
-  const { records, notify } = useRecords()
+  const { company, notify } = useRecords()
   const [busy, setBusy] = useState(false)
 
   const download = async () => {
     if (busy) return
     setBusy(true)
     try {
-      await exportSystemGuide({ company: readCompanyProfile(records.settings), author: profile?.nombre })
+      await exportSystemGuide({ company, author: profile?.nombre })
       notify('Guía del sistema preparada. Elige Guardar como PDF en la ventana de impresión.')
     } catch (error) {
       notify(error instanceof Error ? error.message : 'No se pudo preparar la guía del sistema.')

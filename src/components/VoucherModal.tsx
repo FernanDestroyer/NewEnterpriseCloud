@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { escapeCell, money, statusTone, totalWithIgv, brandLogoUrl } from '../data/helpers'
-import { readCompanyProfile } from '../services/company'
 import logoNegro from '../assets/enterprisecloud-logo-negro.png'
 import { useDialog } from './useDialog'
 import { useRecords } from '../context/RecordsContext'
@@ -18,7 +17,7 @@ function GoogleIcon({ name, className = '' }: { name: string; className?: string
 
 /** Comprobante singular: 1 por cada venta o compra, con sus líneas e IGV, imprimible. */
 export default function VoucherModal({ page, record, onClose }: { page: 'sales' | 'purchases'; record: RecordItem; onClose: () => void }) {
-  const { records } = useRecords()
+  const { records, company } = useRecords()
   const dialogRef = useDialog<HTMLDivElement>(onClose)
   const [lines, setLines] = useState<DocumentLine[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,7 +68,6 @@ export default function VoucherModal({ page, record, onClose }: { page: 'sales' 
   const total = isSale ? netSubtotal : totalWithIgv(subtotal)
   const base = isSale ? Math.round(total / 1.18 * 100) / 100 : subtotal
   const igv = Math.round((total - base) * 100) / 100
-  const company = readCompanyProfile(records.settings)
   const emitterName = company?.razonSocial || 'EnterpriseCloud'
   const emitterDetail = company?.ruc ? `RUC ${company.ruc}${company.direccion ? ` · ${company.direccion}` : ''}` : 'Sistema ERP · Comprobantes'
 
