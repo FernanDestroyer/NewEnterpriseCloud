@@ -13,9 +13,14 @@ const DashboardPage = lazy(() => import('../components/DashboardPage'))
 const CajaPage = lazy(() => import('../components/CajaPage'))
 const MaintenancePage = lazy(() => import('../components/MaintenancePage'))
 const PermisosPage = lazy(() => import('../components/PermisosPage'))
-const ModuloPage = lazy(() => import('../components/ModuloPage'))
+const AuditPage = lazy(() => import('../components/AuditPage'))
+const ModuloPage = lazy(() => import('../pages/ModuloPage'))
 const ReportsPage = lazy(() => import('../components/ReportsPage'))
 const ProfilePage = lazy(() => import('../components/ProfilePage'))
+const AnalyzerPage = lazy(() => import('../components/AnalyzerPage'))
+const MaestrosPage = lazy(() => import('../components/MaestrosPage'))
+const TreasuryPage = lazy(() => import('../components/TreasuryPage'))
+const CommissionsPage = lazy(() => import('../components/CommissionsPage'))
 
 // Solo deja pasar a quien tenga una sesión de Supabase activa.
 // Tras iniciar sesión se muestra "Preparando tu panel" un tiempo mínimo
@@ -61,7 +66,12 @@ export default function AppRouter() {
         <Route path="/estado-cuenta" element={<Navigate to="/finance" replace />} />
         <Route path="/mantenimientos" element={<MaintenancePage />} />
         <Route path="/permisos" element={<PermisosPage />} />
+        <Route path="/auditoria" element={<AuditPage />} />
         <Route path="/caja" element={<CajaPage />} />
+        <Route path="/maestros" element={<MaestrosPage />} />
+        <Route path="/tesoreria" element={<TreasuryPage />} />
+        <Route path="/comisiones" element={<CommissionsPage />} />
+        <Route path="/analizador" element={<AnalyzerPage />} />
         <Route path="/settings" element={<Navigate to="/mantenimientos" replace />} />
         <Route path="/documents" element={<Navigate to="/dashboard" replace />} />
         <Route path="/perfil" element={<ProfilePage />} />

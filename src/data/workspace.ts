@@ -1,29 +1,176 @@
-import { Boxes, Building2, ClipboardList, LayoutDashboard, PackageCheck, ReceiptText, ShoppingCart, TrendingUp, Users, Wallet, ArrowLeftRight, Wrench, Banknote, KeyRound } from 'lucide-react'
+import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, ScanSearch, Settings, ShieldCheck, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
 
-export type WorkspaceEntry = { label: string; path: string; page?: DataPage; icon: LucideIcon; group: string }
+export type PermissionModuleKey = DataPage | 'analizador' | 'audit'
+
+export type WorkspaceEntry = { label: string; path: string; page?: DataPage; permission?: PermissionModuleKey; icon: LucideIcon; group: string }
 export const workspaceEntries: WorkspaceEntry[] = [
-  { label: 'Panel de control', path: '/dashboard', icon: LayoutDashboard, group: 'INICIO' },
+  { label: 'Panel de control', path: '/dashboard', icon: LayoutDashboard, group: 'REPORTES E INTELIGENCIA' },
   { label: 'Órdenes de compra', path: '/purchases', page: 'purchases', icon: ShoppingCart, group: 'COMPRAS' },
   { label: 'Ingreso al Kardex', path: '/ingreso-kardex', page: 'purchases', icon: PackageCheck, group: 'COMPRAS' },
-  { label: 'Proveedores', path: '/suppliers', page: 'suppliers', icon: Building2, group: 'COMPRAS' },
+  { label: 'Proveedores', path: '/suppliers', page: 'suppliers', icon: Building2, group: 'MAESTROS' },
   { label: 'Cotizaciones', path: '/quotes', page: 'quotes', icon: ClipboardList, group: 'VENTAS' },
   { label: 'Ventas', path: '/sales', page: 'sales', icon: ReceiptText, group: 'VENTAS' },
-  { label: 'Clientes', path: '/customers', page: 'customers', icon: Users, group: 'VENTAS' },
+  { label: 'Clientes', path: '/customers', page: 'customers', icon: Users, group: 'MAESTROS' },
   { label: 'Stock de productos', path: '/inventory', page: 'inventory', icon: Boxes, group: 'INVENTARIO' },
   { label: 'Movimientos de Kardex', path: '/movimiento-kardex', page: 'inventory', icon: ArrowLeftRight, group: 'INVENTARIO' },
-  { label: 'Tesorería', path: '/finance', page: 'finance', icon: Wallet, group: 'FINANZAS' },
-  { label: 'Caja', path: '/caja', page: 'finance', icon: Banknote, group: 'FINANZAS' },
-  { label: 'Reportes', path: '/reports', page: 'reports', icon: TrendingUp, group: 'ADMINISTRACIÓN' },
-  { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'ADMINISTRACIÓN' },
-  { label: 'Permisos', path: '/permisos', page: 'settings', icon: KeyRound, group: 'ADMINISTRACIÓN' },
+  { label: 'Tesorería', path: '/finance', page: 'finance', icon: Wallet, group: 'TESORERÍA' },
+  { label: 'Bancos y conciliación', path: '/tesoreria', permission: 'finance', icon: Landmark, group: 'TESORERÍA' },
+  { label: 'Comisiones de vendedores', path: '/comisiones', permission: 'sales', icon: Percent, group: 'VENTAS' },
+  { label: 'Maestros', path: '/maestros', permission: 'settings', icon: Building2, group: 'MAESTROS' },
+  { label: 'Caja', path: '/caja', page: 'finance', icon: Banknote, group: 'TESORERÍA' },
+  { label: 'Reportes', path: '/reports', page: 'reports', icon: TrendingUp, group: 'REPORTES E INTELIGENCIA' },
+  { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'CONFIGURACIÓN' },
+  { label: 'Permisos', path: '/permisos', page: 'settings', icon: KeyRound, group: 'SEGURIDAD' },
+  { label: 'Bitácora de auditoría', path: '/auditoria', permission: 'audit', icon: FileCheck2, group: 'SEGURIDAD' },
+  { label: 'Analizador de proyectos', path: '/analizador', permission: 'analizador', icon: ScanSearch, group: 'HERRAMIENTAS' },
 ]
 
-export const permissionModule: Record<DataPage, string> = {
+export type WorkspaceSubmodule = {
+  label: string
+  path?: string
+  permission?: PermissionModuleKey
+  icon?: LucideIcon
+  action?: 'notifications'
+  availability?: 'partial' | 'optional'
+  implemented: boolean
+}
+
+export type WorkspaceModule = {
+  id: string
+  label: string
+  icon: LucideIcon
+  children: WorkspaceSubmodule[]
+}
+
+// Los catálogos del PDF se agrupan por responsabilidad para mantener el menú compacto.
+// Las opciones sin pantalla se muestran como referencia y no permiten navegación.
+export const workspaceModules: WorkspaceModule[] = [
+  {
+    id: 'maestros', label: 'Maestros', icon: Building2,
+    children: [
+      { label: 'Clientes', path: '/customers', permission: 'customers', icon: Users, implemented: true },
+      { label: 'Proveedores', path: '/suppliers', permission: 'suppliers', icon: Building2, implemented: true },
+      { label: 'Productos y clasificación', path: '/inventory#productos', permission: 'inventory', icon: Boxes, implemented: true },
+      { label: 'Ficha de empresa', path: '/mantenimientos#empresa', permission: 'settings', icon: Building2, implemented: true },
+      { label: 'Sucursales y almacenes', path: '/mantenimientos#organizacion', permission: 'settings', icon: Building2, implemented: true },
+      { label: 'Zonas comerciales y de reparto', path: '/mantenimientos#zonas-comerciales', permission: 'settings', icon: MapPinned, implemented: true },
+      { label: 'Transportistas y vendedores', path: '/maestros#personas', permission: 'settings', icon: Truck, implemented: true },
+      { label: 'Catálogos comerciales y tributarios', path: '/maestros#catalogos', permission: 'settings', icon: Wrench, implemented: true },
+    ],
+  },
+  {
+    id: 'compras', label: 'Compras', icon: ShoppingCart,
+    children: [
+      { label: 'Órdenes nacionales', path: '/purchases', permission: 'purchases', icon: ShoppingCart, availability: 'partial', implemented: true },
+      { label: 'Solicitud interna y comparativo de ofertas', permission: 'purchases', icon: ClipboardList, implemented: false },
+      { label: 'Recepción de mercadería', path: '/ingreso-kardex', permission: 'purchases', icon: PackageCheck, implemented: true },
+      { label: 'Devoluciones a proveedor', permission: 'purchases', icon: ArrowLeftRight, implemented: false },
+      { label: 'Importaciones, contratos y evaluación', permission: 'purchases', icon: FileText, availability: 'optional', implemented: false },
+    ],
+  },
+  {
+    id: 'ventas', label: 'Ventas', icon: ReceiptText,
+    children: [
+      { label: 'Cotizaciones', path: '/quotes', permission: 'quotes', icon: ClipboardList, implemented: true },
+      { label: 'Pedidos y ventas', path: '/sales', permission: 'sales', icon: ShoppingCart, implemented: true },
+      { label: 'Comprobantes imprimibles', path: '/sales#comprobantes', permission: 'sales', icon: FileCheck2, availability: 'partial', implemented: true },
+      { label: 'Guías de remisión', permission: 'sales', icon: FileText, implemented: false },
+      { label: 'Emisión electrónica SUNAT', permission: 'sales', icon: ReceiptText, implemented: false },
+      { label: 'Notas de crédito y devoluciones', permission: 'sales', icon: ArrowLeftRight, implemented: false },
+    ],
+  },
+  {
+    id: 'inventario', label: 'Inventario y Kardex', icon: Boxes,
+    children: [
+      { label: 'Existencias', path: '/inventory#existencias', permission: 'inventory', icon: Package, implemented: true },
+      { label: 'Kardex', path: '/movimiento-kardex', permission: 'inventory', icon: ArrowLeftRight, implemented: true },
+      { label: 'Transferencias entre almacenes', permission: 'inventory', icon: Truck, implemented: false },
+      { label: 'Ajustes de inventario', permission: 'inventory', icon: Wrench, implemented: false },
+      { label: 'Inventario físico', permission: 'inventory', icon: ClipboardCheck, implemented: false },
+      { label: 'Lotes y series', permission: 'inventory', icon: Package, availability: 'optional', implemented: false },
+    ],
+  },
+  {
+    id: 'tesoreria', label: 'Tesorería', icon: Wallet,
+    children: [
+      { label: 'Cuentas por cobrar y pagar', path: '/finance', permission: 'finance', icon: Wallet, availability: 'partial', implemented: true },
+      { label: 'Cajas y turnos', path: '/caja', permission: 'finance', icon: Banknote, implemented: true },
+      { label: 'Bancos, flujo y conciliación', path: '/tesoreria', permission: 'finance', icon: Landmark, implemented: true },
+    ],
+  },
+  {
+    id: 'logistica', label: 'Logística y Transporte', icon: Truck,
+    children: [
+      { label: 'Planificación de despachos y rutas', icon: MapPinned, implemented: false },
+      { label: 'Vehículos y asignación de conductores', icon: Truck, implemented: false },
+      { label: 'Seguimiento, entrega y devoluciones', icon: PackageCheck, implemented: false },
+    ],
+  },
+  {
+    id: 'comisiones', label: 'Comisiones de Vendedores', icon: Percent,
+    children: [
+      { label: 'Reglas, escalas y excepciones', path: '/comisiones#reglas', permission: 'sales', icon: Settings, implemented: true },
+      { label: 'Cálculo y ajustes de comisión', path: '/comisiones#calculo', permission: 'sales', icon: Percent, implemented: true },
+      { label: 'Liquidaciones y pagos', path: '/comisiones#liquidaciones', permission: 'sales', icon: Banknote, implemented: true },
+      { label: 'Historial y reportes', path: '/comisiones#historial', permission: 'sales', icon: FileText, implemented: true },
+    ],
+  },
+  {
+    id: 'metas', label: 'Metas y Objetivos', icon: Target,
+    children: [
+      { label: 'Definición y asignación de metas', icon: Target, implemented: false },
+      { label: 'Avance por vendedor, sucursal o producto', icon: TrendingUp, implemented: false },
+      { label: 'Ranking y alertas de cumplimiento', icon: Award, implemented: false },
+    ],
+  },
+  {
+    id: 'inteligencia', label: 'Reportes e Inteligencia de Negocios', icon: TrendingUp,
+    children: [
+      { label: 'Panel ejecutivo', path: '/dashboard', icon: LayoutDashboard, implemented: true },
+      { label: 'Reportes operativos', path: '/reports', permission: 'reports', icon: BarChart3, implemented: true },
+    ],
+  },
+  {
+    id: 'seguridad', label: 'Seguridad y Auditoría', icon: ShieldCheck,
+    children: [
+      { label: 'Usuarios, roles y permisos', path: '/permisos', permission: 'settings', icon: KeyRound, implemented: true },
+      { label: 'Bitácora y auditoría de operaciones', path: '/auditoria', permission: 'audit', icon: FileCheck2, availability: 'partial', implemented: true },
+    ],
+  },
+  {
+    id: 'configuracion', label: 'Configuración e Integraciones', icon: Settings,
+    children: [
+      { label: 'Parámetros, series y plantillas', permission: 'settings', icon: Settings, implemented: false },
+      { label: 'Integraciones de cobro', path: '/mantenimientos#integraciones', permission: 'settings', icon: Workflow, availability: 'partial', implemented: true },
+      { label: 'Descarga de respaldos', path: '/mantenimientos#respaldos', permission: 'settings', icon: FileText, availability: 'partial', implemented: true },
+      { label: 'API y webhooks', permission: 'settings', icon: Landmark, implemented: false },
+    ],
+  },
+  {
+    id: 'notificaciones', label: 'Notificaciones y Aprobaciones', icon: Bell,
+    children: [
+      { label: 'Centro de alertas', action: 'notifications', icon: Bell, implemented: true },
+      { label: 'Workflows y reglas de aprobación', icon: Workflow, implemented: false },
+      { label: 'Bandeja de aprobaciones', icon: ClipboardCheck, implemented: false },
+      { label: 'Canales e historial de notificaciones', icon: FileText, implemented: false },
+    ],
+  },
+]
+
+export function submoduleMatchesLocation(path: string | undefined, pathname: string, hash: string) {
+  if (!path) return false
+  const separator = path.indexOf('#')
+  const route = separator < 0 ? path : path.slice(0, separator)
+  const targetHash = separator < 0 ? '' : path.slice(separator)
+  return route === pathname && (!targetHash || targetHash === hash)
+}
+
+export const permissionModule: Record<PermissionModuleKey, string> = {
   sales: 'ventas', quotes: 'cotizaciones', purchases: 'compras', inventory: 'inventario',
   customers: 'clientes', suppliers: 'proveedores', finance: 'finanzas', documents: 'documentos',
-  reports: 'reportes', settings: 'configuracion',
+  reports: 'reportes', settings: 'configuracion', analizador: 'analizador', audit: 'auditoria',
 }
 
 export type Period = 'all' | 'month' | '30' | '7' | 'today'
@@ -117,7 +264,7 @@ export function consumesCreditLine(medio?: string | null): boolean {
   return (medio ?? '').trim().toLocaleLowerCase('es') === 'tarjeta'
 }
 
-// Ventas del cliente + consumo de su línea (solo lo pagado con Tarjeta).
+// Ventas del cliente + consumo vigente de su línea (solo Tarjeta con CxC abierta).
 // excludeSaleRowId descuenta la venta que se está editando para no contarla dos veces.
 export function customerCredit(
   customer: RecordItem,
@@ -130,9 +277,19 @@ export function customerCredit(
     && sale.cliente_id === customer.rowId
     && sale.rowId !== (excludeSaleRowId ?? ''))
   const ids = new Set(mine.filter((sale) => sale.rowId).map((sale) => sale.rowId as string))
+  const paymentBySale = new Map<string, RecordItem>()
+  for (const item of finance) {
+    if (item.saleId && !paymentBySale.has(item.saleId)) paymentBySale.set(item.saleId, item)
+  }
   const consumidoTarjeta = mine
     .filter((sale) => consumesCreditLine(sale.medio))
-    .reduce((sum, sale) => sum + (Number(sale.amount) || 0), 0)
+    .reduce((sum, sale) => {
+      const payment = sale.rowId ? paymentBySale.get(sale.rowId) : undefined
+      // Sin CxC vinculada se conserva el consumo por precaución; una CxC
+      // completada libera el cupo que ocupó la venta.
+      if (payment?.status === 'Completada') return sum
+      return sum + (Number(payment?.amount ?? sale.amount) || 0)
+    }, 0)
   const deuda = finance
     .filter((item) => item.saleId && ids.has(item.saleId) && item.status !== 'Completada')
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
