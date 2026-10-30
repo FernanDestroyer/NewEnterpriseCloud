@@ -18,6 +18,16 @@ const ModuloPage = lazy(() => import('../pages/ModuloPage'))
 const ReportsPage = lazy(() => import('../components/ReportsPage'))
 const ProfilePage = lazy(() => import('../components/ProfilePage'))
 const AnalyzerPage = lazy(() => import('../components/AnalyzerPage'))
+const PurchaseSourcingPage = lazy(() => import('../components/PurchaseSourcingPage'))
+const PurchaseReturnsPage = lazy(() => import('../components/PurchaseReturnsPage'))
+const PurchaseContractsPage = lazy(() => import('../components/PurchaseContractsPage'))
+const ImportFoldersPage = lazy(() => import('../components/ImportFoldersPage'))
+const SupplierEvaluationsPage = lazy(() => import('../components/SupplierEvaluationsPage'))
+const InventoryOperationsPage = lazy(() => import('../components/InventoryOperationsPage'))
+const InventoryQueriesPage = lazy(() => import('../components/InventoryQueriesPage'))
+const PhysicalInventoryPage = lazy(() => import('../components/PhysicalInventoryPage'))
+const InventoryTracePage = lazy(() => import('../components/InventoryTracePage'))
+const SalesOperationsPage = lazy(() => import('../components/SalesOperationsPage'))
 
 // Solo deja pasar a quien tenga una sesión de Supabase activa.
 // Tras iniciar sesión se muestra "Preparando tu panel" un tiempo mínimo
@@ -57,8 +67,26 @@ export default function AppRouter() {
       <Route path="/registro" element={<LoginPage mode="register" />} />
       <Route element={<RequireAuth />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/sales" element={<SalesOperationsPage key="orders" initialTab="orders" />} />
+        <Route path="/quotes" element={<SalesOperationsPage key="quotes" initialTab="quotes" />} />
+        <Route path="/sales/receipts" element={<SalesOperationsPage key="receipts" initialTab="receipts" />} />
+        <Route path="/sales/guides" element={<SalesOperationsPage key="guides" initialTab="guides" />} />
+        <Route path="/sales/credits" element={<SalesOperationsPage key="credits" initialTab="credits" />} />
+        <Route path="/sales/sunat" element={<SalesOperationsPage key="sunat" initialTab="sunat" />} />
+        <Route path="/solicitudes-compra" element={<PurchaseSourcingPage />} />
+        <Route path="/devoluciones-proveedor" element={<PurchaseReturnsPage />} />
+        <Route path="/contratos-compra" element={<PurchaseContractsPage />} />
+        <Route path="/importaciones" element={<ImportFoldersPage />} />
+        <Route path="/evaluaciones-proveedores" element={<SupplierEvaluationsPage />} />
+        <Route path="/operaciones-inventario" element={<Navigate to="/inventario/transferencias" replace />} />
+        <Route path="/inventario/existencias" element={<InventoryQueriesPage view="stocks" />} />
+        <Route path="/inventario/kardex" element={<InventoryQueriesPage view="kardex" />} />
+        <Route path="/inventario/transferencias" element={<InventoryOperationsPage key="transfer" initialTab="transfer" />} />
+        <Route path="/inventario/ajustes" element={<InventoryOperationsPage key="adjustment" initialTab="adjustment" />} />
+        <Route path="/inventario/fisico" element={<PhysicalInventoryPage />} />
+        <Route path="/inventario/lotes-series" element={<InventoryTracePage />} />
         <Route path="/ingreso-kardex" element={<ModuloPage page="purchases" view="receipts" />} />
-        <Route path="/movimiento-kardex" element={<ModuloPage page="inventory" view="kardex" />} />
+        <Route path="/movimiento-kardex" element={<Navigate to="/inventario/kardex" replace />} />
         <Route path="/facturacion" element={<Navigate to="/sales" replace />} />
         <Route path="/estado-cuenta" element={<Navigate to="/finance" replace />} />
         <Route path="/mantenimientos" element={<MaintenancePage />} />
@@ -73,7 +101,7 @@ export default function AppRouter() {
         <Route path="/orden-compra" element={<Navigate to="/purchases" replace />} />
         <Route path="/orden-venta" element={<Navigate to="/sales" replace />} />
         <Route path="/cotizacion" element={<Navigate to="/quotes" replace />} />
-        <Route path="/stock-productos" element={<Navigate to="/inventory" replace />} />
+        <Route path="/stock-productos" element={<Navigate to="/inventario/existencias" replace />} />
         <Route path="/reportes" element={<Navigate to="/reports" replace />} />
         <Route path="/:pageId" element={<ModuloPage />} />
       </Route>

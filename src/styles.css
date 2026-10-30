@@ -1763,14 +1763,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .kardex-count { color: #7d8da1; font: 700 10px 'DM Mono', monospace; }
 .kardex-summary { padding: 0 22px 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .kardex-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 10px; font-weight: 800; }
-.kardex-chip.in { color: #9fe8c8; background: rgba(125,232,164,.09); border: 1px solid rgba(125,232,164,.25); }
-.kardex-chip.out { color: #ffd07a; background: rgba(255,196,107,.09); border: 1px solid rgba(255,196,107,.25); }
+.kardex-chip.in { color: var(--ws-green); background: var(--ws-green-soft); border: 1px solid var(--ws-border); }
+.kardex-chip.out { color: var(--ws-amber); background: var(--ws-amber-soft); border: 1px solid var(--ws-border); }
 .kardex-note { color: #7d8da1; font-size: 10px; }
 .kardex-qty-in { color: #9fe8c8; font: 700 11px 'DM Mono', monospace; }
 .kardex-qty-out { color: #ffd07a; font: 700 11px 'DM Mono', monospace; }
 .erp-shell[data-theme='light'] .kardex-count, .erp-shell[data-theme='light'] .kardex-note { color: #526b82; }
-.erp-shell[data-theme='light'] .kardex-chip.in { color: #166a43; background: #def3e7; border-color: #b9e5cc; }
-.erp-shell[data-theme='light'] .kardex-chip.out { color: #93560b; background: #fff0d5; border-color: #f0d9a8; }
+.erp-shell[data-theme='light'] .kardex-chip.in { color: var(--ws-green); background: var(--ws-green-soft); border-color: var(--ws-border); }
+.erp-shell[data-theme='light'] .kardex-chip.out { color: var(--ws-amber); background: var(--ws-amber-soft); border-color: var(--ws-border); }
 .erp-shell[data-theme='light'] .kardex-qty-in { color: #166a43; }
 
 /* ---- Catálogo por proveedor (filas expandibles en Proveedores) ---- */
@@ -1910,9 +1910,9 @@ button.supplier-product-row.supplier-result .gicon { color: #86f6f2; font-size: 
 .ws-receipt-lines { display: grid; gap: 8px; max-height: 42vh; overflow-y: auto; margin-top: 15px; }
 .ws-receipt-line { display: grid; grid-template-columns: minmax(0,1fr) 112px; align-items: center; gap: 14px; padding: 12px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.075); border-radius: 9px; }
 .ws-receipt-line span { display: grid; gap: 5px; min-width: 0; }
-.ws-receipt-line strong { color: #e8f1f7; font-size: 11px; }
-.ws-receipt-line small { color: #91a2b5; font-size: 10px; }
-.ws-receipt-line input, .ws-confirm-field input { min-width: 0; height: 39px; padding: 0 11px; color: #edf4f9; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 8px; outline: 0; font-size: 11px; }
+.ws-receipt-line strong { color: #e8f1f7; font-size: 12px; }
+.ws-receipt-line small { color: #91a2b5; font-size: 11px; }
+.ws-receipt-line input, .ws-confirm-field input { min-width: 0; height: 39px; padding: 0 11px; color: #edf4f9; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 8px; outline: 0; font-size: 12px; }
 .ws-receipt-line input:focus, .ws-confirm-field input:focus { border-color: rgba(134,246,242,.52); }
 .ws-receipt-line input:disabled { opacity: .5; }
 .erp-shell[data-theme='light'] .ws-receipt-state { color: #187650; }

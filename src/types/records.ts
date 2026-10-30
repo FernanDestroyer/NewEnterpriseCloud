@@ -47,6 +47,9 @@ export type RecordItem = {
   updatedAt?: string
   dueAt?: string | null
   amount?: number
+  /** Compras: moneda de la orden y tipo de cambio persistido. */
+  moneda?: 'PEN' | 'USD'
+  exchangeRate?: number | null
   /** Obligación original para cuentas con abonos; amount representa el saldo abierto. */
   obligationAmount?: number
   quantity?: number
@@ -115,6 +118,12 @@ export type DocumentLine = {
   cantidad: number
   /** Precio unitario (venta) o costo unitario (compra). */
   precio: number
+  /** Snapshots fiscales de compras; NULL = línea histórica sin clasificación. */
+  taxTreatment?: 'Gravado' | 'Exonerado' | 'Inafecto' | null
+  taxRate?: number | null
+  taxBase?: number | null
+  taxAmount?: number | null
+  lineTotal?: number | null
 }
 
 export type RecordModalState = {

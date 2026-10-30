@@ -1,0 +1,50 @@
+.workspace-shell.erp-shell .ws-sales-page .voucher-modal.sales-print-dialog { box-sizing: border-box; width: min(940px, 100%); border: 1px solid var(--ws-border); background: var(--ws-surface); color: var(--ws-text); }
+.ws-sales-page .sales-print-controls { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 10px 0; }
+.ws-sales-page .sales-print-controls label { min-width: 190px; }
+.ws-sales-page .sales-print-controls h2 { margin: 4px 0; color: var(--ws-text); }
+.ws-sales-page .sales-print-controls p { color: var(--ws-muted); }
+.ws-sales-page .voucher-paper.sales-print-paper { box-sizing: border-box; margin: 14px auto; width: 100%; max-width: 210mm; padding: 24px; border: 1px solid var(--ws-border); border-radius: 11px; background: var(--ws-surface); color: var(--ws-text); box-shadow: 0 10px 32px color-mix(in srgb, var(--ws-text) 7%, transparent); }
+.sales-print-header { display: flex; justify-content: space-between; align-items: start; gap: 18px; padding-bottom: 18px; border-bottom: 2px solid var(--ws-border); }
+.sales-print-header > div { display: grid; gap: 5px; }
+.sales-print-header strong { font-size: 1.05rem; color: var(--ws-text); }
+.sales-print-header small, .sales-print-id small { color: var(--ws-muted); }
+.sales-print-id { min-width: 150px; padding: 12px; border: 1px solid var(--ws-border); border-radius: 8px; text-align: center; background: var(--ws-raised); }
+.sales-print-id span { color: var(--ws-primary); font-weight: 750; font-variant-numeric: tabular-nums; }
+.sales-print-meta { display: grid; gap: 7px; margin: 18px 0; padding: 12px; background: var(--ws-raised); border: 1px solid var(--ws-border); border-radius: 8px; }
+.sales-print-meta strong { color: var(--ws-text); }
+.ws-sales-page .sales-print-paper .voucher-table { width: 100%; border-collapse: collapse; color: var(--ws-text); }
+.ws-sales-page .sales-print-paper .voucher-table th { padding: 10px 8px; border: 0; border-bottom: 1px solid var(--ws-border); background: var(--ws-raised); color: var(--ws-muted); font-size: .73rem; letter-spacing: .04em; text-transform: uppercase; }
+.ws-sales-page .sales-print-paper .voucher-table td { padding: 10px 8px; border: 0; border-bottom: 1px solid var(--ws-border); color: var(--ws-text); }
+.ws-sales-page .sales-print-paper .voucher-table tbody tr:hover { background: var(--ws-raised); }
+.ws-sales-page .sales-print-paper .voucher-table small { display: block; color: var(--ws-muted); }
+.ws-sales-page .sales-print-paper .voucher-totals { margin-top: 18px; color: var(--ws-text); }
+.ws-sales-page .sales-print-paper .voucher-totals .grand { border-top: 1px solid var(--ws-border); color: var(--ws-text); }
+.sales-print-disclaimer { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--ws-border); color: var(--ws-muted); font-size: .78rem; line-height: 1.5; }
+.ws-sales-page .voucher-paper.sales-print-ticket { max-width: 80mm; padding: 9px; }
+.sales-print-ticket .sales-print-header, .sales-print-ticket .sales-print-meta { display: block; }
+.sales-print-ticket .sales-print-id { margin-top: 12px; }
+.ws-sales-page .sales-print-ticket .voucher-table { font-size: .625rem; table-layout: fixed; }
+.ws-sales-page .sales-print-ticket .voucher-table :is(th, td) { padding: 5px 2px; word-break: break-word; }
+.ws-sales-page .sales-print-ticket .voucher-table :is(th, td):nth-child(3) { display: table-cell; }
+
+@page ws-sales-a4 { size: A4; margin: 12mm; }
+@page ws-sales-ticket { size: 80mm 200mm; margin: 2mm; }
+@media print {
+  @page { size: auto; margin: 8mm; }
+  body * { visibility: hidden !important; }
+  .ws-sales-page > :not(.modal-backdrop), .ws-sidebar, .ws-topbar, .ws-footer, .sales-print-controls { display: none !important; }
+  .ws-sales-page .sales-print-paper, .ws-sales-page .sales-print-paper * { visibility: visible !important; }
+  .workspace-shell.erp-shell .ws-sidebar { display: none !important; }
+  .workspace-shell :is(.ws-main, .ws-content) { box-sizing: border-box; width: auto !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
+  .ws-sales-page { display: block; margin: 0; padding: 0; }
+  .ws-sales-page .modal-backdrop { position: static; display: block; padding: 0; overflow: visible; backdrop-filter: none; }
+  .workspace-shell.erp-shell .ws-sales-page .voucher-modal.sales-print-dialog { width: auto; max-height: none; overflow: visible; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; animation: none; }
+  .ws-sales-page .voucher-paper.sales-print-paper { position: static; width: 100%; max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .ws-sales-page .voucher-paper.sales-print-a4 { page: ws-sales-a4; }
+  .ws-sales-page .voucher-paper.sales-print-ticket { box-sizing: border-box; page: ws-sales-ticket; width: 76mm; max-width: 76mm; }
+  .ws-sales-page .sales-print-ticket .voucher-table :is(th, td):nth-child(3) { display: table-cell; }
+  .workspace-shell[data-theme='dark'] .sales-print-paper { filter: invert(1); }
+  .ws-sales-page .sales-print-paper .table-scroll { overflow: visible; }
+  .ws-sales-page .sales-print-paper table { width: 100%; }
+  .ws-sales-page .sales-print-paper tr { break-inside: avoid; }
+}

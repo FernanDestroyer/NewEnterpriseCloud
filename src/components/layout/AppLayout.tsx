@@ -146,7 +146,6 @@ export default function AppLayout() {
                   if (child.path) return <NavLink key={key} to={child.path} end title={child.label} aria-label={child.label} className={({ isActive }) => `ws-submodule-link${isActive && submoduleMatchesLocation(child.path, location.pathname, location.hash) ? ' is-active' : ''}`}>
                     {ChildIcon && <ChildIcon size={15} />}
                     <span>{child.label}</span>
-                    {child.path === '/inventory#existencias' && stockAlerts.length > 0 && <b>{stockAlerts.length}</b>}
                     {child.path === '/mantenimientos#catalogos' && maintenanceIssues > 0 && <b>{maintenanceIssues}</b>}
                     {child.availability === 'partial' && <small className="ws-submodule-status is-partial">Parcial</small>}
                   </NavLink>

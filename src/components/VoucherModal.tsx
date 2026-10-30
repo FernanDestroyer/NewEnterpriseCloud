@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { escapeCell, money, statusTone, totalWithIgv, brandLogoUrl } from '../data/helpers'
+import { escapeCell, money, moneyCurrency, statusTone, totalWithIgv, brandLogoUrl } from '../data/helpers'
 import logoNegro from '../assets/enterprisecloud-logo-negro.png'
 import { useDialog } from './useDialog'
 import { useRecords } from '../context/RecordsContext'
@@ -65,9 +65,13 @@ export default function VoucherModal({ page, record, onClose }: { page: 'sales' 
     : (record.amount ?? 0)
   const discount = record.descuento ?? 0
   const netSubtotal = discount > 0 ? Math.round(subtotal * (1 - discount / 100) * 100) / 100 : subtotal
-  const total = isSale ? netSubtotal : totalWithIgv(subtotal)
-  const base = isSale ? Math.round(total / 1.18 * 100) / 100 : subtotal
-  const igv = Math.round((total - base) * 100) / 100
+  const currency = isSale ? 'PEN' : record.moneda ?? 'PEN'
+  const purchaseFiscalComplete = !isSale && lines.length > 0 && lines.every(line => line.taxTreatment && line.taxBase != null && line.taxAmount != null && line.lineTotal != null)
+  const purchaseBase = purchaseFiscalComplete ? lines.reduce((sum, line) => sum + (line.taxBase ?? 0), 0) : null
+  const purchaseTax = purchaseFiscalComplete ? lines.reduce((sum, line) => sum + (line.taxAmount ?? 0), 0) : null
+  const total = isSale ? netSubtotal : purchaseFiscalComplete ? lines.reduce((sum, line) => sum + (line.lineTotal ?? 0), 0) : record.amount ?? 0
+  const base = isSale ? Math.round(total / 1.18 * 100) / 100 : purchaseBase
+  const igv = isSale ? Math.round((total - (base ?? 0)) * 100) / 100 : purchaseTax
   const emitterName = company?.razonSocial || 'EnterpriseCloud'
   const emitterDetail = company?.ruc ? `RUC ${company.ruc}${company.direccion ? ` · ${company.direccion}` : ''}` : 'Sistema ERP · Comprobantes'
 
@@ -77,17 +81,17 @@ export default function VoucherModal({ page, record, onClose }: { page: 'sales' 
     // Logo incrustado (data URI) para que salga sí o sí en la impresión.
     void brandLogoUrl().then((logoUrl) => {
     const rows = lines.length
-      ? lines.map((line) => `<tr><td>${line.cantidad}</td><td>${escapeCell(line.nombre ?? line.producto_id)}<br><small>${escapeCell(line.codigo ?? '')}</small></td><td>${money(line.precio)}</td><td>${money(line.cantidad * line.precio)}</td></tr>`).join('')
-      : `<tr><td>1</td><td>${escapeCell(record.name)}<br><small>${escapeCell(record.detail)}</small></td><td>${money(record.amount ?? 0)}</td><td>${money(record.amount ?? 0)}</td></tr>`
+      ? lines.map((line) => `<tr><td>${line.cantidad}</td><td>${escapeCell(line.nombre ?? line.producto_id)}<br><small>${escapeCell(line.codigo ?? '')}${!isSale ? `<br>${escapeCell(line.taxTreatment ?? 'Tributo histórico no informado')}` : ''}</small></td><td>${moneyCurrency(line.precio, currency)}</td><td>${moneyCurrency(isSale ? line.cantidad * line.precio : line.lineTotal ?? line.cantidad * line.precio, currency)}</td></tr>`).join('')
+      : `<tr><td>1</td><td>${escapeCell(record.name)}<br><small>${escapeCell(record.detail)}</small></td><td>${moneyCurrency(record.amount ?? 0, currency)}</td><td>${moneyCurrency(record.amount ?? 0, currency)}</td></tr>`
     printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeCell(docTitle)} ${escapeCell(docNumber)} · EnterpriseCloud</title>`
       + `<style>body{font-family:Arial,sans-serif;color:#111;margin:0;padding:24px}h1{font-size:22px;margin:0}p{margin:4px 0;font-size:12px}.head{display:flex;justify-content:space-between;gap:16px;border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:14px}.brand{display:flex;align-items:center;gap:12px}.logo{height:100px;width:auto}.doc{border:2px solid #111;padding:10px 14px;text-align:center}.doc strong{font-size:18px}.meta{display:grid;gap:2px;margin-bottom:14px}.meta small{color:#555}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border:1px solid #999;text-align:left}th{background:#eee}td:nth-child(1),td:nth-child(3),td:nth-child(4){text-align:right}.totals{margin-left:auto;width:240px;margin-top:12px}.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:12px}.totals .grand{font-size:15px;font-weight:bold;border-top:2px solid #111;margin-top:4px;padding-top:8px}.foot{margin-top:18px;color:#555;font-size:10px}</style></head><body>`
       + `<div class="head"><div class="brand"><img class="logo" src="${logoUrl}" alt="Logotipo de EnterpriseCloud"><div><h1>${escapeCell(emitterName)}</h1><p>${escapeCell(emitterDetail)}</p></div></div><div class="doc"><strong>${escapeCell(docTitle)}</strong><p>${escapeCell(docNumber)}</p><p>${escapeCell(record.date)} · ${escapeCell(record.status)}</p></div></div>`
       + `<div class="meta"><p><strong>${counterLabel}:</strong> ${escapeCell(counterName)}${counterCode ? ` · ${escapeCell(counterCode)}` : ''}</p>`
       + (isSale && record.medio ? `<p><strong>Medio de pago:</strong> ${escapeCell(record.medio)}</p>` : '')
-      + (!isSale ? `<p><strong>Fase:</strong> ${escapeCell(record.status)}${record.fechaLimite ? ` · <strong>Límite:</strong> ${escapeCell(record.fechaLimite)}` : ''}${record.comprobanteTipo ? ` · <strong>Recepción:</strong> ${escapeCell(record.comprobanteTipo)}${record.comprobanteNumero ? ` ${escapeCell(record.comprobanteNumero)}` : ''}` : ''}</p>` : '')
+       + (!isSale ? `<p><strong>Fase:</strong> ${escapeCell(record.status)} · <strong>Moneda:</strong> ${currency}${record.exchangeRate ? ` · <strong>Tipo de cambio:</strong> ${record.exchangeRate}` : ''}${record.fechaLimite ? ` · <strong>Límite:</strong> ${escapeCell(record.fechaLimite)}` : ''}${record.comprobanteTipo ? ` · <strong>Recepción:</strong> ${escapeCell(record.comprobanteTipo)}${record.comprobanteNumero ? ` ${record.comprobanteNumero}` : ''}` : ''}</p>` : '')
       + `</div>`
       + `<table><thead><tr><th>Cant.</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead><tbody>${rows}</tbody></table>`
-      + `<div class="totals"><div><span>Base imponible</span><span>${money(base)}</span></div>${discount > 0 ? `<div><span>Descuento ${discount}%</span><span>-${money(subtotal - netSubtotal)}</span></div>` : ''}<div><span>IGV 18%</span><span>${money(igv)}</span></div><div class="grand"><span>Total</span><span>${money(total)}</span></div></div>`
+       + `<div class="totals">${isSale || purchaseFiscalComplete ? `<div><span>Base imponible</span><span>${moneyCurrency(base ?? 0, currency)}</span></div>` : `<div><span>Desglose tributario</span><span>No informado; sin recálculo</span></div>`}${discount > 0 ? `<div><span>Descuento ${discount}%</span><span>-${moneyCurrency(subtotal - netSubtotal, currency)}</span></div>` : ''}${isSale || purchaseFiscalComplete ? `<div><span>${isSale ? 'IGV 18%' : 'Impuestos'}</span><span>${moneyCurrency(igv ?? 0, currency)}</span></div>` : ''}<div class="grand"><span>Total persistido</span><span>${moneyCurrency(total, currency)}</span></div></div>`
       + `<p class="foot">Documento generado desde EnterpriseCloud · ${lines.length} ${lines.length === 1 ? 'línea' : 'líneas'}.</p>`
       + `<script>window.onload=function(){var logo=document.querySelector('img.logo');var done=false;function print(){if(done)return;done=true;window.print()}if(logo&&!logo.complete){logo.onload=print;logo.onerror=print;setTimeout(print,2000)}else{print()}}<\/script></body></html>`)
     printWindow.document.close()
@@ -124,8 +128,8 @@ export default function VoucherModal({ page, record, onClose }: { page: 'sales' 
                   <tr key={line.producto_id}>
                     <td>{line.cantidad}</td>
                     <td><strong>{line.nombre ?? line.producto_id}</strong><small>{line.codigo ?? ''}</small></td>
-                    <td>{money(line.precio)}</td>
-                    <td>{money(line.cantidad * line.precio)}</td>
+                    <td>{moneyCurrency(line.precio, currency)}</td>
+                    <td>{moneyCurrency(isSale ? line.cantidad * line.precio : line.lineTotal ?? line.cantidad * line.precio, currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -133,14 +137,14 @@ export default function VoucherModal({ page, record, onClose }: { page: 'sales' 
           ) : (
             <table className="voucher-table">
               <thead><tr><th>Cant.</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead>
-              <tbody><tr><td>1</td><td><strong>{record.name}</strong><small>{record.detail}</small></td><td>{money(record.amount ?? 0)}</td><td>{money(record.amount ?? 0)}</td></tr></tbody>
+              <tbody><tr><td>1</td><td><strong>{record.name}</strong><small>{record.detail}</small></td><td>{moneyCurrency(record.amount ?? 0, currency)}</td><td>{moneyCurrency(record.amount ?? 0, currency)}</td></tr></tbody>
             </table>
           )}
           <div className="voucher-totals">
-            <div><span>Base imponible</span><span>{money(base)}</span></div>
-            {discount > 0 && <div><span>Descuento {discount}%</span><span>−{money(subtotal - netSubtotal)}</span></div>}
-            <div><span>IGV 18%</span><span>{money(igv)}</span></div>
-            <div className="grand"><span>Total</span><span>{money(total)}</span></div>
+            {isSale || purchaseFiscalComplete ? <div><span>Base imponible</span><span>{moneyCurrency(base ?? 0, currency)}</span></div> : <div><span>Desglose tributario</span><span>No informado; sin recálculo histórico</span></div>}
+            {discount > 0 && <div><span>Descuento {discount}%</span><span>−{moneyCurrency(subtotal - netSubtotal, currency)}</span></div>}
+            {(isSale || purchaseFiscalComplete) && <div><span>{isSale ? 'IGV 18%' : 'Impuestos'}</span><span>{moneyCurrency(igv ?? 0, currency)}</span></div>}
+            <div className="grand"><span>Total persistido</span><span>{moneyCurrency(total, currency)}</span></div>
           </div>
           <p className="voucher-foot">Documento generado desde EnterpriseCloud · <span className={`status-pill ${statusTone(record.status)}`}>{record.status}</span></p>
         </div>

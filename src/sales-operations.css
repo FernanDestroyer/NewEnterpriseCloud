@@ -1,0 +1,133 @@
+/* Ventas: densidad de trabajo ERP. Todos los tonos proceden de --ws-*. */
+.ws-sales-page { display: grid; align-content: start; gap: 10px; min-width: 0; color: var(--ws-text); font-size: .8125rem; }
+.ws-sales-page > .ws-card { min-width: 0; }
+.ws-sales-page :is(h2, h3) { color: var(--ws-text); letter-spacing: -.015em; }
+.ws-sales-page :is(p, small) { line-height: 1.4; }
+.ws-sales-page .ws-sales-heading { gap: 12px; margin: 0; padding: 0 0 9px; border-bottom: 1px solid var(--ws-border); }
+.ws-sales-page .ws-sales-heading h1 { margin: 2px 0 1px; font-size: 1.125rem; line-height: 1.25; letter-spacing: -.02em; }
+.ws-sales-page .ws-sales-heading .ws-eyebrow { font-size: .625rem; letter-spacing: .08em; }
+.ws-sales-page .ws-sales-heading p { font-size: .75rem; line-height: 1.4; }
+
+/* Navegación plana: sin caja sobredimensionada alrededor de las pestañas. */
+.ws-sales-page .ws-sales-tabs { display: flex; flex-wrap: nowrap; gap: 2px; max-width: 100%; margin: 0; padding: 0; overflow-x: auto; border: 0; border-bottom: 1px solid var(--ws-border); border-radius: 0; background: transparent; box-shadow: none; scrollbar-color: var(--ws-border) transparent; }
+.ws-sales-page .ws-sales-tabs button { position: relative; flex: 0 0 auto; min-height: 32px; padding: 7px 10px; border: 0; border-radius: 0; background: transparent; color: var(--ws-muted); font-size: .75rem; font-weight: 600; white-space: nowrap; box-shadow: none; }
+.ws-sales-page .ws-sales-tabs button:hover { color: var(--ws-text); background: var(--ws-raised); }
+.ws-sales-page .ws-sales-tabs button[aria-selected='true'] { color: var(--ws-primary); background: transparent; box-shadow: inset 0 -2px 0 var(--ws-primary); }
+.ws-sales-page .ws-notice { min-height: 0; margin: 0; padding: 8px 11px; border-radius: 7px; font-size: .75rem; line-height: 1.4; }
+.ws-sales-page .ws-sales-info { color: var(--ws-muted); background: var(--ws-raised); border: 1px solid var(--ws-border); }
+.ws-sales-page .ws-sales-success { color: var(--ws-green); background: var(--ws-green-soft); border: 1px solid var(--ws-green); }
+.ws-sales-page .ws-sales-warning { color: var(--ws-amber); background: var(--ws-amber-soft); border: 1px solid var(--ws-amber); }
+.ws-sales-page--sunat .ws-sales-info { display: none; }
+
+/* Compositor: cabecera, datos, renglones y pie, sin cajas dentro de cajas. */
+.ws-sales-page :is(.ws-sales-form, .ws-sales-list, .ws-sales-pending) { border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); box-shadow: 0 1px 3px color-mix(in srgb, var(--ws-text) 5%, transparent); }
+.ws-sales-page .ws-sales-form { display: grid; gap: 0; padding: 0; }
+.ws-sales-form-head { padding: 11px 15px 9px; border-bottom: 1px solid var(--ws-border); }
+.ws-sales-kicker { display: block; margin-bottom: 2px; color: var(--ws-primary); font-size: .625rem; font-weight: 750; letter-spacing: .08em; }
+.ws-sales-page .ws-sales-form h2, .ws-sales-page .ws-sales-list > h2, .ws-sales-page .ws-sales-pending > h2 { margin: 0; font-size: .875rem; font-weight: 750; line-height: 1.3; }
+.ws-sales-page .ws-form-grid.ws-sales-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 9px; align-items: end; padding: 11px 15px; }
+.ws-sales-product-section { min-width: 0; margin: 0 15px; border-top: 1px solid var(--ws-border); container-type: inline-size; }
+.ws-sales-product-heading { display: flex; align-items: baseline; gap: 9px; padding: 9px 0 6px; }
+.ws-sales-page .ws-sales-product-heading h3 { margin: 0; font-size: .8rem; font-weight: 750; }
+.ws-sales-product-heading small { color: var(--ws-muted); font-size: .7rem; }
+.ws-sales-page .ws-form-grid.ws-sales-line { display: grid; grid-template-columns: minmax(220px, 2.25fr) minmax(80px, .7fr) minmax(100px, .85fr) minmax(125px, 1fr) auto; align-items: end; gap: 8px; margin: 0; padding: 7px 0; border: 0; border-bottom: 1px solid var(--ws-border); border-radius: 0; background: transparent; }
+.ws-sales-line:last-child { border-bottom: 0; }
+.ws-sales-line:hover { background: color-mix(in srgb, var(--ws-raised) 55%, var(--ws-surface)); }
+.ws-sales-line label small { display: block; margin-top: 2px; font-size: .6875rem; font-weight: 500; }
+.ws-sales-over-limit { color: var(--ws-red); }
+.ws-sales-page :is(.ws-sales-form, .ws-sales-dialog, .sales-print-controls) label:not(.ws-sales-check) { display: grid; align-content: start; gap: 4px; min-width: 0; color: var(--ws-muted); font-size: .75rem; font-weight: 650; }
+.ws-sales-page :is(.ws-sales-form, .ws-sales-dialog, .sales-print-controls) :is(select, input:not([type='checkbox'])) { box-sizing: border-box; width: 100%; min-height: 33px; padding: 5px 9px; border: 1px solid var(--ws-border); border-radius: 6px; background: var(--ws-surface); color: var(--ws-text); font: inherit; font-size: .8125rem; font-weight: 500; transition: border-color .16s, box-shadow .16s; }
+.ws-sales-page :is(.ws-sales-form, .ws-sales-dialog, .sales-print-controls) :is(select, input:not([type='checkbox'])):hover:not(:disabled) { border-color: var(--ws-subtle); }
+.ws-sales-page :is(.ws-sales-form, .ws-sales-dialog, .sales-print-controls) :is(select, input:not([type='checkbox'])):focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 1px; border-color: var(--ws-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ws-primary) 16%, transparent); }
+.ws-sales-page :is(select, input):disabled { opacity: .62; cursor: not-allowed; }
+.ws-sales-page :is(select, input)::placeholder { color: var(--ws-subtle); }
+.workspace-shell[data-theme='dark'] .ws-sales-page :is(select, input) { color-scheme: dark; }
+.ws-sales-form-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 9px; padding: 9px 15px; background: var(--ws-raised); border-top: 1px solid var(--ws-border); }
+.ws-sales-page .ws-sales-total { display: inline-flex; gap: 8px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--ws-text); font-size: .8125rem; font-weight: 750; white-space: nowrap; }
+.ws-sales-form-footer .ws-heading-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-sales-page .ws-button { min-height: 30px; padding: 5px 9px; border-radius: 6px; font-size: .75rem; line-height: 1.25; box-shadow: none; }
+.ws-sales-page .ws-button:disabled { opacity: .55; cursor: not-allowed; }
+.ws-sales-page .ws-sales-line .ws-sales-remove { min-height: 33px; }
+
+/* Listado operativo compacto. */
+.ws-sales-page .ws-sales-list > h2, .ws-sales-page .ws-sales-pending > h2 { padding: 10px 14px; border-bottom: 1px solid var(--ws-border); }
+.ws-sales-page .ws-sales-pending > p { margin: 0; padding: 8px 14px; color: var(--ws-muted); font-size: .75rem; }
+.ws-sales-sunat-state { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr); gap: 0; padding: 0 14px; }
+.ws-sales-sunat-summary, .ws-sales-sunat-provider { padding: 17px 2px; }
+.ws-sales-sunat-summary { padding-right: 20px; }
+.ws-sales-sunat-provider { padding-left: 20px; border-left: 1px solid var(--ws-border); }
+.ws-sales-page .ws-sales-sunat-summary h3 { margin: 2px 0 4px; font-size: .875rem; font-weight: 750; }
+.ws-sales-sunat-provider > span { display: block; margin-bottom: 5px; color: var(--ws-muted); font-size: .6875rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.ws-sales-sunat-provider strong { display: inline-flex; align-items: center; gap: 6px; color: var(--ws-amber); font-size: .8125rem; }
+.ws-sales-sunat-provider strong::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--ws-amber); }
+.ws-sales-sunat-state p { margin: 0; color: var(--ws-muted); font-size: .75rem; }
+.ws-sales-page .ws-sales-sunat-disclaimer { grid-column: 1 / -1; padding: 9px 2px; border-top: 1px solid var(--ws-border); color: var(--ws-amber); }
+.ws-sales-page .ws-empty-compact { margin: 8px 12px; padding: 16px; border: 1px dashed var(--ws-border); border-radius: 7px; background: var(--ws-raised); font-size: .75rem; }
+.ws-sales-table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+.workspace-shell.erp-shell .ws-sales-page .ws-sales-table th { padding: 8px 11px; border: 0; border-bottom: 1px solid var(--ws-border); background: var(--ws-raised); color: var(--ws-muted); font-family: inherit; font-size: .6875rem; font-weight: 650; letter-spacing: .05em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.workspace-shell.erp-shell .ws-sales-page .ws-sales-table th:nth-child(4) { text-align: right; }
+.workspace-shell.erp-shell .ws-sales-page .ws-sales-table td { padding: 8px 11px; border: 0; border-bottom: 1px solid var(--ws-border); color: var(--ws-text); vertical-align: middle; }
+.ws-sales-table tbody tr { transition: background .14s ease; }
+.ws-sales-table tbody tr:hover { background: var(--ws-raised); }
+.ws-sales-table tbody tr:last-child td { border-bottom: 0; }
+.ws-sales-table td > small, .ws-sales-table td > strong + small { display: block; margin-top: 2px; color: var(--ws-muted); font-size: .6875rem; }
+.workspace-shell.erp-shell .ws-sales-page .ws-sales-table .record-id { color: var(--ws-muted); background: var(--ws-raised); font-size: .75rem; }
+.workspace-shell.erp-shell[data-theme='light'] .ws-sales-page .ws-sales-table td:nth-child(2) strong,
+.workspace-shell.erp-shell[data-theme='light'] .ws-sales-page .ws-sales-table .record-value { color: var(--ws-text) !important; }
+.workspace-shell.erp-shell[data-theme='light'] .ws-sales-page .ws-sales-table td:nth-child(2) small,
+.workspace-shell.erp-shell[data-theme='light'] .ws-sales-page .ws-sales-table .record-date { color: var(--ws-muted) !important; }
+.ws-sales-table .record-value { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; }
+.ws-sales-table .row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.ws-sales-table .row-actions .ws-button { min-height: 27px; padding: 4px 7px; white-space: nowrap; }
+.ws-sales-status { display: inline-flex; align-items: center; justify-content: center; min-height: 21px; padding: 2px 7px; border: 1px solid currentColor; border-radius: 999px; font-size: .6875rem; font-weight: 700; line-height: 1.15; text-transform: capitalize; white-space: nowrap; }
+.ws-sales-status.is-amber { color: var(--ws-amber); background: var(--ws-amber-soft); }
+.ws-sales-status.is-red { color: var(--ws-red); background: var(--ws-red-soft); }
+.ws-sales-status.is-green { color: var(--ws-green); background: var(--ws-green-soft); }
+
+/* Historial, colas de despacho y devolución. */
+.ws-sales-history { margin: 9px 12px 12px; padding: 10px 12px; border: 1px solid var(--ws-border); border-radius: 7px; background: var(--ws-raised); }
+.ws-sales-page .ws-sales-history h3 { margin: 0 0 6px; font-size: .8125rem; }
+.ws-sales-history > div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--ws-border); }
+.ws-sales-history span { color: var(--ws-muted); }
+.ws-sales-action-list { display: grid; gap: 0; }
+.ws-sales-action-list > div:not(.ws-empty-compact) { display: flex; align-items: center; justify-content: space-between; gap: 9px; min-height: 49px; padding: 8px 13px; border-bottom: 1px solid var(--ws-border); transition: background .14s; }
+.ws-sales-action-list > div:not(.ws-empty-compact):last-child { border-bottom: 0; }
+.ws-sales-action-list > div:not(.ws-empty-compact):hover { background: var(--ws-raised); }
+.ws-sales-action-list strong, .ws-sales-action-list small { display: block; }
+.ws-sales-action-list small { margin-top: 2px; color: var(--ws-muted); font-size: .6875rem; }
+.ws-sales-credit-line { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 6px 8px; border-bottom: 1px solid var(--ws-border); }
+.ws-sales-credit-line:nth-of-type(even) { background: var(--ws-raised); }
+.ws-sales-credit-line small { display: block; color: var(--ws-muted); font-weight: 500; }
+.ws-sales-credit-line input { width: 86px !important; flex: 0 0 86px; }
+.ws-sales-check { display: flex; align-items: center; gap: 7px; color: var(--ws-text); font-weight: 600; }
+.ws-sales-check input { width: 15px; height: 15px; accent-color: var(--ws-primary); }
+.workspace-shell.erp-shell .ws-sales-page .voucher-modal.ws-sales-dialog { display: grid; gap: 9px; width: min(640px, 100%); padding: 16px; border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); color: var(--ws-text); }
+.ws-sales-dialog .modal-heading { margin: 0 0 3px; }
+.workspace-shell.erp-shell .ws-sales-page .voucher-modal .modal-heading h2 { margin: 0; color: var(--ws-text); font-size: 1rem; }
+.workspace-shell.erp-shell .ws-sales-page .voucher-modal .modal-heading p { color: var(--ws-muted); }
+.ws-sales-dialog > p { margin: 0; color: var(--ws-muted); font-size: .75rem; }
+.ws-sales-page .ws-sales-dialog label.ws-sales-credit-line { display: flex; }
+.ws-sales-page .ws-sales-dialog .ws-notice { margin: 0; }
+.ws-sales-page .ws-sales-dialog .modal-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin: 0; padding: 9px 0 0; border-top: 1px solid var(--ws-border); background: var(--ws-surface); }
+
+@container (max-width: 720px) {
+  .ws-sales-page .ws-sales-product-section .ws-sales-line.ws-form-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, .7fr); }
+  .ws-sales-product-section .ws-sales-line > label:first-child { grid-column: 1 / -1; }
+  .ws-sales-product-section .ws-sales-line > label:nth-of-type(4) { grid-column: 1 / -1; }
+  .ws-sales-product-section .ws-sales-remove { justify-self: start; }
+}
+@media (max-width: 700px) {
+  .ws-sales-page { gap: 8px; }
+  .ws-sales-sunat-state { grid-template-columns: minmax(0, 1fr); }
+  .ws-sales-sunat-summary, .ws-sales-sunat-provider { padding: 12px 2px; }
+  .ws-sales-sunat-provider { border-left: 0; border-top: 1px solid var(--ws-border); }
+  .ws-sales-history > div, .ws-sales-action-list > div:not(.ws-empty-compact) { flex-direction: column; align-items: stretch; }
+  .ws-sales-page .ws-form-grid.ws-sales-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ws-sales-page .ws-form-grid.ws-sales-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ws-sales-form-footer { align-items: stretch; }
+  .ws-sales-dialog .ws-sales-credit-line { align-items: stretch; }
+}
+@media (max-width: 420px) {
+  .ws-sales-page .ws-form-grid.ws-sales-fields { grid-template-columns: minmax(0, 1fr); }
+  .ws-sales-page .ws-form-grid.ws-sales-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

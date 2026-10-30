@@ -2,7 +2,7 @@ import { requireSupabase } from '../lib/supabase'
 import { salePayableTotal } from '../data/payments'
 import { consumesCreditLine } from '../data/workspace'
 import { DATA_PAGES } from '../data/catalog'
-import { formatWhen, totalWithIgv } from '../data/helpers'
+import { formatWhen } from '../data/helpers'
 import type { CustomerImportRow, PurchaseImportRow, SalesImportRow, SupplierImportReport, SupplierImportRow } from './import'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 
@@ -39,6 +39,9 @@ export type RecordInput = {
   documento?: string | null
   /** Compras: fecha límite o aproximada (YYYY-MM-DD). null = sin fecha. */
   fecha_limite?: string | null
+  /** Compras: moneda base PEN o USD y cambio manual al confirmar. */
+  moneda?: 'PEN' | 'USD'
+  exchange_rate?: number | null
   /** Ventas: descuento % sobre el subtotal (0-100). undefined = no tocar. */
   descuento?: number
   /** Finanzas: medio con que se canceló la cuenta. undefined = no tocar. */
@@ -117,6 +120,12 @@ function toRecord(page: DataPage, row: Row): RecordItem {
     item.purchaseId = typeof row.compra_id === 'string' ? row.compra_id : null
     item.dueAt = typeof row.fecha_vencimiento === 'string' ? row.fecha_vencimiento : null
     item.medio = typeof row.medio_pago === 'string' && row.medio_pago ? row.medio_pago : null
+    item.moneda = row.moneda === 'USD' ? 'USD' : 'PEN'
+    item.exchangeRate = row.exchange_rate == null ? null : Number(row.exchange_rate)
+  }
+  if (page === 'purchases') {
+    item.moneda = row.moneda === 'USD' ? 'USD' : 'PEN'
+    item.exchangeRate = row.exchange_rate == null ? null : Number(row.exchange_rate)
   }
   // Medio de pago de la venta (si su migración ya se ejecutó).
   if (page === 'sales') {
@@ -671,29 +680,24 @@ export async function importSales(rows: SalesImportRow[]): Promise<ModuleImportR
 /** Importa compras históricas de cabecera; no genera movimientos de stock sin líneas de producto. */
 export async function importPurchases(rows: PurchaseImportRow[]): Promise<ModuleImportReport> {
   const client = requireSupabase()
-  const report: ModuleImportReport = { created: 0, skipped: [], failed: [] }
-  const codes = [...new Set(rows.map(row => `IMP-${row.codigo.trim()}`))]
-  const { data: existing, error: existingError } = await client.from('compras').select('codigo').in('codigo', codes)
-  if (existingError) throw existingError
-  const existingCodes = new Set(((existing ?? []) as Array<{ codigo: string }>).map(row => row.codigo))
-  const relationCodes = [...new Set(rows.map(row => row.proveedorCodigo).filter(Boolean))]
-  const supplierIds = new Map<string, string>()
-  if (relationCodes.length) {
-    const { data, error } = await client.from('proveedores').select('id,codigo').in('codigo', relationCodes)
-    if (error) throw error
-    for (const row of (data ?? []) as Array<{ id: string; codigo: string }>) supplierIds.set(row.codigo, row.id)
-  }
-  for (const row of rows) {
-    const reference = `IMP-${row.codigo.trim()}`
-    if (existingCodes.has(reference)) { report.skipped.push({ line: row.line, reference: row.codigo, reason: 'El código ya fue importado.' }); continue }
-    if (row.proveedorCodigo && !supplierIds.has(row.proveedorCodigo)) { report.failed.push({ line: row.line, reference: row.codigo, reason: `No existe el proveedor ${row.proveedorCodigo}.` }); continue }
-    try {
-      await insertPurchaseWithLines({ reference: row.codigo, created_at: row.fecha ? `${row.fecha}T12:00:00.000Z` : undefined, name: row.proveedorNombre, detail: row.detalle, status: row.estado, amount: row.monto, proveedor_id: row.proveedorCodigo ? supplierIds.get(row.proveedorCodigo) : null, fecha_limite: row.fechaLimite || null, comprobante_tipo: row.comprobanteTipo || null, comprobante_numero: row.comprobanteNumero || null }, [])
-      existingCodes.add(reference)
-      report.created++
-    } catch (error) { report.failed.push({ line: row.line, reference: row.codigo, reason: friendlyError(error) }) }
-  }
-  return report
+  const { data, error } = await client.rpc('importar_compras_historicas_v1', {
+    p_rows: rows.map(row => ({
+      line: row.line,
+      codigo: row.codigo.trim(),
+      fecha: row.fecha || null,
+      proveedor_codigo: row.proveedorCodigo || null,
+      proveedor_nombre: row.proveedorNombre,
+      detalle: row.detalle,
+      monto: row.monto,
+      estado: row.estado,
+      fecha_limite: row.fechaLimite || null,
+      comprobante_tipo: row.comprobanteTipo || null,
+      comprobante_numero: row.comprobanteNumero || null,
+    })),
+  })
+  if (error) throw error
+  const result = data as { created?: number; skipped?: ModuleImportIssue[] } | null
+  return { created: Number(result?.created ?? 0), skipped: result?.skipped ?? [], failed: [] }
 }
 
 export async function updateRecord(page: DataPage, code: string, input: RecordInput): Promise<RecordItem> {
@@ -799,7 +803,15 @@ export async function updateStatuses(page: DataPage, codes: string[], status: Re
 // Además mueven stock y generan la cuenta por cobrar / por pagar (cobranzas).
 // -----------------------------------------------------------------------------
 
-export type LineInput = { producto_id: string; cantidad: number; precio: number }
+export type TaxTreatment = 'Gravado' | 'Exonerado' | 'Inafecto'
+export type LineInput = {
+  producto_id: string
+  cantidad: number
+  precio: number
+  detalle_compra_id?: string
+  tratamiento_tributario?: TaxTreatment | null
+  tasa_tributaria?: number | null
+}
 
 function lineTotal(lines: LineInput[]) {
   return Math.round(lines.reduce((sum, line) => sum + line.cantidad * line.precio, 0) * 100) / 100
@@ -813,8 +825,10 @@ function sameLines(left: LineInput[], right: LineInput[]) {
 function assertValidLines(lines: LineInput[]) {
   for (const line of lines) {
     if (!line.producto_id) throw new Error('Elige un producto válido en cada línea.')
-    if (!Number.isInteger(line.cantidad) || line.cantidad <= 0) throw new Error('La cantidad debe ser un entero mayor a cero.')
-    if (!Number.isFinite(line.precio) || line.precio < 0) throw new Error('El precio/costo debe ser cero o mayor.')
+    if (!Number.isInteger(line.cantidad) || line.cantidad <= 0 || line.cantidad > 2147483647) throw new Error('La cantidad debe ser un entero positivo dentro del límite permitido.')
+    if (!Number.isFinite(line.precio) || line.precio < 0 || line.precio > 999999999999.99 || Number(line.precio.toFixed(2)) !== line.precio) {
+      throw new Error('El precio/costo debe ser finito, no negativo y tener hasta 2 decimales dentro del límite permitido.')
+    }
   }
 }
 
@@ -891,22 +905,58 @@ export async function fetchDocumentLines(page: 'sales' | 'purchases' | 'quotes',
   }
   const { data, error } = await client
     .from('detalle_compras')
-    .select('id, proveedor_producto_id, cantidad, costo_unitario, proveedor_productos(codigo, nombre)')
+    .select('id, proveedor_producto_id, descripcion, cantidad, costo_unitario, tratamiento_tributario,tasa_tributaria,base_imponible,impuesto,total_linea, proveedor_productos(codigo, nombre)')
     .eq('compra_id', docRowId)
   if (error) throw error
-  return (data as unknown as Array<{ id: string; proveedor_producto_id: string | null; cantidad: number; costo_unitario: number; proveedor_productos: { codigo: string; nombre: string } | null }>)
-    .filter((row) => row.proveedor_producto_id)
+  return (data as unknown as Array<{ id: string; proveedor_producto_id: string | null; descripcion: string | null; cantidad: number; costo_unitario: number; tratamiento_tributario: TaxTreatment | null; tasa_tributaria: number | null; base_imponible: number | null; impuesto: number | null; total_linea: number | null; proveedor_productos: { codigo: string; nombre: string } | null }>)
+    .filter((row) => row.proveedor_producto_id || row.descripcion)
     .map((row) => ({
       rowId: row.id,
-      producto_id: row.proveedor_producto_id as string,
+      producto_id: row.proveedor_producto_id ?? '',
       cantidad: Number(row.cantidad),
       precio: Number(row.costo_unitario),
+      taxTreatment: row.tratamiento_tributario,
+      taxRate: row.tasa_tributaria == null ? null : Number(row.tasa_tributaria),
+      taxBase: row.base_imponible == null ? null : Number(row.base_imponible),
+      taxAmount: row.impuesto == null ? null : Number(row.impuesto),
+      lineTotal: row.total_linea == null ? null : Number(row.total_linea),
       codigo: row.proveedor_productos?.codigo,
-      nombre: row.proveedor_productos?.nombre,
+      nombre: row.proveedor_productos?.nombre ?? row.descripcion ?? undefined,
     }))
 }
 
-export type PurchaseReceiptInputLine = { detalle_compra_id: string; cantidad: number }
+export type PurchaseFiscalSummary = { base: number | null; tax: number | null; total: number | null; complete: boolean }
+
+export async function fetchPurchaseFiscalSummaries(compraIds: string[]): Promise<Map<string, PurchaseFiscalSummary>> {
+  const ids = [...new Set(compraIds)]
+  if (!ids.length) return new Map()
+  const { data, error } = await requireSupabase().from('detalle_compras')
+    .select('compra_id,base_imponible,impuesto,total_linea')
+    .in('compra_id', ids)
+  if (error) throw error
+  const groups = new Map<string, Array<{ base: number | null; tax: number | null; total: number | null }>>()
+  for (const raw of data ?? []) {
+    const row = raw as { compra_id: string; base_imponible: number | null; impuesto: number | null; total_linea: number | null }
+    const rows = groups.get(row.compra_id) ?? []
+    rows.push({
+      base: row.base_imponible == null ? null : Number(row.base_imponible),
+      tax: row.impuesto == null ? null : Number(row.impuesto),
+      total: row.total_linea == null ? null : Number(row.total_linea),
+    })
+    groups.set(row.compra_id, rows)
+  }
+  return new Map([...groups].map(([id, rows]) => {
+    const complete = rows.length > 0 && rows.every(row => row.base !== null && row.tax !== null && row.total !== null)
+    return [id, complete ? {
+      base: rows.reduce((sum, row) => sum + (row.base ?? 0), 0),
+      tax: rows.reduce((sum, row) => sum + (row.tax ?? 0), 0),
+      total: rows.reduce((sum, row) => sum + (row.total ?? 0), 0),
+      complete,
+    } : { base: null, tax: null, total: null, complete }]
+  }))
+}
+
+export type PurchaseReceiptInputLine = { detalle_compra_id: string; cantidad: number; devolucion_detalle_id?: string }
 export type ActiveWarehouse = { id: string; nombre: string; sucursal_id: string }
 
 export async function fetchActiveWarehouses(): Promise<ActiveWarehouse[]> {
@@ -922,21 +972,6 @@ export async function fetchWarehouseStocks(almacenId: string): Promise<Map<strin
   return new Map(((data ?? []) as Array<{ producto_id: string; cantidad: number }>).map(row => [row.producto_id, Number(row.cantidad)]))
 }
 
-export async function fetchPurchaseReceiptProgress(compraId: string): Promise<Map<string, number>> {
-  const client = requireSupabase()
-  const { data: receipts, error: receiptsError } = await client.from('recepciones_compra').select('id').eq('compra_id', compraId)
-  if (receiptsError) throw receiptsError
-  const ids = (receipts ?? []).map(row => String((row as { id: string }).id))
-  if (!ids.length) return new Map()
-  const { data, error } = await client.from('detalle_recepciones_compra').select('detalle_compra_id,cantidad').in('recepcion_id', ids)
-  if (error) throw error
-  const progress = new Map<string, number>()
-  for (const row of (data ?? []) as Array<{ detalle_compra_id: string; cantidad: number }>) {
-    progress.set(row.detalle_compra_id, (progress.get(row.detalle_compra_id) ?? 0) + Number(row.cantidad))
-  }
-  return progress
-}
-
 export async function registerPurchaseReceipt(input: {
   compraId: string
   almacenId: string
@@ -945,7 +980,7 @@ export async function registerPurchaseReceipt(input: {
   comprobanteTipo?: string | null
   comprobanteNumero?: string | null
 }): Promise<string> {
-  const { data, error } = await requireSupabase().rpc('registrar_recepcion_compra', {
+  const { data, error } = await requireSupabase().rpc('registrar_recepcion_compra_v2', {
     p_compra_id: input.compraId,
     p_almacen_id: input.almacenId,
     p_lineas: input.lineas,
@@ -1054,13 +1089,9 @@ export async function completeLinkedDocument(pagoCodigo: string, tipo: 'cobrar' 
     return header.codigo
   }
   if (tipo === 'pagar' && link?.compra_id) {
-    const { data: compra } = await client.from('compras').select('codigo, estado').eq('id', link.compra_id).single()
-    const header = (compra ?? null) as { codigo: string; estado: string } | null
-    if (!header || header.estado === 'Pagada') return null
-    const { data: updated, error: updateError } = await client.from('compras').update({ estado: 'Pagada' }).eq('id', link.compra_id).select('codigo')
+    const { data: codigo, error: updateError } = await client.rpc('marcar_compra_pagada_tesoreria_v1', { p_compra_id: link.compra_id })
     if (updateError) throw updateError
-    if (!(updated as Array<{ codigo: string }> | null)?.length) throw { code: '42501', message: 'Tu rol necesita permiso de editar compras para marcarla como pagada.' }
-    return header.codigo
+    return typeof codigo === 'string' ? codigo : null
   }
   return null
 }
@@ -1307,85 +1338,40 @@ export async function insertSaleWithLines(input: RecordInput, lines: LineInput[]
   return toRecord('sales', header as Row)
 }
 
-type CatalogRow = { id: string; nombre: string; detalle: string; costo: number; producto_id: string | null }
-
-async function getCatalogRows(ids: string[]): Promise<Map<string, CatalogRow>> {
-  const unique = [...new Set(ids)]
-  if (!unique.length) return new Map()
-  const { data, error } = await requireSupabase()
-    .from('proveedor_productos')
-    .select('id, nombre, detalle, costo, producto_id')
-    .in('id', unique)
-  if (error) throw error
-  return new Map(
-    (data as Array<{ id: string; nombre: string; detalle: string; costo: number; producto_id: string | null }>).map((row) => [
-      row.id,
-      { id: row.id, nombre: String(row.nombre), detalle: String(row.detalle ?? ''), costo: Number(row.costo), producto_id: row.producto_id },
-    ]),
-  )
-}
-
-async function assertCatalogLines(lines: LineInput[]): Promise<Map<string, CatalogRow>> {
-  const catalog = await getCatalogRows(lines.map((line) => line.producto_id))
-  for (const line of lines) {
-    if (!catalog.has(line.producto_id)) throw new Error('Un producto del catálogo ya no existe. Recarga y vuelve a elegir.')
-  }
-  return catalog
-}
-
 export async function insertPurchaseWithLines(input: RecordInput, lines: LineInput[]): Promise<RecordItem> {
   assertValidLines(lines)
   const client = requireSupabase()
   const total = lines.length ? lineTotal(lines) : (input.amount ?? 0)
   const headerInput: RecordInput = { ...input, amount: total }
 
-  // Las órdenes ingresadas desde el formulario se registran atómicamente.
-  // Las importaciones históricas conservan su código y flujo de legado.
+  // Las órdenes operativas se escriben únicamente mediante RPC.
   if (input.source !== 'import' && !input.reference) {
     if (!input.proveedor_id) throw new Error('Selecciona un proveedor registrado para crear la orden.')
     if (!input.idempotencyKey) throw new Error('No se pudo identificar esta solicitud. Cierra y vuelve a abrir el formulario.')
-    const { data: purchaseId, error } = await client.rpc('crear_orden_compra_operativa', {
-      p_proveedor_id: input.proveedor_id,
-      p_detalle: input.detail,
-      p_fecha_limite: input.fecha_limite || null,
-      p_monto_manual: input.amount ?? 0,
-      p_lineas: lines.map(line => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio })),
-      p_idempotency_key: input.idempotencyKey,
-    })
+    const currency = input.moneda ?? 'PEN'
+    const linePayload = lines.map(line => ({
+      producto_id: line.producto_id,
+      cantidad: line.cantidad,
+      precio: line.precio,
+      tratamiento_tributario: line.tratamiento_tributario ?? 'Gravado',
+      tasa_tributaria: line.tasa_tributaria ?? null,
+    }))
+    const { data: purchaseId, error } = await client.rpc('crear_orden_compra_operativa_v4', {
+        p_proveedor_id: input.proveedor_id,
+        p_detalle: input.detail,
+        p_fecha_limite: input.fecha_limite || null,
+        p_monto_manual: input.amount ?? 0,
+        p_lineas: linePayload,
+        p_idempotency_key: input.idempotencyKey,
+        p_moneda: currency,
+        p_exchange_rate: currency === 'PEN' ? 1 : input.exchange_rate ?? null,
+      })
     if (error) throw error
     const { data: header, error: readError } = await client.from('compras').select('*').eq('id', String(purchaseId)).single()
     if (readError) throw readError
     return toRecord('purchases', header as Row)
   }
-
-  // Las líneas referencian al CATÁLOGO del proveedor, no a mi inventario.
-  await assertCatalogLines(lines)
-
-  const { data: header, error: headerError } = await client.from('compras').insert(toRow('purchases', headerInput)).select('*').single()
-  if (headerError) throw headerError
-  const headerRow = header as Row
-
-  // La cuenta por pagar incluye IGV (total a pagar al proveedor).
-  const pagoTotal = totalWithIgv(total)
-  try {
-    if (lines.length) {
-      const { error: linesError } = await client.from('detalle_compras').insert(
-        lines.map((line) => ({
-          compra_id: String(headerRow.id),
-          proveedor_producto_id: line.producto_id,
-          cantidad: line.cantidad,
-          costo_unitario: line.precio,
-        })),
-      )
-      if (linesError) throw linesError
-    }
-    await createRelatedPago('purchase', headerRow, pagoTotal, input.status)
-  } catch (error) {
-    await client.from('detalle_compras').delete().eq('compra_id', String(headerRow.id))
-    await client.from('compras').delete().eq('id', String(headerRow.id))
-    throw error
-  }
-  return toRecord('purchases', headerRow)
+  throw new Error('Las compras históricas deben importarse mediante el proceso CSV transaccional. No se permiten escrituras directas de órdenes.')
 }
 
 export async function updateSaleWithLines(code: string, input: RecordInput, lines: LineInput[]): Promise<RecordItem> {
@@ -1464,46 +1450,40 @@ export async function updateSaleWithLines(code: string, input: RecordInput, line
   return toRecord('sales', updated as Row)
 }
 
-export async function updatePurchaseWithLines(code: string, input: RecordInput, lines: LineInput[]): Promise<RecordItem> {
+export async function updatePurchaseWithLines(code: string, input: RecordInput, lines: LineInput[], expectedUpdatedAt?: string): Promise<RecordItem> {
   assertValidLines(lines)
   const client = requireSupabase()
   const { data: current, error: currentError } = await client.from('compras').select('*').eq('codigo', code).single()
   if (currentError) throw currentError
   const headerId = String((current as Row).id)
-  const oldLines = await fetchDocumentLines('purchases', headerId)
-  // La recepción es un movimiento separado. Una orden con recepciones no puede
-  // cambiar cantidades ni productos y nunca suma stock al editar su estado.
-  const { count: receiptCount, error: receiptError } = await client.from('recepciones_compra').select('id', { count: 'exact', head: true }).eq('compra_id', headerId)
-  if (receiptError) throw receiptError
-  if ((receiptCount ?? 0) > 0 && !sameLines(oldLines, lines)) throw new Error('La orden ya tiene recepciones registradas. Conserva sus líneas y registra los ajustes con una devolución o recepción adicional.')
-  if (input.status === 'Pagada' && String((current as Row).estado) !== 'Pagada') throw new Error('No marques la orden como pagada desde Compras. Registra el pago y su aplicación en Tesorería.')
-  await assertCatalogLines([...oldLines, ...lines].map((line) => ({ producto_id: line.producto_id, cantidad: 1, precio: 0 })))
-  const total = lines.length ? lineTotal(lines) : (input.amount ?? Number((current as Row).monto ?? 0))
-  const pagoTotal = totalWithIgv(total)
-
-  const { data: updated, error: updateError } = await client
-    .from('compras')
-    .update(toRow('purchases', { ...input, amount: total }))
-    .eq('codigo', code)
-    .select('*')
-    .single()
-  if (updateError) throw updateError
-
-  if (!sameLines(oldLines, lines)) {
-    const deleted = await client.from('detalle_compras').delete().eq('compra_id', headerId).select('id')
-    if (deleted.error) throw deleted.error
-    if (oldLines.length && deleted.data.length < oldLines.length) throw new Error('Tu rol necesita permiso de eliminar líneas de compra para editar sus productos.')
-  }
-  if (lines.length && !sameLines(oldLines, lines)) {
-    const { error: linesError } = await client.from('detalle_compras').insert(
-      lines.map((line) => ({ compra_id: headerId, proveedor_producto_id: line.producto_id, cantidad: line.cantidad, costo_unitario: line.precio })),
-    )
-    if (linesError) throw linesError
-  }
-  const previous = current as Row
-  if (total !== Number(previous.monto) || input.name !== String(previous.proveedor_nombre)) {
-    await syncRelatedPago('purchase', headerId, pagoTotal, input.status)
-  }
+  const expected = expectedUpdatedAt ?? String((current as Row).updated_at ?? '')
+  if (!expected) throw new Error('No se pudo identificar la versión de la orden. Recarga e inténtalo de nuevo.')
+  const proveedorId = input.proveedor_id ?? (current as Row).proveedor_id
+  if (!proveedorId) throw new Error('Selecciona un proveedor registrado para editar la orden.')
+  const currency = input.moneda ?? ((current as Row).moneda === 'USD' ? 'USD' : 'PEN')
+  const { data: result, error } = await client.rpc('editar_orden_compra_operativa_v3', {
+    p_compra_id: headerId,
+    p_expected_updated_at: expected,
+    p_proveedor_id: proveedorId,
+    p_detalle: input.detail,
+    p_fecha_limite: input.fecha_limite || null,
+    p_comprobante_tipo: input.comprobante_tipo || null,
+    p_comprobante_numero: input.comprobante_numero || null,
+    p_lineas: lines.map(line => ({
+      detalle_compra_id: line.detalle_compra_id ?? null,
+      producto_id: line.producto_id,
+      cantidad: line.cantidad,
+      precio: line.precio,
+      tratamiento_tributario: line.tratamiento_tributario ?? null,
+      tasa_tributaria: line.tasa_tributaria ?? null,
+    })),
+    p_moneda: currency,
+    p_exchange_rate: currency === 'PEN' ? 1 : input.exchange_rate ?? (current as Row).exchange_rate ?? null,
+  })
+  if (error) throw error
+  const id = String((result as { compra_id?: string } | null)?.compra_id ?? headerId)
+  const { data: updated, error: readError } = await client.from('compras').select('*').eq('id', id).single()
+  if (readError) throw readError
   return toRecord('purchases', updated as Row)
 }
 

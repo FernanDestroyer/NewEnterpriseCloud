@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { igvOf, money, statusTone, totalWithIgv } from '../data/helpers'
+import { moneyCurrency, statusTone } from '../data/helpers'
 import { useRecords } from '../context/RecordsContext'
 import { fetchDocumentLines, friendlyError, updatePurchaseWithLines } from '../services/records'
 import VoucherModal from './VoucherModal'
 import type { DocumentLine, RecordItem, RecordStatus } from '../types'
 import { useAuth } from '../context/AuthContext'
+import { fetchPurchaseCloseSummary, type PurchaseCloseSummary } from '../services/purchaseReceipts'
+import SupplierOrderEvaluationPanel from './SupplierOrderEvaluationPanel'
+import SupplierEvaluationRating from './SupplierEvaluationRating'
 
 /** Icono de Google (Material Symbols Outlined). */
 function GoogleIcon({ name, className = '' }: { name: string; className?: string }) {
@@ -40,6 +43,10 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
   const [compTipo, setCompTipo] = useState(order.comprobanteTipo ?? 'Factura')
   const [compNum, setCompNum] = useState(order.comprobanteNumero ?? '')
   const [showVoucher, setShowVoucher] = useState(false)
+  const [closeSummary, setCloseSummary] = useState<PurchaseCloseSummary | null>(null)
+  const [closeSummaryLoading, setCloseSummaryLoading] = useState(false)
+  const [closeSummaryError, setCloseSummaryError] = useState('')
+  const lineRequest = useRef(0)
 
   useEffect(() => {
     setFecha(order.fechaLimite ?? '')
@@ -48,6 +55,7 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
   }, [order.id, order.fechaLimite, order.comprobanteTipo, order.comprobanteNumero])
 
   const loadLines = useCallback(async () => {
+    const request = ++lineRequest.current
     if (!order.rowId) {
       setLines([])
       setLoadingLines(false)
@@ -55,24 +63,41 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
     }
     setLoadingLines(true)
     setLineError('')
+    setLines([])
     try {
-      setLines(await fetchDocumentLines('purchases', order.rowId))
+      const result = await fetchDocumentLines('purchases', order.rowId)
+      if (request === lineRequest.current) setLines(result)
     } catch (error) {
-      setLineError(friendlyError(error))
-      notify(friendlyError(error))
+      if (request === lineRequest.current) {
+        setLineError(friendlyError(error))
+        notify(friendlyError(error))
+      }
     } finally {
-      setLoadingLines(false)
+      if (request === lineRequest.current) setLoadingLines(false)
     }
   }, [order.rowId, notify])
 
   useEffect(() => {
     void loadLines()
+    return () => { lineRequest.current++ }
   }, [loadLines])
 
-  const qtyTotal = useMemo(() => lines.reduce((sum, line) => sum + line.cantidad, 0), [lines])
-  const subtotal = useMemo(() => lines.length ? lines.reduce((sum, line) => sum + line.cantidad * line.precio, 0) : order.amount ?? 0, [lines, order.amount])
-  const igv = igvOf(subtotal)
-  const total = totalWithIgv(subtotal)
+  useEffect(() => {
+    let active = true
+    if (!order.rowId) return
+    setCloseSummaryLoading(true); setCloseSummaryError('')
+    fetchPurchaseCloseSummary(order.rowId)
+      .then(result => { if (active) setCloseSummary(result) })
+      .catch(error => { if (active) setCloseSummaryError(friendlyError(error)) })
+      .finally(() => { if (active) setCloseSummaryLoading(false) })
+    return () => { active = false }
+  }, [order.rowId, order.updatedAt])
+
+  const currency = order.moneda ?? 'PEN'
+  const fiscalComplete = lines.length > 0 && lines.every(line => line.taxTreatment && line.taxBase != null && line.taxAmount != null && line.lineTotal != null)
+  const base = fiscalComplete ? lines.reduce((sum, line) => sum + (line.taxBase ?? 0), 0) : null
+  const tax = fiscalComplete ? lines.reduce((sum, line) => sum + (line.taxAmount ?? 0), 0) : null
+  const total = fiscalComplete ? lines.reduce((sum, line) => sum + (line.lineTotal ?? 0), 0) : order.amount ?? 0
 
   // La fase se cambia desde "Editar": este detalle solo guarda fecha y comprobante.
   const persist = async (nextStatus: RecordStatus) => {
@@ -88,12 +113,12 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
         fecha_limite: fecha || null,
         comprobante_tipo: compTipo || null,
         comprobante_numero: compNum.trim() || null,
-      }, lines.map((line) => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio })))
+      }, lines.map((line) => ({ detalle_compra_id: line.rowId, producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio, tratamiento_tributario: line.taxTreatment, tasa_tributaria: line.taxRate })), order.updatedAt)
       await reload()
       await loadLines()
       notify(nextStatus === order.status
         ? `Orden ${order.id} actualizada.`
-        : `Orden ${order.id} avanzó a ${nextStatus}${nextStatus === 'Recepción' ? ': ingreso a almacén + kardex.' : nextStatus === 'Pagada' ? ': cuenta por pagar completada.' : '.'}`)
+        : `Orden ${order.id} avanzó a ${nextStatus}.`)
     } catch (error) {
       notify(friendlyError(error))
     } finally {
@@ -136,6 +161,7 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
               {supplierContact && <p>{supplierContact}</p>}
               {supplier.formaPago && <p>Condición de pago: {supplier.formaPago}</p>}
               <span className="linked-badge"><GoogleIcon name="verified" className="small" /> Proveedor registrado · {supplierOffers} {supplierOffers === 1 ? 'producto en catálogo' : 'productos en catálogo'}</span>
+              {supplier.rowId && <SupplierEvaluationRating proveedorId={supplier.rowId} />}
             </>
           ) : (
             <>
@@ -155,9 +181,28 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
         )}
       </section>
 
+      {order.rowId && <SupplierOrderEvaluationPanel
+        compraId={order.rowId}
+        proveedorId={order.proveedor_id ?? null}
+        estadoRecepcion={order.estadoRecepcion}
+        requiereRecepcion={requiereRecepcion}
+      />}
+
+      <section className="po-close-summary panel" aria-labelledby="purchase-close-summary-title">
+        <div className="table-header"><div><span className="panel-label">RECEPCIONES Y TESORERÍA · FUENTES INDEPENDIENTES</span><h2 id="purchase-close-summary-title">Resumen de cierre</h2></div></div>
+        {closeSummaryError && <div className="ws-notice ws-notice-warning" role="alert">{closeSummaryError}</div>}
+        {closeSummaryLoading ? <p>Consultando recepción neta y pagos…</p> : closeSummary && <>
+          <div className="po-close-metrics"><div><small>Recibido bruto</small><strong>{closeSummary.recibido_bruto}</strong></div><div><small>Devuelto</small><strong>{closeSummary.devuelto}</strong></div><div><small>Neto recibido</small><strong>{closeSummary.neto_recibido}</strong></div></div>
+          <div className="table-scroll"><table className="record-table"><thead><tr><th>CUENTA CxP · TESORERÍA</th><th>MONTO ORIGINAL</th><th>APLICADO</th><th>SALDO PENDIENTE</th><th>ESTADO</th></tr></thead><tbody>
+            {!closeSummary.financiera_visible ? <tr><td colSpan={5}>Resumen financiero oculto: requiere permiso de lectura de Finanzas/Tesorería. El resumen de recepción es independiente.</td></tr> : closeSummary.pagos.length ? closeSummary.pagos.map(payment => <tr key={payment.cuenta_id}><td>{payment.codigo}</td><td>{moneyCurrency(payment.monto_original, payment.moneda === 'USD' ? 'USD' : 'PEN')}</td><td>{moneyCurrency(payment.monto_aplicado, payment.moneda === 'USD' ? 'USD' : 'PEN')}</td><td><strong>{moneyCurrency(payment.saldo_pendiente, payment.moneda === 'USD' ? 'USD' : 'PEN')}</strong></td><td>{payment.estado}</td></tr>) : <tr><td colSpan={5}>Tesorería aún no registra cuentas por pagar para esta orden.</td></tr>}
+          </tbody></table></div>
+          <small>Las devoluciones cambian stock y neto recibido, pero no alteran esta cuenta. Los créditos se aplican manualmente desde Tesorería.</small>
+        </>}
+      </section>
+
       <section className="table-panel panel">
         <div className="table-header">
-          <div><span className="panel-label">SOLICITUD DE COMPRA</span><h2>{requiereRecepcion ? 'Productos, cantidades e IGV' : 'Servicio o gasto e IGV'}</h2></div>
+          <div><span className="panel-label">SOLICITUD DE COMPRA</span><h2>{requiereRecepcion ? 'Productos, cantidades e impuestos' : 'Servicio o gasto'}</h2></div>
         </div>
         <div className="po-datos">
           <label>Fecha límite o aproximada<input type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>
@@ -172,33 +217,33 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
         {lineError && <div className="ws-notice ws-notice-warning" role="alert">{lineError}<button className="ws-text-button" onClick={() => void loadLines()}>Reintentar</button></div>}
         <div className="table-scroll">
           <table className="record-table">
-            <thead><tr><th>PRODUCTO</th><th>CANT.</th><th>COSTO UNIT.</th><th>SUBTOTAL</th></tr></thead>
+            <thead><tr><th>PRODUCTO</th><th>CANT.</th><th>BASE UNIT.</th><th>IMPUESTO</th><th>TOTAL LÍNEA</th></tr></thead>
             <tbody>
               {lines.map((line) => (
                 <tr key={line.producto_id}>
                   <td><strong>{line.nombre ?? line.producto_id}</strong><small>{line.codigo ?? ''}</small></td>
-                  <td className="record-value">{line.cantidad} und.</td>
-                  <td className="record-value">{money(line.precio)}</td>
-                  <td className="record-value">{money(line.cantidad * line.precio)}</td>
+                  <td className="record-value">{line.cantidad}</td>
+                  <td className="record-value">{moneyCurrency(line.precio, currency)}</td>
+                  <td className="record-value">{line.taxTreatment ? `${line.taxTreatment} · ${moneyCurrency(line.taxAmount ?? 0, currency)}` : 'No informado (histórico)'}</td>
+                  <td className="record-value">{line.lineTotal == null ? moneyCurrency(line.cantidad * line.precio, currency) : moneyCurrency(line.lineTotal, currency)}</td>
                 </tr>
               ))}
-              {!lines.length && <tr><td colSpan={4}><div className="empty-table"><GoogleIcon name={requiereRecepcion ? 'inventory_2' : 'receipt_long'} />{loadingLines ? <><strong>Cargando detalle…</strong></> : requiereRecepcion ? <><strong>Sin productos</strong><span>Edita la compra para agregar su catálogo.</span></> : <><strong>No requiere ingreso a almacén</strong><span>El importe corresponde a un servicio o gasto y no genera movimientos de inventario.</span></>}</div></td></tr>}
+              {!lines.length && <tr><td colSpan={5}><div className="empty-table"><GoogleIcon name={requiereRecepcion ? 'inventory_2' : 'receipt_long'} />{loadingLines ? <><strong>Cargando detalle…</strong></> : requiereRecepcion ? <><strong>Sin productos</strong><span>Edita la compra para agregar su catálogo.</span></> : <><strong>No requiere ingreso a almacén</strong><span>El importe corresponde a un servicio o gasto y no genera movimientos de inventario.</span></>}</div></td></tr>}
             </tbody>
           </table>
         </div>
         <div className="po-totals">
           <div className="lines-summary">
             <span className="lines-summary-title"><GoogleIcon name="receipt_long" className="small" /> Resumen</span>
-            <span>{requiereRecepcion ? `${lines.length} ${lines.length === 1 ? 'producto' : 'productos'} · ${qtyTotal} und.` : 'Sin líneas de inventario'}</span>
-            <strong>Subtotal {money(subtotal)}</strong>
+            <span>{requiereRecepcion ? `${lines.length} ${lines.length === 1 ? 'producto' : 'productos'}` : 'Sin líneas de inventario'}</span>
+            <strong>Total persistido {moneyCurrency(total, currency)}</strong>
           </div>
           <div className="po-tax">
-            <span>Subtotal <strong>{money(subtotal)}</strong></span>
-            <span>IGV 18% <strong>{money(igv)}</strong></span>
-            <span className="po-grand">Total <strong>{money(total)}</strong></span>
+            {fiscalComplete ? <><span>Base imponible <strong>{moneyCurrency(base ?? 0, currency)}</strong></span><span>Impuestos <strong>{moneyCurrency(tax ?? 0, currency)}</strong></span></> : <span>Desglose tributario <strong>No disponible; sin recálculo histórico</strong></span>}
+            <span className="po-grand">Total persistido <strong>{moneyCurrency(order.amount ?? total, currency)}</strong></span>
           </div>
         </div>
-        <p className="po-foot"><GoogleIcon name="schedule" className="small" /> Actualización: {order.date} · La CxP se genera por el total con IGV estándar del 18%; esta versión no admite comprobantes exonerados, inafectos, mixtos ni con otra tasa.</p>
+        <p className="po-foot"><GoogleIcon name="schedule" className="small" /> Actualización: {order.date} · La obligación por pagar nace al registrar la recepción. Esta edición no crea ni actualiza CxP.</p>
       </section>
     </>
   )

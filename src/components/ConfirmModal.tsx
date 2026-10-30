@@ -8,6 +8,7 @@ export default function ConfirmModal({
   onCancel,
   onConfirm,
   busy = false,
+  tone = 'danger',
   children,
 }: {
   title: string
@@ -16,6 +17,7 @@ export default function ConfirmModal({
   onCancel: () => void
   onConfirm: () => void | Promise<void>
   busy?: boolean
+  tone?: 'danger' | 'primary'
   children?: ReactNode
 }) {
   const [working, setWorking] = useState(false)
@@ -34,7 +36,7 @@ export default function ConfirmModal({
         {children}
         <div className="modal-actions">
           <button className="cancel-button" type="button" disabled={blocked} onClick={onCancel}>Cancelar</button>
-          <button className="danger-button" type="button" disabled={blocked} onClick={() => void confirm()}>{blocked ? 'Guardando…' : confirmLabel}</button>
+          <button className={tone === 'primary' ? 'primary-button' : 'danger-button'} type="button" disabled={blocked} onClick={() => void confirm()}>{blocked ? 'Guardando…' : confirmLabel}</button>
         </div>
       </div>
     </div>
