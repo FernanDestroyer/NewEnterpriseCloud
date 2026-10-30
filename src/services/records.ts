@@ -2,6 +2,7 @@ import { requireSupabase } from '../lib/supabase'
 import { salePayableTotal } from '../data/payments'
 import { consumesCreditLine } from '../data/workspace'
 import { DATA_PAGES } from '../data/catalog'
+import { auditDayBounds, auditRangeError, escapeLike, type AuditJson } from '../data/audit'
 import { formatWhen, totalWithIgv } from '../data/helpers'
 import type { CustomerImportRow, PurchaseImportRow, SalesImportRow, SupplierImportReport, SupplierImportRow } from './import'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
@@ -821,21 +822,13 @@ function assertValidLines(lines: LineInput[]) {
 /** Bitácora paginada; la política RLS limita la consulta a auditoria:ver. */
 export type AuditEntry = { id: number; email: string | null; accion: string; modulo: string; registro: string | null; resultado: string; createdAt: string }
 export type AuditTrailPage = { entries: AuditEntry[]; total: number }
+export type AuditFilters = { modulo?: string; accion?: string; resultado?: string; desde?: string; hasta?: string; usuario?: string; registro?: string }
+export type AuditDetail = { before: AuditJson; after: AuditJson }
 
-export async function fetchAuditTrail(input: { limit?: number; offset?: number; modulo?: string; accion?: string } = {}): Promise<AuditTrailPage> {
-  const limit = Math.max(1, Math.min(100, Math.trunc(input.limit ?? 50)))
-  const offset = Math.max(0, Math.trunc(input.offset ?? 0))
-  let query = requireSupabase()
-    .from('auditoria')
-    .select('id, usuario_email, accion, modulo, registro_id, resultado, created_at', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .range(offset, offset + limit - 1)
-  if (input.modulo) query = query.eq('modulo', input.modulo)
-  if (input.accion) query = query.eq('accion', input.accion)
-  const { data, error, count } = await query
-  if (error) throw error
-  return { entries: ((data ?? []) as Row[]).map((row) => ({
+const AUDIT_COLUMNS = 'id, usuario_email, accion, modulo, registro_id, resultado, created_at'
+
+function toAuditEntry(row: Row): AuditEntry {
+  return {
     id: Number(row.id),
     email: typeof row.usuario_email === 'string' ? row.usuario_email : null,
     accion: String(row.accion ?? ''),
@@ -843,13 +836,65 @@ export async function fetchAuditTrail(input: { limit?: number; offset?: number; 
     registro: typeof row.registro_id === 'string' ? row.registro_id : null,
     resultado: String(row.resultado ?? ''),
     createdAt: typeof row.created_at === 'string' ? row.created_at : '',
-  })), total: count ?? 0 }
+  }
 }
 
-export async function fetchAuditModules(): Promise<string[]> {
-  const { data, error } = await requireSupabase().from('auditoria').select('modulo').order('modulo').limit(1000)
+// Aplica los filtros a cualquier consulta de la bitácora (listado y exportación usan los mismos).
+function applyAuditFilters<T extends { eq: Function; ilike: Function; gte: Function; lt: Function }>(query: T, filters: AuditFilters): T {
+  const rangeError = auditRangeError(filters.desde, filters.hasta)
+  if (rangeError) throw new Error(rangeError)
+  let next = query
+  if (filters.modulo) next = next.eq('modulo', filters.modulo)
+  if (filters.accion) next = next.eq('accion', filters.accion)
+  if (filters.resultado) next = next.eq('resultado', filters.resultado)
+  const bounds = auditDayBounds(filters.desde, filters.hasta)
+  if (bounds.gte) next = next.gte('created_at', bounds.gte)
+  if (bounds.lt) next = next.lt('created_at', bounds.lt)
+  const user = escapeLike(filters.usuario ?? '')
+  if (user) next = next.ilike('usuario_email', `%${user}%`)
+  const record = escapeLike(filters.registro ?? '')
+  if (record) next = next.ilike('registro_id', `%${record}%`)
+  return next
+}
+
+export async function fetchAuditTrail(input: AuditFilters & { limit?: number; offset?: number } = {}): Promise<AuditTrailPage> {
+  const limit = Math.max(1, Math.min(100, Math.trunc(input.limit ?? 50)))
+  const offset = Math.max(0, Math.trunc(input.offset ?? 0))
+  const query = applyAuditFilters(requireSupabase()
+    .from('auditoria')
+    .select(AUDIT_COLUMNS, { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1), input)
+  const { data, error, count } = await query
   if (error) throw error
-  return [...new Set((data ?? []).map(row => String(row.modulo ?? '')).filter(Boolean))]
+  return { entries: ((data ?? []) as Row[]).map(toAuditEntry), total: count ?? 0 }
+}
+
+/** Datos antes/después de un evento. Se piden al abrir el detalle: pueden ser grandes y no se necesitan en el listado. */
+export async function fetchAuditDetail(id: number): Promise<AuditDetail> {
+  const { data, error } = await requireSupabase().from('auditoria').select('datos_antes, datos_despues').eq('id', id).maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('El evento ya no está disponible para tu cuenta.')
+  const asJson = (value: unknown): AuditJson => (value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null)
+  return { before: asJson(data.datos_antes), after: asJson(data.datos_despues) }
+}
+
+export const AUDIT_EXPORT_LIMIT = 2000
+
+/** Eventos para exportar con los filtros activos. truncated indica que había más que el límite. */
+export async function fetchAuditForExport(filters: AuditFilters): Promise<{ entries: AuditEntry[]; total: number; truncated: boolean }> {
+  const query = applyAuditFilters(requireSupabase()
+    .from('auditoria')
+    .select(AUDIT_COLUMNS, { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(0, AUDIT_EXPORT_LIMIT - 1), filters)
+  const { data, error, count } = await query
+  if (error) throw error
+  const entries = ((data ?? []) as Row[]).map(toAuditEntry)
+  const total = count ?? entries.length
+  return { entries, total, truncated: total > entries.length }
 }
 
 /** Líneas guardadas de una venta, cotización o compra (para precargar el editor). */

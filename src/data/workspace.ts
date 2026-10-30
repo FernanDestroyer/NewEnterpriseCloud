@@ -2,7 +2,7 @@ import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, Cli
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
 
-export type PermissionModuleKey = DataPage | 'analizador' | 'audit'
+export type PermissionModuleKey = DataPage | 'analizador' | 'audit' | 'metas' | 'logistica'
 
 export type WorkspaceEntry = { label: string; path: string; page?: DataPage; permission?: PermissionModuleKey; icon: LucideIcon; group: string }
 export const workspaceEntries: WorkspaceEntry[] = [
@@ -21,6 +21,9 @@ export const workspaceEntries: WorkspaceEntry[] = [
   { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'CONFIGURACIÓN' },
   { label: 'Permisos', path: '/permisos', page: 'settings', icon: KeyRound, group: 'SEGURIDAD' },
   { label: 'Bitácora de auditoría', path: '/auditoria', permission: 'audit', icon: FileCheck2, group: 'SEGURIDAD' },
+  // Módulo propio «logistica» (ver/crear/editar), igual que exigen las políticas RLS; ver modules/logistica/permisos.ts.
+  { label: 'Planificación de despachos', path: '/logistica/despachos', permission: 'logistica', icon: MapPinned, group: 'LOGÍSTICA Y TRANSPORTE' },
+  { label: 'Vehículos y conductores', path: '/logistica/flota', permission: 'logistica', icon: Truck, group: 'LOGÍSTICA Y TRANSPORTE' },
   { label: 'Analizador de proyectos', path: '/analizador', permission: 'analizador', icon: ScanSearch, group: 'HERRAMIENTAS' },
 ]
 
@@ -100,9 +103,9 @@ export const workspaceModules: WorkspaceModule[] = [
   {
     id: 'logistica', label: 'Logística y Transporte', icon: Truck,
     children: [
-      { label: 'Planificación de despachos y rutas', icon: MapPinned, implemented: false },
-      { label: 'Vehículos y asignación de conductores', icon: Truck, implemented: false },
-      { label: 'Seguimiento, entrega y devoluciones', icon: PackageCheck, implemented: false },
+      { label: 'Planificación de despachos y rutas', path: '/logistica/despachos', permission: 'logistica', icon: MapPinned, implemented: true },
+      { label: 'Vehículos y asignación de conductores', path: '/logistica/flota', permission: 'logistica', icon: Truck, implemented: true },
+      { label: 'Seguimiento, entrega y devoluciones', path: '/logistica/seguimiento', permission: 'logistica', icon: PackageCheck, implemented: true },
     ],
   },
   {
@@ -117,9 +120,11 @@ export const workspaceModules: WorkspaceModule[] = [
   {
     id: 'metas', label: 'Metas y Objetivos', icon: Target,
     children: [
-      { label: 'Definición y asignación de metas', icon: Target, implemented: false },
-      { label: 'Avance por vendedor, sucursal o producto', icon: TrendingUp, implemented: false },
-      { label: 'Ranking y alertas de cumplimiento', icon: Award, implemented: false },
+      // Sin `permission`: el módulo siempre se muestra en el menú; dentro, la página
+      // bloquea las acciones del rol sin metas:ver/crear/editar/eliminar.
+      { label: 'Definición y asignación de metas', path: '/metas#definicion', icon: Target, implemented: true },
+      { label: 'Avance por vendedor, sucursal o producto', path: '/metas#avance', icon: TrendingUp, implemented: true },
+      { label: 'Ranking y alertas de cumplimiento', path: '/metas#ranking', icon: Award, implemented: true },
     ],
   },
   {
@@ -133,7 +138,7 @@ export const workspaceModules: WorkspaceModule[] = [
     id: 'seguridad', label: 'Seguridad y Auditoría', icon: ShieldCheck,
     children: [
       { label: 'Usuarios, roles y permisos', path: '/permisos', permission: 'settings', icon: KeyRound, implemented: true },
-      { label: 'Bitácora y auditoría de operaciones', path: '/auditoria', permission: 'audit', icon: FileCheck2, availability: 'partial', implemented: true },
+      { label: 'Bitácora y auditoría de operaciones', path: '/auditoria', permission: 'audit', icon: FileCheck2, implemented: true },
     ],
   },
   {
@@ -168,6 +173,7 @@ export const permissionModule: Record<PermissionModuleKey, string> = {
   sales: 'ventas', quotes: 'cotizaciones', purchases: 'compras', inventory: 'inventario',
   customers: 'clientes', suppliers: 'proveedores', finance: 'finanzas', documents: 'documentos',
   reports: 'reportes', settings: 'configuracion', analizador: 'analizador', audit: 'auditoria',
+  metas: 'metas', logistica: 'logistica',
 }
 
 export type Period = 'all' | 'month' | '30' | '7' | 'today'
