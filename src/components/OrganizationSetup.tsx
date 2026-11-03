@@ -122,15 +122,27 @@ export default function OrganizationSetup({ canInitializeStock, canManageOrganiz
       setMessage('No tienes permiso para modificar la estructura organizacional.')
       return
     }
-    if (!data || busy) return
+    if (busy) return
     const values = new FormData(event.currentTarget)
     setBusy(true)
     setMessage('')
     try {
       if (kind === 'branch') {
-        if (!data.empresa) throw new Error('Primero completa la ficha de la empresa principal.')
-        await saveBranch({
-          empresa_id: data.empresa.id,
+  // Consultar los datos actuales para evitar usar información antigua.
+  const latestData = data?.empresa
+    ? data
+    : await fetchOrganizationSetup()
+
+  setData(latestData)
+
+  if (!latestData.empresa) {
+    throw new Error(
+      'No se encontró la empresa principal en Supabase. Verifica que esté guardada correctamente.'
+    )
+  }
+
+  await saveBranch({
+    empresa_id: latestData.empresa.id,
           codigo: String(values.get('codigo') ?? ''),
           nombre: String(values.get('nombre') ?? ''),
           proposito: String(values.get('proposito') ?? ''),
@@ -244,7 +256,7 @@ export default function OrganizationSetup({ canInitializeStock, canManageOrganiz
           </div></fieldset>
           <div className="ws-heading-actions">
             {editingBranch && canManageOrganization && <button className="ws-button ws-button-secondary" type="button" onClick={() => setEditingBranch(null)}>Cancelar edición</button>}
-            {canManageOrganization && <button className="primary-button" type="submit" disabled={busy || !data?.empresa}><Save size={14} />{busy ? 'Guardando…' : editingBranch ? 'Guardar sucursal' : 'Crear sucursal'}</button>}
+            {canManageOrganization && <button className="primary-button" type="submit" disabled={busy}><Save size={14} />{busy ? 'Guardando…' : editingBranch ? 'Guardar sucursal' : 'Crear sucursal'}</button>}
           </div>
         </form>
 

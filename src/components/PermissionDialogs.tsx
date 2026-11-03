@@ -13,6 +13,8 @@ const ACTION_LABEL: Record<PermissionCatalogEntry['accion'], string> = {
 const MODULE_LABEL = Object.fromEntries(DATA_PAGES.map(page => [permissionModule[page], pageMeta[page].title])) as Record<string, string>
 MODULE_LABEL.usuarios = 'Usuarios'
 MODULE_LABEL.auditoria = 'Seguridad y Auditoría'
+MODULE_LABEL.metas = 'Metas y Objetivos'
+MODULE_LABEL.logistica = 'Logística y Transporte'
 
 function groupPermissions(permissions: PermissionCatalogEntry[]) {
   return permissions.reduce<Record<string, PermissionCatalogEntry[]>>((groups, permission) => {

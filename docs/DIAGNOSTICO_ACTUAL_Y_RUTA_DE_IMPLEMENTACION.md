@@ -1,8 +1,10 @@
 # Diagnóstico y ruta de implementación de EnterpriseCloud
 
-**Corte de verificación remota:** 26 de octubre de 2026. **Avances:** 26 de octubre de 2026.  
+**Corte de verificación remota:** 26 de octubre de 2026. **Avances:** 26 de octubre de 2026; nueva entrega: 29 de octubre de 2026.  
 **Proyecto Supabase:** ERP EnterpriseCloud (ref: auxqjoxnsasnmtnakgmg), organización Free.  
 **Protección de datos:** se verificaron 9 usuarios de Auth y sus 9 perfiles; no se eliminaron cuentas ni datos.
+
+**Actualización 29-10-2026.** El remoto tiene 75 tablas públicas (RLS en las 75), 69 con auditoría por trigger, 193 políticas y 32 migraciones registradas (23 originales + 19 forward-only). Se estandarizó el Modelo B de compras (solicitud → ofertas → orden con idempotencia, fracciones y cierre 'Cancelada'), se unificó el ajuste de inventario y quedaron operativos los módulos Maestros, Tesorería bancaria y Comisiones con validación funcional de extremo a extremo (`typecheck` limpio y 48/48 pruebas; detalles en [IMPLEMENTACION_MAESTROS_TESORERIA_COMISIONES.md](IMPLEMENTACION_MAESTROS_TESORERIA_COMISIONES.md)). Las cifras y flujos de las secciones siguientes corresponden al corte del 26-10-2026 y se conservan como referencia histórica.
 
 ## 1. Resultado ejecutivo
 

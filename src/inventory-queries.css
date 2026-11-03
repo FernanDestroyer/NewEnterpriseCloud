@@ -1,0 +1,35 @@
+.inventory-query { color: var(--ws-text); }
+.inventory-query-heading { margin-bottom: 12px; }
+.inventory-query-nav { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--ws-border); }
+.inventory-query-nav button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 11px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ws-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.inventory-query-nav button.is-current { color: var(--ws-primary); border-bottom-color: var(--ws-primary); }
+.inventory-query-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; padding: 12px; margin-bottom: 12px; border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); }
+.inventory-query-filters > label { display: grid; gap: 5px; flex: 1 1 190px; min-width: 0; color: var(--ws-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.inventory-query-filters .ws-control, .inventory-query-filters .ws-table-search { width: 100%; height: 34px; min-height: 34px; }
+.inventory-query-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.inventory-query-summary > div { display: flex; align-items: baseline; gap: 10px; padding: 9px 13px; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 8px; font-size: 11px; color: var(--ws-muted); }
+.inventory-query-summary strong { color: var(--ws-text); font-size: 16px; font-variant-numeric: tabular-nums; }
+.inventory-query-summary small { margin-left: auto; color: var(--ws-muted); font-size: 10px; }
+.inventory-query-card-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px; padding: 12px 14px; }
+.inventory-query-card-title strong { font-size: 13px; }
+.inventory-query-card-title span { color: var(--ws-muted); font-size: 10px; }
+.inventory-query .table-scroll { max-width: 100%; overflow-x: auto; }
+.inventory-query-table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 12px; }
+.inventory-query-kardex { min-width: 1160px; }
+.inventory-query-table th { padding: 9px 11px; border-block: 1px solid var(--ws-border); background: var(--ws-raised); color: var(--ws-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; text-align: left; white-space: nowrap; }
+.inventory-query-table td { padding: 9px 11px; border-bottom: 1px solid var(--ws-border); color: var(--ws-muted); vertical-align: middle; }
+.inventory-query-table tbody tr:hover { background: var(--ws-raised); }
+.inventory-query-table td strong { color: var(--ws-text); font-size: 12px; font-weight: 600; }
+.inventory-query-table td small { display: block; max-width: 240px; margin-top: 3px; color: var(--ws-subtle); font-size: 10px; overflow-wrap: anywhere; }
+.inventory-query-table .ws-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.inventory-query-table .status-pill { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 650; white-space: nowrap; }
+.workspace-shell.erp-shell .inventory-query-table .status-pill { border-radius: 999px; }
+.inventory-query-table .status-pill.green { color: var(--ws-green); background: var(--ws-green-soft); }
+.inventory-query-table .status-pill.amber { color: var(--ws-amber); background: var(--ws-amber-soft); }
+.inventory-query-table .status-pill.red { color: var(--ws-red); background: var(--ws-red-soft); }
+.inventory-query-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; font-size: 10px; color: var(--ws-muted); }
+.inventory-query-pagination > div { display: flex; gap: 6px; }
+.inventory-query-pagination button { display: grid; place-items: center; padding: 5px; border: 1px solid var(--ws-border); border-radius: 6px; background: var(--ws-surface); color: var(--ws-text); cursor: pointer; }
+.inventory-query-pagination button:disabled { opacity: .45; cursor: default; }
+.inventory-query-note { color: var(--ws-muted); font-size: 10px; line-height: 1.5; }
+@media (max-width: 650px) { .inventory-query-summary small { width: 100%; margin-left: 0; } }

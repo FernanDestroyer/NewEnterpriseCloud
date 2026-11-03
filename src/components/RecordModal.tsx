@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
 import type { FormEvent } from 'react'
 import { pageMeta } from '../data/catalog'
-import { defaultStatus, LOW_STOCK_THRESHOLD, money, statusesForPage, totalWithIgv } from '../data/helpers'
+import { defaultStatus, LOW_STOCK_THRESHOLD, money, moneyCurrency, statusesForPage, totalWithIgv } from '../data/helpers'
 import { useRecords } from '../context/RecordsContext'
 import { useAuth } from '../context/AuthContext'
 import { fetchActiveWarehouses, fetchDocumentLines, fetchMeasurementUnits, fetchPaymentMethods, fetchProductCategories, fetchWarehouseStocks, friendlyError, type ActiveWarehouse, type MeasurementUnit, type ProductCategory } from '../services/records'
@@ -14,6 +14,7 @@ import { fetchPlinSettings, fetchBankTransferSettings } from '../services/paymen
 import YapePaymentPanel from './YapePaymentPanel'
 import { BankTransferPaymentPanel, WalletPaymentPanel } from './AdditionalPaymentPanels'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
+import type { TaxTreatment } from '../services/records'
 import { useDialog } from './useDialog'
 import { fetchCashSetup, getOpenCashShifts, type CashBox, type CashShift } from '../services/caja'
 
@@ -59,7 +60,7 @@ function GoogleIcon({ name, className = '' }: { name: string; className?: string
   )
 }
 
-type LineDraft = { selected: boolean; qty: number; price: number }
+type LineDraft = { selected: boolean; qty: number; price: number; taxTreatment?: TaxTreatment | null; taxBase?: number | null; taxAmount?: number | null; lineTotal?: number | null }
 
 export default function RecordModal({ page, record, saving = false, onClose, onSave }: { page: DataPage; record: RecordItem | null; saving?: boolean; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void }) {
   const meta = pageMeta[page]
@@ -82,6 +83,8 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   const [warehouseStockLoading, setWarehouseStockLoading] = useState(false)
   const [saleRequestKey, setSaleRequestKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
   const [purchaseRequestKey, setPurchaseRequestKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
+  const [purchaseCurrency, setPurchaseCurrency] = useState<'PEN' | 'USD'>(record?.moneda ?? 'PEN')
+  const [purchaseExchangeRate, setPurchaseExchangeRate] = useState(record?.exchangeRate == null ? '' : String(record.exchangeRate))
   const saleUsesCreditLine = page === 'sales' && consumesCreditLine(saleMethod)
   const [manualAmount, setManualAmount] = useState(record?.amount === undefined ? '' : String(record.amount))
   const [productCategories, setProductCategories] = useState<ProductCategory[]>([])
@@ -110,6 +113,10 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   useEffect(() => {
     setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
   }, [page, record?.rowId])
+  useEffect(() => {
+    setPurchaseCurrency(record?.moneda ?? 'PEN')
+    setPurchaseExchangeRate(record?.exchangeRate == null ? '' : String(record.exchangeRate))
+  }, [page, record?.rowId, record?.moneda, record?.exchangeRate])
   useEffect(() => {
     if (page !== 'inventory') { setProductCategories([]); setMeasurementUnits([]); setProductCategoryError(''); setMeasurementUnitError(''); setProductMastersLoading(false); return }
     let active = true
@@ -439,7 +446,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
         const draft: Record<string, LineDraft> = {}
         const quantities: Record<string, number> = {}
         for (const line of previous) {
-          draft[line.producto_id] = { selected: true, qty: line.cantidad, price: line.precio }
+          draft[line.producto_id] = { selected: true, qty: line.cantidad, price: line.precio, taxTreatment: line.taxTreatment, taxBase: line.taxBase, taxAmount: line.taxAmount, lineTotal: line.lineTotal }
           quantities[line.producto_id] = (quantities[line.producto_id] ?? 0) + line.cantidad
         }
         setLines(draft)
@@ -456,12 +463,12 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
 
   // En compras solo se compra del CATÁLOGO del proveedor elegido (su oferta).
   // Sin proveedor no hay base: lo ya marcado se conserva aparte (edición segura).
-  const purchaseBase = useMemo(() => {
+  const purchaseProducts = useMemo(() => {
     if (page !== 'purchases' || !relatedId) return []
     return catalog.filter((item) => item.proveedor_id === relatedId)
   }, [page, relatedId, catalog])
 
-  const baseProducts = page === 'purchases' ? purchaseBase : inventory
+  const baseProducts = page === 'purchases' ? purchaseProducts : inventory
 
   // No perder lo ya marcado al cambiar el filtro (edición segura): lo
   // seleccionado siempre queda visible aunque el filtro lo oculte.
@@ -510,7 +517,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   }, [page, baseProducts])
 
   const supplierHasRelated = page === 'purchases' && relatedId
-    ? purchaseBase.length > 0
+    ? purchaseProducts.length > 0
     : true
 
   // Compras, ventas y cotizaciones: lista paginada (3 por página); el resto
@@ -567,6 +574,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
           selected: true,
           qty: page === 'sales' ? Math.min(qty, Math.max(1, stock)) : qty,
           price: current[uuid]?.price ?? suggested,
+          ...(page === 'purchases' ? { taxTreatment: current[uuid] && 'taxTreatment' in current[uuid] ? current[uuid].taxTreatment : 'Gravado' } : {}),
         },
       }
     })
@@ -586,11 +594,19 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
         .map((product) => {
           const uuid = product.rowId as string
           const draft = lines[uuid]
-          return { product, qty: draft.qty, price: draft.price, subtotal: draft.qty * draft.price }
+          return { product, qty: draft.qty, price: draft.price, subtotal: draft.qty * draft.price, taxTreatment: draft.taxTreatment, taxBase: draft.taxBase, taxAmount: draft.taxAmount, lineTotal: draft.lineTotal }
         }),
     [visibleProducts, lines],
   )
   const linesTotal = selectedLines.reduce((sum, line) => sum + line.subtotal, 0)
+  const purchaseLineBase = selectedLines.reduce((sum, line) => sum + Math.round(line.qty * line.price * 100) / 100, 0)
+  const purchaseTaxComplete = selectedLines.length > 0 && selectedLines.every(line => Boolean(line.taxTreatment))
+  const purchaseTax = selectedLines.reduce((sum, line) => {
+    if (!line.taxTreatment) return sum
+    const base = Math.round(line.qty * line.price * 100) / 100
+    return sum + Math.round(base * (line.taxTreatment === 'Gravado' ? 18 : 0)) / 100
+  }, 0)
+  const purchaseTotal = purchaseLineBase + purchaseTax
   // El guardado conserva las líneas anteriores si una edición no marca ninguna.
   const saleHasLines = selectedLines.length > 0 || Boolean(record?.rowId && originalLineTotals.count)
   const saleSubtotal = selectedLines.length ? linesTotal : originalLineTotals.subtotal
@@ -610,7 +626,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => !saving && event.target === event.currentTarget && onClose()}>
-      <form ref={dialogRef} className={`record-modal record-modal--wide${page === 'purchases' || page === 'sales' || page === 'quotes' ? ' record-modal--split' : ''}`} onChange={() => page === 'sales' && setSaleRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)} onSubmit={onSave} role="dialog" aria-modal="true" aria-label={editing ? `Editar ${meta.title}` : meta.action}>
+         <form ref={dialogRef} className={`record-modal record-modal--wide${page === 'purchases' || page === 'sales' || page === 'quotes' ? ' record-modal--split' : ''}`} onChange={() => { if (page === 'sales') setSaleRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`); if (page === 'purchases') setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }} onSubmit={onSave} role="dialog" aria-modal="true" aria-label={editing ? `Editar ${meta.title}` : meta.action}>
         <div className="modal-heading"><div><span className="section-kicker"><i /> {meta.eyebrow}</span><h2>{editing ? `Editar registro de ${meta.title.toLocaleLowerCase()}` : meta.action}</h2><p>{editing ? 'Los cambios se guardarán en la base de datos.' : 'El registro se guardará en la base de datos.'}</p></div><button className="modal-close" type="button" aria-label="Cerrar" onClick={onClose}><GoogleIcon name="close" /></button></div>
         <div className="modal-fields">
           {page === 'sales' && <input type="hidden" name="idempotency_key" value={saleRequestKey} />}
@@ -789,6 +805,21 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
             </div>
           ) : null)}
           <label>{meta.entityLabel}<input data-autofocus name="name" required minLength={2} value={nameValue} onChange={(event) => setNameValue(event.target.value)} placeholder={meta.entityLabel} /></label>
+          {page === 'purchases' && <div className="ws-form-grid">
+            <label>Moneda de la orden
+              <select name="moneda" value={purchaseCurrency} onChange={event => { const next = event.target.value === 'USD' ? 'USD' : 'PEN'; setPurchaseCurrency(next); if (next === 'PEN') setPurchaseExchangeRate('1') }}>
+                <option value="PEN">PEN · Sol peruano</option><option value="USD">USD · Dólar estadounidense</option>
+              </select>
+            </label>
+            {purchaseCurrency === 'USD' ? (
+              <label>Tipo de cambio manual (PEN por USD)
+                <input name="exchange_rate" type="number" min="0.000001" step="0.000001" value={purchaseExchangeRate} required={statusValue === 'Orden'} onChange={event => setPurchaseExchangeRate(event.target.value)} placeholder="Se captura al confirmar" />
+                <small className="relation-hint">Registra el tipo de cambio al confirmar la orden. El importe permanece en USD; no se convierte automáticamente.</small>
+              </label>
+            ) : (
+              <input type="hidden" name="exchange_rate" value="1" />
+            )}
+          </div>}
           {page === 'finance' && <label>Tipo de cuenta<select name="financeType" defaultValue={record?.financeType ?? (record?.id.startsWith('CXC') ? 'cobrar' : record?.id.startsWith('CXP') ? 'pagar' : '')} required><option value="">Selecciona el tipo</option><option value="cobrar">Cuenta por cobrar</option><option value="pagar">Cuenta por pagar</option></select></label>}
           {page === 'sales' && (
             <div className="relation-field">
@@ -910,7 +941,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                       : 'Selecciona un proveedor arriba para ver sus productos.'}
                 </small>
               {page === 'purchases' && <small className="relation-hint">Si no seleccionas artículos, se guardará como servicio o gasto: no generará recepción ni movimiento de almacén. Indica el importe base sin IGV en el campo de la orden.</small>}
-              {page === 'purchases' && <small className="relation-hint">Alcance V1: el cálculo aplica IGV estándar del 18%. No registres aquí comprobantes exonerados, inafectos, mixtos o con otra tasa.</small>}
+              {page === 'purchases' && <small className="relation-hint">Cada línea conserva su snapshot tributario. Las líneas históricas sin tratamiento permanecen sin reclasificar hasta que se elija uno explícitamente.</small>}
               {page === 'purchases' && (
                 <div className="ws-tabs" role="tablist" aria-label="Filtrar productos">
                   <button type="button" role="tab" aria-selected={productFilter === 'all'} onClick={() => setProductFilter('all')}>Todos ({productCounts.total})</button>
@@ -931,7 +962,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                 <>
                   {page === 'purchases' && (
                     <div className="line-head" aria-hidden="true">
-                      <span>Producto</span><span>Cant.</span><span>P. unit.</span><span>Subtotal</span>
+                      <span>Producto / tributo</span><span>Cant.</span><span>Base unit.</span><span>Total línea</span>
                     </div>
                   )}
                   <div className="lines-list">
@@ -965,6 +996,13 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                           />
                           <span className="line-copy">
                             <strong>{product.name}</strong>
+                            {isCatalogLine && checked && <select name={`tax_${uuid}`} aria-label={`Tratamiento tributario de ${product.name}`} value={draft?.taxTreatment ?? ''} onChange={event => changeLine(uuid, { taxTreatment: (event.target.value || null) as TaxTreatment | null })}>
+                              <option value="">Sin desglose (histórico)</option>
+                              <option value="Gravado">Gravado · IGV 18%</option>
+                              <option value="Exonerado">Exonerado · 0%</option>
+                              <option value="Inafecto">Inafecto · 0%</option>
+                            </select>}
+                            {isCatalogLine && checked && !draft?.taxTreatment && <small>Importe histórico: no se recalcula impuesto.</small>}
                             {!isCatalogLine && (
                               <small>
                                 {product.id} · {`${stock} und. · P. fijo ${money(suggested)}`}
@@ -1010,7 +1048,8 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                         </label>
                         <span className="line-subtotal" title={checked ? `${money(unit)} × ${qty} = ${money(qty * unit)}` : 'Marca el producto para sumar'}>
                           {isCatalogLine ? null : <small>{checked ? `${money(unit)} × ${qty}` : '—'}</small>}
-                          <strong>{money(checked ? qty * unit : 0)}</strong>
+                          {isCatalogLine && checked && draft?.taxTreatment && <small>Base {moneyCurrency(Math.round(qty * unit * 100) / 100, purchaseCurrency)} · impuesto {moneyCurrency(Math.round(Math.round(qty * unit * 100) / 100 * (draft.taxTreatment === 'Gravado' ? 18 : 0)) / 100, purchaseCurrency)}</small>}
+                          <strong>{moneyCurrency(checked ? draft?.taxTreatment ? Math.round(qty * unit * 100) / 100 + Math.round(Math.round(qty * unit * 100) / 100 * (draft.taxTreatment === 'Gravado' ? 18 : 0)) / 100 : draft?.lineTotal ?? qty * unit : 0, page === 'purchases' ? purchaseCurrency : 'PEN')}</strong>
                         </span>
                       </div>
                     )
@@ -1025,6 +1064,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                             <input type="checkbox" name={`sel_${hiddenId}`} checked readOnly />
                             <input type="number" name={`qty_${hiddenId}`} value={hiddenDraft?.qty ?? 1} readOnly />
                             <input type="number" name={`price_${hiddenId}`} value={hiddenDraft?.price ?? 0} readOnly />
+                            {page === 'purchases' && <input type="hidden" name={`tax_${hiddenId}`} value={hiddenDraft?.taxTreatment ?? ''} />}
                           </Fragment>
                         )
                       })}
@@ -1058,13 +1098,16 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                 <p className="relation-hint"><GoogleIcon name="search_off" className="small" /> Sin coincidencias en productos: ajusta la búsqueda o el filtro.</p>
               )}
               {page === 'purchases' ? (() => {
-                const baseImponible = selectedLines.length ? linesTotal : Math.max(0, Number(manualAmount) || 0)
-                const igvAmount = Math.round(baseImponible * 0.18 * 100) / 100
+                const baseImponible = selectedLines.length ? purchaseLineBase : Math.max(0, Number(manualAmount) || 0)
+                const igvAmount = purchaseTax
+                const historicalWithoutTax = selectedLines.some(line => !line.taxTreatment)
+                const shownTotal = selectedLines.length ? purchaseTotal : baseImponible
                 return (
                   <div className="lines-summary purchase-totals">
-                    <div><span>Base sin IGV</span><span>{money(baseImponible)}</span></div>
-                    <div><span>IGV (18%)</span><span>{money(igvAmount)}</span></div>
-                    <div className="grand"><span>Total a pagar</span><strong>{money(totalWithIgv(baseImponible))}</strong></div>
+                    <div><span>Base imponible</span><span>{moneyCurrency(baseImponible, purchaseCurrency)}</span></div>
+                    {purchaseTaxComplete && <div><span>Impuestos por línea</span><span>{moneyCurrency(igvAmount, purchaseCurrency)}</span></div>}
+                    {historicalWithoutTax && <div><span>Tributación histórica</span><span>No informada; sin recálculo</span></div>}
+                    <div className="grand"><span>{historicalWithoutTax ? 'Importe persistido / base' : 'Total de líneas'}</span><strong>{moneyCurrency(selectedLines.length ? historicalWithoutTax && !purchaseTaxComplete ? (record?.amount ?? baseImponible) : shownTotal : baseImponible, purchaseCurrency)}</strong></div>
                   </div>
                 )
               })() : (() => {

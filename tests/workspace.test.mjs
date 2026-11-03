@@ -1,10 +1,41 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { businessDate, customerCredit, dailyOperations, inDateRange, matchesSearch, periodRange } from '../src/data/workspace.ts'
+import { businessDate, customerCredit, dailyOperations, inDateRange, matchesSearch, periodRange, submoduleMatchesLocation, workspaceEntries, workspaceModules } from '../src/data/workspace.ts'
 import { financialSnapshot, totalAmount } from '../src/data/dashboard.ts'
 import { csvContent } from '../src/data/exports.ts'
 
 const record = (id, amount, createdAt, extra = {}) => ({ id, name: id, detail: '', date: 'Texto de presentación', status: 'Pendiente', amount, createdAt, ...extra })
+
+test('inventario ofrece las seis vistas independientes del módulo', () => {
+  const inventory = workspaceModules.find(module => module.id === 'inventario')
+  assert.ok(inventory)
+  for (const path of ['/inventario/existencias', '/inventario/kardex', '/inventario/transferencias', '/inventario/ajustes', '/inventario/fisico', '/inventario/lotes-series']) {
+    assert.ok(inventory.children.some(child => child.path === path && child.permission === 'inventory' && child.implemented))
+    assert.ok(workspaceEntries.some(entry => entry.path === path && entry.permission === 'inventory'))
+    assert.equal(submoduleMatchesLocation(path, path, ''), true)
+  }
+  assert.equal(inventory.children.find(child => child.path === '/inventario/transferencias').availability, undefined)
+})
+
+test('compras y ventas exponen todas sus pantallas sin opciones pendientes', () => {
+  const expected = {
+    compras: ['/purchases', '/solicitudes-compra', '/ingreso-kardex', '/devoluciones-proveedor', '/contratos-compra', '/importaciones', '/evaluaciones-proveedores'],
+    ventas: ['/quotes', '/sales', '/sales/receipts', '/sales/guides', '/sales/sunat', '/sales/credits'],
+  }
+  for (const [id, paths] of Object.entries(expected)) {
+    const module = workspaceModules.find(item => item.id === id)
+    assert.ok(module)
+    for (const path of paths) {
+      const child = module.children.find(item => item.path === path)
+      assert.ok(child, `${id} debe incluir ${path}`)
+      assert.equal(child.implemented, true)
+      assert.notEqual(child.availability, 'optional')
+      assert.ok(!/próximamente|opcional/i.test(child.label))
+      assert.ok(workspaceEntries.some(entry => entry.path === path))
+      assert.equal(submoduleMatchesLocation(path, path, ''), true)
+    }
+  }
+})
 
 test('los períodos y los registros usan el calendario de Perú, incluso al cruzar medianoche UTC', () => {
   assert.equal(businessDate('2026-10-10T02:00:00Z'), '2026-10-09')

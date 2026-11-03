@@ -1,8 +1,32 @@
 # Reconciliación del historial de migraciones
 
-**Estado:** diez migraciones forward-only aplicadas; 25 archivos históricos/futuros aún por reconciliar.  
-**Esquema remoto usado como evidencia:** lectura del 26 de octubre de 2026.  
+**Estado:** 41 versiones registradas en el historial remoto; 25 archivos históricos/futuros siguen por conciliar.  
+**Esquema remoto usado como evidencia:** lecturas del 26, 29 y 30 de octubre de 2026.  
 **Proyecto:** `auxqjoxnsasnmtnakgmg`.
+
+## Actualización del 30 de octubre de 2026
+
+Se integraron los módulos de Logística y Transporte y Metas y Objetivos con nueve migraciones forward-only aplicadas mediante `apply_migration` (nunca `db push`):
+
+1. `logistica_flota_base` — crea `vehiculos`, `conductores` y `asignaciones_vehiculo` (Alejandro no incluía estas tablas en ningún archivo; solo las mencionaba como «script base»), con unicidad de placa/DNI, restricciones de exclusión `vehiculo_sin_cruce`/`conductor_sin_cruce`, trigger de vigencia y compatibilidad de licencia, RLS, permisos y auditoría.
+2. `metas_objetivos` — `metas`, `metas_asignaciones` y `metas_cortes`, permisos `metas:*` y RLS.
+3. `logistica_despachos` — `despachos` con paradas JSONB, RLS y permisos `logistica:*`.
+4. `bitacora_operaciones` — columna `auditoria.resultado` (`exitoso`/`denegado`/`fallido`), trigger de bitácora en las tablas nuevas y RPC `registrar_evento_auditoria`.
+5. `seguimiento_despachos` — columna `despachos.eventos` y su restricción de arreglo JSONB.
+6. `metas_ventas_automaticas` — `metas_asignaciones.referencia_id`, `metas_logrado` y `metas_catalogo`.
+7. `vendedor_turno_sucursal` — `caja_turnos.vendedor_id`, `caja_vendedores`, `_sucursal_de_venta`, `_metas_resueltas`, y `metas_logrado`/`metas_aportes` por sucursal.
+8. `caja_vendedor_asignado` — unicidad de caja por responsable, trigger `_cajas_responsable_guard` y `metas_ubicaciones`.
+9. `metas_logistica_permisos` — asigna los permisos nuevos a Administrador, Gerente, Supervisor, Operador y Vendedor según el alcance acordado.
+
+Verificación remota al cierre: 41 migraciones registradas, 118 tablas públicas con RLS, 249 políticas, 90 tablas con trigger `fn_auditar`, 316 funciones en `public`, 61 en `app_private` y 10 cuentas/perfiles. El conteo de tablas incluye las tablas de `contratos_compra`/`reversiones_devolucion_compra` y demás objetos del equipo concurrente, que quedaron fuera de alcance y no se modificaron. Las 7 tablas nuevas del módulo (`vehiculos`, `conductores`, `asignaciones_vehiculo`, `despachos`, `metas`, `metas_asignaciones`, `metas_cortes`) tienen RLS y 23 políticas en total. Se validó con SQL suplantando el JWT de una cuenta Administrador (lectura y escritura permitidas, RPCs operativos) y de una cuenta Vendedor (metas visibles, logística filtrada y escritura rechazada con 42501); todo dentro de transacciones revertidas, sin dejar filas de prueba.
+
+### Conciliación de `20261102057000_estado_anulacion_cancelada.sql`
+
+El archivo local es una reconstrucción de la versión remota `20261030032206_estado_anulacion_cancelada_funciones`. Las firmas de las seis funciones coinciden con el remoto (`app_private._anular_requisicion_compra`, `app_private._proteger_cancelacion_orden_contrato_v1`, `public.cancelar_orden_compra_v1`, `public.cancelar_solicitud_compra_v1`, `public.listar_solicitudes_compra_paginado_v1`, `public.registrar_devolucion_compra`). La definición remota de `registrar_devolucion_compra` evolucionó después: descuenta las reversiones de `public.detalle_reversiones_devolucion_compra` (tabla del equipo concurrente) y llama `registrar_movimiento_inventario` con la cantidad como cuarto argumento. El archivo local se corrigió para reflejar esa definición y ya no contiene el error tipográfico `v_detaille` ni la llamada de ocho argumentos. No se reejecutó en remoto: la fuente de verdad es la definición actual de Postgres. `cancelar_solicitud_compra_v1` y `listar_solicitudes_compra_paginado_v1` siguen apuntando a las tablas heredadas `solicitudes_compra`/`ofertas_compra`; el flujo canónico nuevo es `requisiciones_compra` → `ofertas_proveedor` → orden.
+
+## Actualización del 29 de octubre de 2026
+
+Nueve versiones forward-only nuevas aplicadas directamente con `apply_migration` y verificadas: `retiro_modelo_a_compras` (20261030024159), `requisiciones_compra_extension` (…024732), `funciones_requisiciones_compra` (…030722), `compras_cantidad_fraccionaria` (…031945), `estado_anulacion_cancelada` (…032144), `estado_anulacion_cancelada_funciones` (…032206), `ajuste_inventario_dedup_retorno` (…033217), `maestros_tesoreria_comisiones_schema` (20261030034328) y `maestros_tesoreria_comisiones_funciones` (…034434). El remoto queda con 32 migraciones registradas, 75 tablas públicas (RLS en 75), 69 con trigger `trg_auditoria`, 193 políticas RLS, 265 funciones públicas y 50 en `app_private`. Transitorio relevante: `funciones_requisiciones_compra` se re-aplicó una vez más cuando se corrigió a causa del error 42P13 (doble declaración de la misma firma), y una corrección posterior (`ajuste_inventario_dedup_retorno`) hizo que la repetición de `_registrar_ajuste_inventario` devuelva el id del asiento en lugar de NULL. Los 25 archivos históricos conservan la disposición de la matriz siguiente; no deben ejecutarse como bloque hasta tener CLI enlazada y exportación restaurable. El detalle funcional de la última fase está en [IMPLEMENTACION_MAESTROS_TESORERIA_COMISIONES.md](IMPLEMENTACION_MAESTROS_TESORERIA_COMISIONES.md).
 
 ## Objetivo y criterio
 

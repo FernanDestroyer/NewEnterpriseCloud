@@ -2,8 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { pageMeta } from '../data/catalog'
 import { brandLogoUrl, defaultStatus, escapeCell, isStockAlert, money, stockStatus } from '../data/helpers'
 import { customerCredit, consumesCreditLine } from '../data/workspace'
+import { requiresTreasuryPermission } from '../data/operationPermissions'
 import { fetchCompanyProfile, type CompanyProfile } from '../services/company'
-import { convertQuoteToSale, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertPurchaseWithLines, insertQuoteWithLines, insertRecord, insertSaleWithLines, registerPurchaseReceipt, registerTreasuryPayment, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput, type PurchaseReceiptInputLine } from '../services/records'
+import { convertQuoteToSale, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchPurchaseFiscalSummaries, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertPurchaseWithLines, insertQuoteWithLines, insertRecord, insertSaleWithLines, registerPurchaseReceipt, registerTreasuryPayment, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput, type PurchaseReceiptInputLine } from '../services/records'
 import { DATA_PAGES } from '../data/catalog'
 import { csvContent } from '../data/exports'
 import { useAuth } from './AuthContext'
@@ -20,7 +21,7 @@ type RecordsContextValue = {
   lastSyncedAt: Date | null
   errors: Partial<Record<DataPage, string>>
   catalogError: string
-  reload: () => Promise<void>
+  reload: (options?: { throwOnError?: boolean }) => Promise<void>
   toast: string
   notify: (message: string) => void
   recordModal: RecordModalState | null
@@ -80,8 +81,11 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     return { base: snapshot.records, errors: snapshot.errors, catalogError, catalog: enrichCatalog(raw, snapshot.records.inventory), company }
   }, [allowedPages])
 
-  const reload = useCallback(async () => {
-    if (!userId || !profile) return
+  const reload = useCallback(async (options?: { throwOnError?: boolean }) => {
+    if (!userId || !profile) {
+      if (options?.throwOnError) throw new Error('La sesión no está disponible para recargar productos.')
+      return
+    }
     const sequence = ++loadSequence.current
     setRefreshing(true)
     try {
@@ -93,8 +97,10 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       setErrors(errors)
       setCatalogError(catalogError)
       setLastSyncedAt(new Date())
+      if (options?.throwOnError && errors.inventory) throw new Error(`No se pudo cargar el catálogo de productos: ${errors.inventory}`)
     } catch (error) {
       notify(friendlyError(error))
+      if (options?.throwOnError) throw error
     } finally { if (sequence === loadSequence.current) setRefreshing(false) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, profile, loadAll, notify])
@@ -295,7 +301,9 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
         const price = Number(String(form.get(`price_${uuid}`) ?? ''))
         if (!Number.isFinite(qty) || qty <= 0) throw new Error(`Cantidad inválida para ${product.name}.`)
         if (!Number.isFinite(price) || price <= 0) throw new Error(`"${product.name}" no tiene precio definido. ${priceHint}`)
-        lines.push({ producto_id: uuid, cantidad: qty, precio: price })
+        const treatmentRaw = String(form.get(`tax_${uuid}`) ?? '')
+        const tratamiento_tributario = treatmentRaw === 'Gravado' || treatmentRaw === 'Exonerado' || treatmentRaw === 'Inafecto' ? treatmentRaw : null
+        lines.push({ producto_id: uuid, cantidad: qty, precio: price, ...(page === 'purchases' ? { tratamiento_tributario } : {}) })
       }
     }
     try {
@@ -309,10 +317,30 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       return
     }
     if (page === 'sales' || page === 'purchases') {
-      const paymentAction = record ? 'editar' : 'crear'
-      if (!can('finance', paymentAction)) return notify(`Tu rol necesita permiso de ${paymentAction} finanzas para guardar esta operación y su cuenta vinculada.`)
+      const saleTotal = lines.length
+        ? Math.round(lines.reduce((sum, line) => {
+          const base = Math.round(line.cantidad * line.precio * 100) / 100
+          return sum + base + (page === 'purchases' && line.tratamiento_tributario === 'Gravado' ? Math.round(base * 18) / 100 : 0)
+        }, 0) * (1 - discount / 100) * 100) / 100
+        : (savedAmount ?? 0)
+      const requiresTreasury = requiresTreasuryPermission({
+        operation: page === 'sales' ? 'sale' : 'purchase',
+        editing: Boolean(record),
+        status: selectedStatus,
+        paymentMethod: saleMethod,
+        total: saleTotal,
+      })
+      const treasuryAction = record ? 'editar' : 'crear'
+      if (requiresTreasury && !can('finance', treasuryAction)) {
+        if (record) return notify('Tu rol necesita permiso de editar finanzas para modificar esta operación y su cuenta vinculada.')
+        return notify('Tu rol necesita permiso de crear finanzas para registrar el cobro inmediato. Puedes guardar la venta como pendiente y cobrarla desde Tesorería.')
+      }
       if (page === 'sales' && lines.length && !can('inventory', 'editar') && !can('inventory', 'crear')) return notify('Tu rol necesita permiso de crear o editar inventario para registrar una venta con productos.')
       if (page === 'sales' && lines.length && !String(form.get('almacen_id') ?? '')) return notify('Selecciona el almacén de salida para vender productos.')
+    }
+    if (page === 'purchases' && String(form.get('moneda') ?? 'PEN') === 'USD' && selectedStatus === 'Orden') {
+      const rate = Number(String(form.get('exchange_rate') ?? '').trim())
+      if (!Number.isFinite(rate) || rate <= 0) return notify('Registra un tipo de cambio manual mayor que cero para confirmar la orden en USD.')
     }
     const input = {
       name,
@@ -325,6 +353,10 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       ...(page === 'inventory' && form.has('categoria_id') ? { categoria_id: String(form.get('categoria_id') ?? '') || null } : {}),
       ...(page === 'inventory' && form.has('unidad_medida_id') ? { unidad_medida_id: String(form.get('unidad_medida_id') ?? '') || null } : {}),
       ...(page === 'purchases' && savedFechaLimite !== undefined ? { fecha_limite: savedFechaLimite } : {}),
+      ...(page === 'purchases' ? {
+        moneda: String(form.get('moneda') ?? 'PEN') === 'USD' ? 'USD' as const : 'PEN' as const,
+        exchange_rate: String(form.get('exchange_rate') ?? '').trim() ? Number(form.get('exchange_rate')) : null,
+      } : {}),
       ...(page === 'sales' ? { descuento: discount } : {}),
       ...(page === 'sales' ? { medio_pago: saleMethod || null, almacen_id: String(form.get('almacen_id') ?? '') || null, cajaTurnoId: String(form.get('caja_turno_id') ?? '') || null, idempotencyKey: String(form.get('idempotency_key') ?? '') } : {}),
       ...(page === 'purchases' ? { idempotencyKey: String(form.get('idempotency_key') ?? '') } : {}),
@@ -341,7 +373,10 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     }
     // Si hay líneas, el total manda sobre el monto manual.
     if (lines.length) {
-      const total = lines.reduce((sum, line) => sum + line.cantidad * line.precio, 0)
+      const total = lines.reduce((sum, line) => {
+        const base = Math.round(line.cantidad * line.precio * 100) / 100
+        return sum + base + (page === 'purchases' && line.tratamiento_tributario === 'Gravado' ? Math.round(base * 18) / 100 : 0)
+      }, 0)
       ;(input as { amount?: number }).amount = total
     }
 
@@ -400,13 +435,13 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       } else if (page === 'purchases') {
         if (!lines.length && record?.rowId) {
           const previous = await fetchDocumentLines('purchases', record.rowId)
-          const previousInput: LineInput[] = previous.map((line) => ({ producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio }))
+          const previousInput: LineInput[] = previous.map((line) => ({ detalle_compra_id: line.rowId, producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio, tratamiento_tributario: line.taxTreatment, tasa_tributaria: line.taxRate }))
           saved = record
-            ? await updatePurchaseWithLines(record.id, input, previousInput)
+            ? await updatePurchaseWithLines(record.id, input, previousInput, record.updatedAt)
             : await insertPurchaseWithLines(input, [])
         } else {
           saved = record
-            ? await updatePurchaseWithLines(record.id, input, lines)
+            ? await updatePurchaseWithLines(record.id, input, lines, record.updatedAt)
             : await insertPurchaseWithLines(input, lines)
         }
       } else {
@@ -508,9 +543,12 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
   const exportTable = async (page: DataPage, format: ExportFormat, items = records[page]) => {
     const title = pageMeta[page].title
     const baseName = `${title.toLocaleLowerCase()}-enterprisecloud`
+    const fiscalSummaries = page === 'purchases'
+      ? await fetchPurchaseFiscalSummaries(items.flatMap(item => item.rowId ? [item.rowId] : []))
+      : new Map()
     const header = page === 'suppliers'
       ? ['Referencia', 'Nombre', 'Fecha', 'RUC', 'Estado']
-      : ['Referencia', 'Nombre', 'Detalle', 'Fecha', page === 'inventory' ? 'Existencias' : page === 'customers' ? 'Disponible' : 'Importe', 'Estado', ...(page === 'inventory' ? ['Precio de venta'] : []), ...(page === 'customers' ? ['Línea de crédito'] : [])]
+      : ['Referencia', 'Nombre', 'Detalle', 'Fecha', page === 'inventory' ? 'Existencias' : page === 'customers' ? 'Disponible' : 'Importe', 'Estado', ...(page === 'inventory' ? ['Precio de venta'] : []), ...(page === 'customers' ? ['Línea de crédito'] : []), ...(page === 'purchases' ? ['Moneda', 'Tipo de cambio', 'Base imponible', 'Impuesto', 'Total fiscal'] : [])]
     const rows = items.map((item) => page === 'suppliers'
       ? [
         item.id,
@@ -524,11 +562,15 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       item.name,
       item.detail,
       item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-PE', { timeZone: 'America/Lima' }) : item.date,
-      page === 'inventory' ? `${item.quantity ?? 0} unidades` : page === 'customers' ? String(customerCredit(item, records.sales, records.finance).disponible) : item.amount !== undefined ? String(item.amount) : '',
-      page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status,
-      ...(page === 'inventory' ? [item.precio !== undefined ? String(item.precio) : ''] : []),
-      ...(page === 'customers' ? [item.amount !== undefined ? String(item.amount) : ''] : []),
-    ])
+       page === 'inventory' ? `${item.quantity ?? 0} unidades` : page === 'customers' ? String(customerCredit(item, records.sales, records.finance).disponible) : item.amount !== undefined ? String(item.amount) : '',
+       page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status,
+       ...(page === 'inventory' ? [item.precio !== undefined ? String(item.precio) : ''] : []),
+       ...(page === 'customers' ? [item.amount !== undefined ? String(item.amount) : ''] : []),
+       ...(page === 'purchases' ? (() => {
+         const summary = item.rowId ? fiscalSummaries.get(item.rowId) : undefined
+         return [item.moneda ?? 'PEN', item.exchangeRate == null ? '' : String(item.exchangeRate), summary?.complete ? String(summary.base) : '', summary?.complete ? String(summary.tax) : '', summary?.complete ? String(summary.total) : item.amount === undefined ? '' : String(item.amount)]
+       })() : []),
+     ])
 
     if (format === 'csv') {
       downloadBlob(new Blob([csvContent(header, rows)], { type: 'text/csv;charset=utf-8' }), `${baseName}.csv`)

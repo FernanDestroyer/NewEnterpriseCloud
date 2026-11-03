@@ -57,6 +57,15 @@ export function money(value = 0) {
   }).format(value)
 }
 
+export function moneyCurrency(value = 0, currency: 'PEN' | 'USD' = 'PEN') {
+  return new Intl.NumberFormat('es-PE', {
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    style: 'currency',
+  }).format(value)
+}
+
 export function statusTone(status: RecordStatus) {
   if (status === 'Crítico' || status === 'Rechazada') return 'red'
   if (status === 'Pendiente' || status === 'Bajo stock' || status === 'Vencida' || status === 'Solicitud' || status === 'Factura' || status === 'Recibida') return 'amber'

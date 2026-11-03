@@ -1,21 +1,41 @@
-import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, ScanSearch, Settings, ShieldCheck, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
+import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, ScanSearch, Settings, ShieldCheck, Ship, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
 
-export type PermissionModuleKey = DataPage | 'analizador' | 'audit'
+export type PermissionModuleKey = DataPage | 'analizador' | 'audit' | 'metas' | 'logistica'
 
 export type WorkspaceEntry = { label: string; path: string; page?: DataPage; permission?: PermissionModuleKey; icon: LucideIcon; group: string }
 export const workspaceEntries: WorkspaceEntry[] = [
   { label: 'Panel de control', path: '/dashboard', icon: LayoutDashboard, group: 'REPORTES E INTELIGENCIA' },
   { label: 'Órdenes de compra', path: '/purchases', page: 'purchases', icon: ShoppingCart, group: 'COMPRAS' },
+  { label: 'Solicitud interna y comparativo de ofertas', path: '/solicitudes-compra', permission: 'purchases', icon: ClipboardList, group: 'COMPRAS' },
   { label: 'Ingreso al Kardex', path: '/ingreso-kardex', page: 'purchases', icon: PackageCheck, group: 'COMPRAS' },
+  { label: 'Devoluciones a proveedor', path: '/devoluciones-proveedor', permission: 'purchases', icon: ArrowLeftRight, group: 'COMPRAS' },
+  { label: 'Contratos marco', path: '/contratos-compra', permission: 'purchases', icon: FileText, group: 'COMPRAS' },
+  { label: 'Importaciones', path: '/importaciones', permission: 'purchases', icon: Ship, group: 'COMPRAS' },
+  { label: 'Evaluación de proveedores', path: '/evaluaciones-proveedores', permission: 'purchases', icon: Award, group: 'COMPRAS' },
   { label: 'Proveedores', path: '/suppliers', page: 'suppliers', icon: Building2, group: 'MAESTROS' },
   { label: 'Cotizaciones', path: '/quotes', page: 'quotes', icon: ClipboardList, group: 'VENTAS' },
   { label: 'Ventas', path: '/sales', page: 'sales', icon: ReceiptText, group: 'VENTAS' },
+  { label: 'Comprobantes imprimibles', path: '/sales/receipts', permission: 'sales', icon: FileCheck2, group: 'VENTAS' },
+  { label: 'Guías de remisión', path: '/sales/guides', permission: 'sales', icon: FileText, group: 'VENTAS' },
+  { label: 'Emisión electrónica SUNAT', path: '/sales/sunat', permission: 'sales', icon: ReceiptText, group: 'VENTAS' },
+  { label: 'Notas de crédito y devoluciones', path: '/sales/credits', permission: 'sales', icon: ArrowLeftRight, group: 'VENTAS' },
   { label: 'Clientes', path: '/customers', page: 'customers', icon: Users, group: 'MAESTROS' },
-  { label: 'Stock de productos', path: '/inventory', page: 'inventory', icon: Boxes, group: 'INVENTARIO' },
-  { label: 'Movimientos de Kardex', path: '/movimiento-kardex', page: 'inventory', icon: ArrowLeftRight, group: 'INVENTARIO' },
+  { label: 'Existencias', path: '/inventario/existencias', permission: 'inventory', icon: Boxes, group: 'INVENTARIO' },
+  { label: 'Kardex', path: '/inventario/kardex', permission: 'inventory', icon: ArrowLeftRight, group: 'INVENTARIO' },
+  { label: 'Transferencias entre almacenes', path: '/inventario/transferencias', permission: 'inventory', icon: Truck, group: 'INVENTARIO' },
+  { label: 'Ajustes de inventario', path: '/inventario/ajustes', permission: 'inventory', icon: Wrench, group: 'INVENTARIO' },
+  { label: 'Inventario físico', path: '/inventario/fisico', permission: 'inventory', icon: ClipboardCheck, group: 'INVENTARIO' },
+  { label: 'Lotes y series', path: '/inventario/lotes-series', permission: 'inventory', icon: Package, group: 'INVENTARIO' },
   { label: 'Tesorería', path: '/finance', page: 'finance', icon: Wallet, group: 'TESORERÍA' },
+  { label: 'Bancos y conciliación', path: '/tesoreria', permission: 'finance', icon: Landmark, group: 'TESORERÍA' },
+  { label: 'Comisiones de vendedores', path: '/comisiones', permission: 'sales', icon: Percent, group: 'VENTAS' },
+  { label: 'Planificación de despachos', path: '/logistica/despachos', permission: 'logistica', icon: MapPinned, group: 'LOGÍSTICA Y TRANSPORTE' },
+  { label: 'Vehículos y conductores', path: '/logistica/flota', permission: 'logistica', icon: Truck, group: 'LOGÍSTICA Y TRANSPORTE' },
+  { label: 'Seguimiento de despachos', path: '/logistica/seguimiento', permission: 'logistica', icon: PackageCheck, group: 'LOGÍSTICA Y TRANSPORTE' },
+  { label: 'Metas y objetivos', path: '/metas', permission: 'metas', icon: Target, group: 'METAS Y OBJETIVOS' },
+  { label: 'Maestros', path: '/maestros', permission: 'settings', icon: Building2, group: 'MAESTROS' },
   { label: 'Caja', path: '/caja', page: 'finance', icon: Banknote, group: 'TESORERÍA' },
   { label: 'Reportes', path: '/reports', page: 'reports', icon: TrendingUp, group: 'REPORTES E INTELIGENCIA' },
   { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'CONFIGURACIÓN' },
@@ -49,22 +69,24 @@ export const workspaceModules: WorkspaceModule[] = [
     children: [
       { label: 'Clientes', path: '/customers', permission: 'customers', icon: Users, implemented: true },
       { label: 'Proveedores', path: '/suppliers', permission: 'suppliers', icon: Building2, implemented: true },
-      { label: 'Productos y clasificación', path: '/inventory#productos', permission: 'inventory', icon: Boxes, availability: 'partial', implemented: true },
-      { label: 'Ficha de empresa', path: '/mantenimientos#empresa', permission: 'settings', icon: Building2, availability: 'partial', implemented: true },
-      { label: 'Sucursales y almacenes', path: '/mantenimientos#organizacion', permission: 'settings', icon: Building2, availability: 'partial', implemented: true },
-      { label: 'Zonas comerciales y de reparto', path: '/mantenimientos#zonas-comerciales', permission: 'settings', icon: MapPinned, availability: 'partial', implemented: true },
-      { label: 'Transportistas y vendedores', icon: Truck, implemented: false },
-      { label: 'Catálogos comerciales y tributarios', path: '/mantenimientos#catalogos', permission: 'settings', icon: Wrench, availability: 'partial', implemented: true },
+      { label: 'Productos y clasificación', path: '/inventory#productos', permission: 'inventory', icon: Boxes, implemented: true },
+      { label: 'Ficha de empresa', path: '/mantenimientos#empresa', permission: 'settings', icon: Building2, implemented: true },
+      { label: 'Sucursales y almacenes', path: '/mantenimientos#organizacion', permission: 'settings', icon: Building2, implemented: true },
+      { label: 'Zonas comerciales y de reparto', path: '/mantenimientos#zonas-comerciales', permission: 'settings', icon: MapPinned, implemented: true },
+      { label: 'Transportistas y vendedores', path: '/maestros#personas', permission: 'settings', icon: Truck, implemented: true },
+      { label: 'Catálogos comerciales y tributarios', path: '/maestros#catalogos', permission: 'settings', icon: Wrench, implemented: true },
     ],
   },
   {
     id: 'compras', label: 'Compras', icon: ShoppingCart,
     children: [
       { label: 'Órdenes nacionales', path: '/purchases', permission: 'purchases', icon: ShoppingCart, availability: 'partial', implemented: true },
-      { label: 'Solicitud interna y comparativo de ofertas', permission: 'purchases', icon: ClipboardList, implemented: false },
+      { label: 'Solicitud interna y comparativo de ofertas', path: '/solicitudes-compra', permission: 'purchases', icon: ClipboardList, implemented: true },
       { label: 'Recepción de mercadería', path: '/ingreso-kardex', permission: 'purchases', icon: PackageCheck, implemented: true },
-      { label: 'Devoluciones a proveedor', permission: 'purchases', icon: ArrowLeftRight, implemented: false },
-      { label: 'Importaciones, contratos y evaluación', permission: 'purchases', icon: FileText, availability: 'optional', implemented: false },
+      { label: 'Devoluciones a proveedor', path: '/devoluciones-proveedor', permission: 'purchases', icon: ArrowLeftRight, implemented: true },
+      { label: 'Contratos marco', path: '/contratos-compra', permission: 'purchases', icon: FileText, implemented: true },
+      { label: 'Importaciones', path: '/importaciones', permission: 'purchases', icon: Ship, implemented: true },
+      { label: 'Evaluación de proveedores', path: '/evaluaciones-proveedores', permission: 'purchases', icon: Award, implemented: true },
     ],
   },
   {
@@ -72,21 +94,21 @@ export const workspaceModules: WorkspaceModule[] = [
     children: [
       { label: 'Cotizaciones', path: '/quotes', permission: 'quotes', icon: ClipboardList, implemented: true },
       { label: 'Pedidos y ventas', path: '/sales', permission: 'sales', icon: ShoppingCart, implemented: true },
-      { label: 'Comprobantes imprimibles', path: '/sales#comprobantes', permission: 'sales', icon: FileCheck2, availability: 'partial', implemented: true },
-      { label: 'Guías de remisión', permission: 'sales', icon: FileText, implemented: false },
-      { label: 'Emisión electrónica SUNAT', permission: 'sales', icon: ReceiptText, implemented: false },
-      { label: 'Notas de crédito y devoluciones', permission: 'sales', icon: ArrowLeftRight, implemented: false },
+      { label: 'Comprobantes imprimibles', path: '/sales/receipts', permission: 'sales', icon: FileCheck2, implemented: true },
+      { label: 'Guías de remisión', path: '/sales/guides', permission: 'sales', icon: FileText, implemented: true },
+      { label: 'Emisión electrónica SUNAT', path: '/sales/sunat', permission: 'sales', icon: ReceiptText, implemented: true },
+      { label: 'Notas de crédito y devoluciones', path: '/sales/credits', permission: 'sales', icon: ArrowLeftRight, implemented: true },
     ],
   },
   {
     id: 'inventario', label: 'Inventario y Kardex', icon: Boxes,
     children: [
-      { label: 'Existencias', path: '/inventory#existencias', permission: 'inventory', icon: Package, implemented: true },
-      { label: 'Kardex', path: '/movimiento-kardex', permission: 'inventory', icon: ArrowLeftRight, implemented: true },
-      { label: 'Transferencias entre almacenes', permission: 'inventory', icon: Truck, implemented: false },
-      { label: 'Ajustes de inventario', permission: 'inventory', icon: Wrench, implemented: false },
-      { label: 'Inventario físico', permission: 'inventory', icon: ClipboardCheck, implemented: false },
-      { label: 'Lotes y series', permission: 'inventory', icon: Package, availability: 'optional', implemented: false },
+      { label: 'Existencias', path: '/inventario/existencias', permission: 'inventory', icon: Package, implemented: true },
+      { label: 'Kardex', path: '/inventario/kardex', permission: 'inventory', icon: ArrowLeftRight, implemented: true },
+      { label: 'Transferencias entre almacenes', path: '/inventario/transferencias', permission: 'inventory', icon: Truck, implemented: true },
+      { label: 'Ajustes de inventario', path: '/inventario/ajustes', permission: 'inventory', icon: Wrench, implemented: true },
+      { label: 'Inventario físico', path: '/inventario/fisico', permission: 'inventory', icon: ClipboardCheck, implemented: true },
+      { label: 'Lotes y series', path: '/inventario/lotes-series', permission: 'inventory', icon: Package, implemented: true },
     ],
   },
   {
@@ -94,32 +116,32 @@ export const workspaceModules: WorkspaceModule[] = [
     children: [
       { label: 'Cuentas por cobrar y pagar', path: '/finance', permission: 'finance', icon: Wallet, availability: 'partial', implemented: true },
       { label: 'Cajas y turnos', path: '/caja', permission: 'finance', icon: Banknote, implemented: true },
-      { label: 'Bancos, flujo y conciliación', permission: 'finance', icon: Landmark, implemented: false },
+      { label: 'Bancos, flujo y conciliación', path: '/tesoreria', permission: 'finance', icon: Landmark, implemented: true },
     ],
   },
   {
     id: 'logistica', label: 'Logística y Transporte', icon: Truck,
     children: [
-      { label: 'Planificación de despachos y rutas', icon: MapPinned, implemented: false },
-      { label: 'Vehículos y asignación de conductores', icon: Truck, implemented: false },
-      { label: 'Seguimiento, entrega y devoluciones', icon: PackageCheck, implemented: false },
+      { label: 'Planificación de despachos y rutas', path: '/logistica/despachos', permission: 'logistica', icon: MapPinned, implemented: true },
+      { label: 'Vehículos y asignación de conductores', path: '/logistica/flota', permission: 'logistica', icon: Truck, implemented: true },
+      { label: 'Seguimiento, entrega y devoluciones', path: '/logistica/seguimiento', permission: 'logistica', icon: PackageCheck, implemented: true },
     ],
   },
   {
     id: 'comisiones', label: 'Comisiones de Vendedores', icon: Percent,
     children: [
-      { label: 'Reglas, escalas y excepciones', icon: Settings, implemented: false },
-      { label: 'Cálculo y ajustes de comisión', icon: Percent, implemented: false },
-      { label: 'Liquidaciones y pagos', icon: Banknote, implemented: false },
-      { label: 'Historial y reportes', icon: FileText, implemented: false },
+      { label: 'Reglas, escalas y excepciones', path: '/comisiones#reglas', permission: 'sales', icon: Settings, implemented: true },
+      { label: 'Cálculo y ajustes de comisión', path: '/comisiones#calculo', permission: 'sales', icon: Percent, implemented: true },
+      { label: 'Liquidaciones y pagos', path: '/comisiones#liquidaciones', permission: 'sales', icon: Banknote, implemented: true },
+      { label: 'Historial y reportes', path: '/comisiones#historial', permission: 'sales', icon: FileText, implemented: true },
     ],
   },
   {
     id: 'metas', label: 'Metas y Objetivos', icon: Target,
     children: [
-      { label: 'Definición y asignación de metas', icon: Target, implemented: false },
-      { label: 'Avance por vendedor, sucursal o producto', icon: TrendingUp, implemented: false },
-      { label: 'Ranking y alertas de cumplimiento', icon: Award, implemented: false },
+      { label: 'Definición y asignación de metas', path: '/metas#definicion', permission: 'metas', icon: Target, implemented: true },
+      { label: 'Avance por vendedor, sucursal o producto', path: '/metas#avance', permission: 'metas', icon: TrendingUp, implemented: true },
+      { label: 'Ranking y alertas de cumplimiento', path: '/metas#ranking', permission: 'metas', icon: Award, implemented: true },
     ],
   },
   {
@@ -168,6 +190,7 @@ export const permissionModule: Record<PermissionModuleKey, string> = {
   sales: 'ventas', quotes: 'cotizaciones', purchases: 'compras', inventory: 'inventario',
   customers: 'clientes', suppliers: 'proveedores', finance: 'finanzas', documents: 'documentos',
   reports: 'reportes', settings: 'configuracion', analizador: 'analizador', audit: 'auditoria',
+  metas: 'metas', logistica: 'logistica',
 }
 
 export type Period = 'all' | 'month' | '30' | '7' | 'today'

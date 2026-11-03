@@ -1,6 +1,6 @@
 # Guía paso a paso de implementación de EnterpriseCloud
 
-**Esquema remoto verificado:** 26 de octubre de 2026. **Trabajo local documentado:** 26 de octubre de 2026.  
+**Esquema remoto verificado:** 26 de octubre de 2026. **Trabajo local documentado:** 26 de octubre de 2026. **Entrega adicional:** 29 de octubre de 2026 (solicitud de compra Modelo B, Maestros/Tesorería/Comisiones).  
 **Objetivo:** completar el ERP por flujos verificables, preservar las cuentas y mantener el costo en cero mientras el plan Free sea suficiente.  
 **Mapa y propuesta de datos:** [arquitectura objetivo](ARQUITECTURA_OBJETIVO_ENTERPRISECLOUD.md).
 
@@ -19,17 +19,18 @@
 
 ### Incluye o tiene avance parcial
 
-1. Maestros de clientes, proveedores, productos/clasificación, empresa, sucursales, almacenes, zonas y catálogos compartidos.
-2. Compras nacionales: orden, recepción parcial/total por almacén, obligación por pagar y pagos parciales.
+1. Maestros de clientes, proveedores, productos/clasificación, empresa, sucursales, almacenes, zonas, catálogos compartidos, transportistas y vendedores.
+2. Compras nacionales: solicitud interna con versionado e historial, comparativo de ofertas, orden, recepción parcial/total por almacén, obligación por pagar y pagos parciales.
 3. Ventas: cotización, venta por almacén, salida de stock, cuenta por cobrar y cobro.
 4. Inventario por almacén, apertura inicial con distribución física y Kardex.
-5. Tesorería: caja/turnos, cuentas por cobrar/pagar, aplicaciones y movimientos parciales.
+5. Tesorería: caja/turnos, cuentas por cobrar/pagar, aplicaciones, movimientos, bancos, flujo y conciliación bancaria.
 6. Seguridad de usuarios/roles/permisos y menú organizado en 12 módulos.
 7. Panel e informes básicos sustentados por los datos actuales.
+8. Comisiones de vendedores: reglas, escalas, excepciones, asignación venta–vendedor, cálculo, liquidación y pagos.
 
 ### Después de V1
 
-Multi-organización SaaS, importaciones, contratos y evaluación formal de proveedores, devoluciones/notas de crédito, reservas, guías, SUNAT, transferencias/ajustes/conteos, conciliación bancaria, logística de flota, comisiones, metas, workflows, notificaciones persistentes, webhooks, lotes/series, cantidades fraccionarias y BI avanzado.
+Multi-organización SaaS, importaciones, contratos y evaluación formal de proveedores, devoluciones/notas de crédito, reservas, guías, SUNAT, transferencias entre almacenes, ajustes de inventario y conteos, logística de flota, metas, workflows, notificaciones persistentes, webhooks, lotes/series y BI avanzado. (Conciliación bancaria, comisiones y compras fraccionarias pasaron al alcance corriente el 29-10-2026.)
 
 ## 3. Fase 1 — reconciliar esquema e historial
 
@@ -152,6 +153,17 @@ Orden:
 7. Publicar BI con definición, fórmula, corte y tabla de origen; conciliar con documentos operativos.
 
 No crear tablas genéricas antes de aprobar reglas. Las tablas candidatas y sus dependencias están en la arquitectura objetivo.
+
+### Entrega del 29-10-2026: compra por solicitud (Modelo B) y módulos Maestros/Tesorería/Comisiones
+
+Ejecutado de acuerdo con el protocolo de la sección 11, aplicando `apply_migration` contra el proyecto real (nunca `db push`) y validando cada fase antes de la siguiente. Las nueve migraciones y su detalle funcional están en [RECONCILIACION_MIGRACIONES.md](RECONCILIACION_MIGRACIONES.md) y [IMPLEMENTACION_MAESTROS_TESORERIA_COMISIONES.md](IMPLEMENTACION_MAESTROS_TESORERIA_COMISIONES.md). Resumen:
+
+1. Retiro del Modelo A de compras (tablas y funciones legacy) sin tocar los datos operativos.
+2. Solicitud interna operativa con versión/bloqueo optimista, historial de eventos, ofertas de proveedor con moneda y tipo de cambio, selección de ganadora y generación atómica de la orden; idempotencia por clave en crear/editar/oferta/orden, y anulación como 'Cancelada'.
+3. Cantidades fraccionarias (numeric(14,3)) en requisición, oferta y orden; recepción/stock sigue en enteros (limitación documentada).
+4. Ajuste de inventario unificado por RPC con delta, asiento en `ajustes_inventario` e idempotencia.
+5. Maestros, Tesorería bancaria y Comisiones completos (14 tablas, 28 políticas, 7 RPC con idempotencia y exclusión de períodos), rutas `/maestros`, `/tesoreria` y `/comisiones`.
+6. Pruebas funcionales con rollback: 13/13 pasos de compras, 7 pasos de Tesorería/Comisiones, restricciones de exclusión y permisos por rol. `typecheck` sin errores y 48/48 pruebas.
 
 ## 10. Escenarios complicados que deben cubrirse
 
