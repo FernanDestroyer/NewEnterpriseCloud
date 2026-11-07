@@ -3,6 +3,7 @@ import { customerCredit, displayDate } from '../data/workspace'
 import { useRecords } from '../context/RecordsContext'
 import { useDialog } from './useDialog'
 import type { RecordItem } from '../types'
+import '../masters-ui.css'
 
 /** Icono de Google (Material Symbols Outlined). */
 function GoogleIcon({ name, className = '' }: { name: string; className?: string }) {
@@ -26,7 +27,7 @@ export default function CustomerHistory({ customer, onClose }: { customer: Recor
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div ref={dialogRef} className="ws-dialog" role="dialog" aria-modal="true" aria-label={`Historial de ${customer.name}`}>
+      <div ref={dialogRef} className="ws-dialog ec-master-history" role="dialog" aria-modal="true" aria-label={`Historial de ${customer.name}`}>
         <div className="modal-heading">
           <div>
             <span className="section-kicker"><i /> CLIENTES / HISTORIAL</span>

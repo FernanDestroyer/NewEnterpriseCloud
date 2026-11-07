@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { isValidElement, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { AlertTriangle, Info, X } from 'lucide-react'
 import ConfirmModal from '../../components/ConfirmModal'
 import { useDialog } from '../../components/useDialog'
@@ -6,6 +6,10 @@ import { friendlyError } from '../../services/records'
 import { ErrorValidacion, etiquetaVehiculo, type FlotaService } from './flotaService'
 import { ahoraLima, LICENCIA_CATEGORIAS, sumarHoras, VEHICULO_TIPOS, type Errores, type ResultadoAsignacion } from './rules'
 import type { Asignacion, Conductor, Vehiculo } from './types'
+import { SearchablePicker } from '../../components/SearchablePicker'
+import { SegmentedControl } from '../../components/ui/SegmentedControl'
+import { AsignacionFicha } from './LogisticaUI'
+import './logistica-ui.css'
 
 type Cerrar = { onClose: () => void; onSaved: (mensaje: string) => void }
 
@@ -20,7 +24,8 @@ export function Dialog({ title, description, onClose, busy, ancho, children }: {
 }
 
 export function Field({ label, error, wide, children }: { label: string; error?: string; wide?: boolean; children: ReactNode }) {
-  return <label className={wide ? 'ws-form-wide' : undefined}>{label}{children}{error && <small className="ws-field-error" role="alert">{error}</small>}</label>
+  if (isValidElement(children) && (children.type === 'input' || children.type === 'textarea')) return <label className={wide ? 'ws-form-wide' : undefined}>{label}{children}{error && <small className="ws-field-error" role="alert">{error}</small>}</label>
+   return <fieldset className={`ec-log-field${wide ? ' ws-form-wide' : ''}`}><legend>{label}</legend>{children}{error && <small className="ws-field-error" role="alert">{error}</small>}</fieldset>
 }
 
 function Actions({ busy, submitLabel, disabled, onClose }: { busy: boolean; submitLabel: string; disabled?: boolean; onClose: () => void }) {
@@ -42,7 +47,7 @@ export function reportar(reason: unknown, setErrores: (errores: Errores) => void
 export const Aviso = ({ mensaje }: { mensaje: string }) => mensaje ? <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={17} /><span>{mensaje}</span></div> : null
 
 // ---------- Vehículo ----------
-export function VehiculoDialog({ servicio, item, onClose, onSaved }: Cerrar & { servicio: FlotaService; item?: Vehiculo }) {
+export function VehiculoDialog({ servicio, item, vehiculos = [], onClose, onSaved }: Cerrar & { servicio: FlotaService; item?: Vehiculo; vehiculos?: Vehiculo[] }) {
   const [form, setForm] = useState({
     placa: item?.placa ?? '', tipo: item?.tipo ?? 'furgoneta', marca: item?.marca ?? '', modelo: item?.modelo ?? '',
     capacidadKg: item ? String(item.capacidadKg) : '', propiedad: item?.propiedad ?? 'propio', transportista: item?.transportista ?? '',
@@ -68,13 +73,13 @@ export function VehiculoDialog({ servicio, item, onClose, onSaved }: Cerrar & { 
       <Aviso mensaje={mensaje} />
       <div className="ws-form-grid">
         <Field label="Placa" error={errores.placa}><input value={form.placa} onChange={event => cambiar('placa', event.target.value)} placeholder="ABC-123" maxLength={8} autoComplete="off" data-autofocus /></Field>
-        <Field label="Tipo" error={errores.tipo}><select value={form.tipo} onChange={event => cambiar('tipo', event.target.value as typeof form.tipo)}>{VEHICULO_TIPOS.map(tipo => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></Field>
+        <Field label="Tipo" error={errores.tipo}><SegmentedControl ariaLabel="Tipo de vehículo" value={form.tipo} onChange={value => cambiar('tipo', value)} options={VEHICULO_TIPOS} /></Field>
         <Field label="Marca" error={errores.marca}><input value={form.marca} onChange={event => cambiar('marca', event.target.value)} maxLength={40} /></Field>
         <Field label="Modelo" error={errores.modelo}><input value={form.modelo} onChange={event => cambiar('modelo', event.target.value)} maxLength={40} /></Field>
         <Field label="Capacidad de carga (kg)" error={errores.capacidadKg}><input type="number" min={1} step={1} value={form.capacidadKg} onChange={event => cambiar('capacidadKg', event.target.value)} /></Field>
-        <Field label="Estado" error={errores.estado}><select value={form.estado} onChange={event => cambiar('estado', event.target.value as typeof form.estado)}><option value="activo">Activo</option><option value="mantenimiento">En mantenimiento</option><option value="inactivo">Inactivo</option></select></Field>
-        <Field label="Propiedad"><select value={form.propiedad} onChange={event => cambiar('propiedad', event.target.value as typeof form.propiedad)}><option value="propio">Propio</option><option value="tercero">De terceros</option></select></Field>
-        {form.propiedad === 'tercero' && <Field label="Empresa transportista" error={errores.transportista}><input value={form.transportista} onChange={event => cambiar('transportista', event.target.value)} maxLength={80} /></Field>}
+        <Field label="Estado" error={errores.estado}><SegmentedControl ariaLabel="Estado del vehículo" value={form.estado} onChange={value => cambiar('estado', value)} options={[{ value: 'activo', label: 'Activo' }, { value: 'mantenimiento', label: 'Mantenimiento' }, { value: 'inactivo', label: 'Inactivo' }]} /></Field>
+        <Field label="Propiedad"><SegmentedControl ariaLabel="Tipo de transporte" value={form.propiedad} onChange={value => cambiar('propiedad', value)} options={[{ value: 'propio', label: 'Propio' }, { value: 'tercero', label: 'Tercero' }]} /></Field>
+        {form.propiedad === 'tercero' && <Field label="Empresa transportista" error={errores.transportista}><SearchablePicker ariaLabel="Transportista registrado" value={form.transportista} onChange={value => cambiar('transportista', value)} options={[...new Set([...vehiculos.map(v => v.transportista), form.transportista].filter(Boolean))].map(value => ({ id: value, label: value }))} /><label>Nombre del transportista<input value={form.transportista} onChange={event => cambiar('transportista', event.target.value)} maxLength={80} placeholder="Registrar o editar nombre" /></label></Field>}
         <Field label="SOAT vence" error={errores.soatVence}><input type="date" value={form.soatVence} onChange={event => cambiar('soatVence', event.target.value)} /></Field>
         <Field label="Revisión técnica vence" error={errores.revisionVence}><input type="date" value={form.revisionVence} onChange={event => cambiar('revisionVence', event.target.value)} /></Field>
         <Field label="Observaciones (opcional)" wide><textarea value={form.observaciones} onChange={event => cambiar('observaciones', event.target.value)} maxLength={300} rows={2} /></Field>
@@ -113,9 +118,9 @@ export function ConductorDialog({ servicio, item, onClose, onSaved }: Cerrar & {
         <Field label="DNI" error={errores.documento}><input value={form.documento} onChange={event => cambiar('documento', event.target.value)} inputMode="numeric" maxLength={8} autoComplete="off" /></Field>
         <Field label="Teléfono (opcional)" error={errores.telefono}><input value={form.telefono} onChange={event => cambiar('telefono', event.target.value)} inputMode="tel" maxLength={14} /></Field>
         <Field label="N.º de licencia" error={errores.licenciaNumero}><input value={form.licenciaNumero} onChange={event => cambiar('licenciaNumero', event.target.value)} maxLength={16} autoComplete="off" /></Field>
-        <Field label="Categoría" error={errores.licenciaCategoria}><select value={form.licenciaCategoria} onChange={event => cambiar('licenciaCategoria', event.target.value)}>{LICENCIA_CATEGORIAS.map(categoria => <option key={categoria} value={categoria}>{categoria}</option>)}</select></Field>
+        <Field label="Categoría" error={errores.licenciaCategoria}><SearchablePicker ariaLabel="Categoría de licencia" value={form.licenciaCategoria} onChange={value => cambiar('licenciaCategoria', value)} options={LICENCIA_CATEGORIAS.map(value => ({ id: value, label: value }))} /></Field>
         <Field label="Licencia vence" error={errores.licenciaVence}><input type="date" value={form.licenciaVence} onChange={event => cambiar('licenciaVence', event.target.value)} /></Field>
-        <Field label="Estado" error={errores.estado}><select value={form.estado} onChange={event => cambiar('estado', event.target.value as typeof form.estado)}><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select></Field>
+        <Field label="Estado" error={errores.estado}><SegmentedControl ariaLabel="Estado del conductor" value={form.estado} onChange={value => cambiar('estado', value)} options={[{ value: 'activo', label: 'Activo' }, { value: 'inactivo', label: 'Inactivo' }]} /></Field>
         <Field label="Observaciones (opcional)" wide><textarea value={form.observaciones} onChange={event => cambiar('observaciones', event.target.value)} maxLength={300} rows={2} /></Field>
       </div>
       <Actions busy={busy} submitLabel={item ? 'Guardar cambios' : 'Registrar conductor'} onClose={onClose} />
@@ -160,12 +165,13 @@ export function AsignacionDialog({ servicio, vehiculos, conductores, onClose, on
     <form className="ws-form" onSubmit={event => void enviar(event)} noValidate>
       {mensaje && !motivos.length && <Aviso mensaje={mensaje} />}
       <div className="ws-form-grid">
-        <Field label="Vehículo" error={errores.vehiculoId}><select value={form.vehiculoId} onChange={event => cambiar('vehiculoId', event.target.value)} data-autofocus><option value="">Elige un vehículo</option>{vehiculos.map(item => <option key={item.id} value={item.id}>{etiquetaVehiculo(item)}</option>)}</select></Field>
-        <Field label="Conductor" error={errores.conductorId}><select value={form.conductorId} onChange={event => cambiar('conductorId', event.target.value)}><option value="">Elige un conductor</option>{conductores.map(item => <option key={item.id} value={item.id}>{item.nombre} · {item.licenciaCategoria}</option>)}</select></Field>
+        <Field label="Vehículo" error={errores.vehiculoId}><SearchablePicker ariaLabel="Vehículo" value={form.vehiculoId} onChange={value => cambiar('vehiculoId', value)} options={vehiculos.map(item => ({ id: item.id, label: etiquetaVehiculo(item), detail: `${item.marca} ${item.modelo} · ${item.capacidadKg} kg` }))} /></Field>
+        <Field label="Conductor" error={errores.conductorId}><SearchablePicker ariaLabel="Conductor" value={form.conductorId} onChange={value => cambiar('conductorId', value)} options={conductores.map(item => ({ id: item.id, label: item.nombre, detail: `DNI ${item.documento} · ${item.licenciaCategoria}` }))} /></Field>
         <Field label="Desde" error={campos.desde}><input type="datetime-local" value={form.desde} onChange={event => cambiar('desde', event.target.value)} /></Field>
         <Field label="Hasta" error={campos.hasta}><input type="datetime-local" value={form.hasta} onChange={event => cambiar('hasta', event.target.value)} /></Field>
         <Field label="Referencia (opcional)" wide><input value={form.referencia} onChange={event => cambiar('referencia', event.target.value)} placeholder="Despacho, ruta o pedido" maxLength={80} /></Field>
       </div>
+      <AsignacionFicha vehiculo={vehiculos.find(item => item.id === form.vehiculoId)} conductor={conductores.find(item => item.id === form.conductorId)} />
       {motivos.length > 0 && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={17} /><div><ul className="ws-fleet-reasons">{motivos.map(motivo => <li key={motivo}>{motivo}</li>)}</ul></div></div>}
       {avisos.length > 0 && <div className="ws-notice"><Info size={17} /><div><ul className="ws-fleet-reasons">{avisos.map(aviso => <li key={aviso}>{aviso}</li>)}</ul></div></div>}
       <Actions busy={busy} submitLabel="Registrar asignación" disabled={elegidos && resultado !== null && !resultado.valido} onClose={onClose} />

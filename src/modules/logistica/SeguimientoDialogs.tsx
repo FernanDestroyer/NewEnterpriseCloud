@@ -6,6 +6,8 @@ import { Dialog, Field, reportar } from './FlotaDialogs'
 import type { Errores } from './rules'
 import { MOTIVOS_NO_ENTREGA, RESULTADOS_ENTREGA, lineasDevueltas, type EntradaEntrega } from './seguimiento'
 import type { Despacho, EventoDespachoTipo, Parada, ResultadoEntrega } from './types'
+import { SearchablePicker } from '../../components/SearchablePicker'
+import { EstadoRuta } from './LogisticaUI'
 
 type Cerrar = { onClose: () => void; onSaved: (mensaje: string) => void }
 
@@ -67,10 +69,7 @@ export function EntregaDialog({ servicio, despacho, parada, onClose, onSaved }: 
           </label>)}
           {errores.cantidades && <small className="ws-field-error" role="alert">{errores.cantidades}</small>}
         </div>}
-        {noEntrega && <Field label="Motivo" error={errores.motivo} wide><select value={form.motivo} onChange={event => cambiar('motivo', event.target.value as EntradaEntrega['motivo'])}>
-          <option value="">Elige el motivo…</option>
-          {MOTIVOS_NO_ENTREGA.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select></Field>}
+        {noEntrega && <Field label="Motivo" error={errores.motivo} wide><SearchablePicker ariaLabel="Motivo de incidencia" value={form.motivo} onChange={value => cambiar('motivo', value as EntradaEntrega['motivo'])} options={MOTIVOS_NO_ENTREGA.map(item => ({ id: item.value, label: item.label }))} /></Field>}
         <Field label={noEntrega ? 'Nota (obligatoria si el motivo es «Otro»)' : 'Nota (opcional)'} error={errores.nota} wide><textarea rows={2} maxLength={300} value={form.nota} onChange={event => cambiar('nota', event.target.value)} /></Field>
       </div>
       {noEntrega && <p className="ws-seg-hint"><PackageCheck size={14} />Lo que no se entregue queda como <b>devolución pendiente</b> y vuelve a aparecer en «Por despachar» para programarlo otra vez.</p>}
@@ -107,6 +106,8 @@ const TITULO_EVENTO: Record<EventoDespachoTipo, string> = { inicio_ruta: 'Salida
 export function LineaTiempoDialog({ despacho, onClose }: { despacho: Despacho; onClose: () => void }) {
   const eventos = [...(despacho.eventos ?? [])].sort((a, b) => a.fecha.localeCompare(b.fecha))
   return <Dialog title={`Línea de tiempo · ${despacho.numero}`} description="Cada paso del seguimiento queda con su fecha y hora (hora de Lima)." onClose={onClose}>
+    <EstadoRuta despacho={despacho} />
+    {despacho.paradas.filter(p => p.entrega && (p.entrega.resultado !== 'entregada' || p.entrega.nota)).map(p => <div className="ec-log-note" key={p.id}><span className={`status-pill ${RESULTADOS_ENTREGA[p.entrega!.resultado].tone}`}>{RESULTADOS_ENTREGA[p.entrega!.resultado].label}</span><strong>{p.clienteNombre} · {p.ventaCodigo}</strong><p>{MOTIVOS_NO_ENTREGA.find(m => m.value === p.entrega?.motivo)?.label} {p.entrega?.nota}</p></div>)}
     {eventos.length ? <ol className="ws-timeline">{eventos.map(item => { const Icono = ICONO_EVENTO[item.tipo] ?? CheckCircle2; return <li key={item.id}>
       <span className="ws-timeline-dot"><Icono size={14} /></span>
       <div><strong>{TITULO_EVENTO[item.tipo] ?? item.tipo}</strong><small>{formatoMomento(item.fecha)}</small><p>{item.detalle}</p></div>

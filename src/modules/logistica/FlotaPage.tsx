@@ -10,6 +10,7 @@ import { ahoraLima, documentosEnAtencion, formatoFecha, tipoLabel, vigenciaDocum
 import type { AlmacenLogistica } from './storage'
 import { useAlmacenLogistica } from './useAlmacen'
 import type { Asignacion, Conductor, Vehiculo } from './types'
+import { PageHeader } from '../../components/ui/PageHeader'
 
 type Pestana = 'vehiculos' | 'conductores' | 'asignaciones'
 type DialogState =
@@ -84,12 +85,12 @@ function FlotaContenido({ almacen }: { almacen: AlmacenLogistica }) {
   const activosC = conductores.filter(item => item.estado === 'activo')
   const sinRecursos = pestana === 'asignaciones' && (!activosV.length || !activosC.length)
 
-  return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">LOGÍSTICA Y TRANSPORTE</span><h1>Vehículos y conductores</h1><p>Registra la flota, controla SOAT, revisión técnica y licencias, y asigna conductores sin cruces de horario.</p></div>
-      <div className="ws-heading-actions">
+  return <div className="ec-logistica">
+    <PageHeader section="Logística / Flota" title="Vehículos y conductores" description="Capacidad, documentación y disponibilidad de tus recursos de transporte." icon={Truck} actions={<>
         <button className="ws-button ws-button-secondary" type="button" disabled={cargando} onClick={recargar}><RefreshCw size={16} className={cargando ? 'ws-spin' : ''} />Actualizar</button>
         {permisos.crear && <button className="ws-button" type="button" disabled={sinRecursos} title={sinRecursos ? 'Registra al menos un vehículo y un conductor activos' : undefined} onClick={accion.abrir}><Plus size={16} />{accion.label}</button>}
-      </div></section>
+      </>} />
+    <section className="ec-log-metrics" aria-label="Resumen de flota">{[['Vehículos activos', activosV.length], ['Conductores activos', activosC.length], ['Asignaciones programadas', programadas], ['Documentos en atención', atencion]].map(([label, value]) => <article key={label}><span>{label}</span><strong>{cargando ? '—' : error ? 'No disponible' : value}</strong></article>)}</section>
     {servicio.origen === 'navegador' && <div className="ws-notice" role="status"><AlertTriangle size={18} /><span><b>Datos guardados solo en este navegador.</b> Las tablas de Logística no están disponibles en tu base de datos, por lo que no se comparten con otras personas ni quedan en la bitácora. Revisa que el script base de la base de datos esté aplicado.</span></div>}
     {error && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={18} /><span>{error}</span><button className="ws-text-button" type="button" onClick={recargar}>Reintentar</button></div>}
     {atencion > 0 && <div className="ws-notice ws-notice-warning" role="status"><AlertTriangle size={18} /><span><b>{atencion} {atencion === 1 ? 'documento requiere' : 'documentos requieren'} atención:</b> vencidos, por vencer en 30 días o sin registrar. Un documento vencido impide asignar el vehículo o conductor.</span></div>}
@@ -143,11 +144,11 @@ function FlotaContenido({ almacen }: { almacen: AlmacenLogistica }) {
       </div>
     </section>
 
-    {dialog?.tipo === 'vehiculo' && <VehiculoDialog servicio={servicio} item={dialog.item} onClose={() => setDialog(null)} onSaved={alGuardar} />}
+    {dialog?.tipo === 'vehiculo' && <VehiculoDialog servicio={servicio} vehiculos={vehiculos} item={dialog.item} onClose={() => setDialog(null)} onSaved={alGuardar} />}
     {dialog?.tipo === 'conductor' && <ConductorDialog servicio={servicio} item={dialog.item} onClose={() => setDialog(null)} onSaved={alGuardar} />}
     {dialog?.tipo === 'asignacion' && <AsignacionDialog servicio={servicio} vehiculos={activosV} conductores={activosC} onClose={() => setDialog(null)} onSaved={alGuardar} />}
     {dialog?.tipo === 'cancelar' && <CancelarDialog servicio={servicio} item={dialog.item} onClose={() => setDialog(null)} onSaved={alGuardar} />}
-  </>
+  </div>
 }
 
 export default function FlotaPage() {

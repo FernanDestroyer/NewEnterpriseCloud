@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { CompanyProfile } from '../services/company'
 import type { SalesReceipt } from '../services/salesOperations'
 import { useDialog } from './useDialog'
+import { SegmentedControl } from './ui/SegmentedControl'
+import { Printer, X } from 'lucide-react'
 import '../sales-print.css'
 
 const money = (value: number, currency: string) => new Intl.NumberFormat('es-PE', { style: 'currency', currency }).format(value)
@@ -21,7 +23,7 @@ export function SalesReceiptPrint({ receipt, company, products, onClose }: {
   return <div className="modal-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}>
     <div ref={dialog} className="voucher-modal sales-print-dialog" role="dialog" aria-modal="true" aria-label={`Vista previa de ${docName} ${receipt.serie}-${receipt.numero}`}>
       <div className="modal-heading sales-print-controls"><div><span className="ws-eyebrow">VENTAS · DOCUMENTO INTERNO</span><h2>{docName} {receipt.serie}-{receipt.numero}</h2><p>Vista previa de la operación registrada.</p></div></div>
-      <div className="ws-heading-actions sales-print-controls"><label>Formato de papel<select value={format} onChange={event => setFormat(event.target.value as 'a4' | 'ticket')}><option value="a4">A4</option><option value="ticket">Ticket 80 mm</option></select></label><button type="button" className="ws-button" onClick={() => window.print()}>Imprimir / PDF</button><button type="button" className="ws-button ws-button-secondary" onClick={onClose}>Cerrar</button></div>
+      <div className="ws-heading-actions sales-print-controls"><div className="ec-field"><span>Formato de papel</span><SegmentedControl value={format} onChange={setFormat} ariaLabel="Formato de impresión" options={[{value:'a4',label:'Documento A4'},{value:'ticket',label:'Ticket · 80 mm'}]} /></div><button type="button" className="ws-button" onClick={() => window.print()}><Printer size={15} /> Imprimir / PDF</button><button type="button" className="ws-button ws-button-secondary" onClick={onClose}><X size={15} /> Cerrar</button></div>
       <article className={`voucher-paper sales-print-paper sales-print-${format}`}>
         <header className="sales-print-header"><div><strong>{company?.razonSocial || 'EnterpriseCloud'}</strong><small>{company?.ruc ? `RUC ${company.ruc}` : 'RUC no configurado'}</small><small>{company?.direccion || 'Dirección fiscal no configurada'}</small></div><div className="sales-print-id"><strong>{docName}</strong><span>{receipt.serie}-{receipt.numero}</span><small>Fecha: {date}</small></div></header>
         <div className="sales-print-meta"><span><strong>Cliente:</strong> {receipt.snapshot?.cliente || 'Sin nombre registrado'}</span><span><strong>Moneda:</strong> {receipt.moneda}{receipt.moneda === 'USD' ? ` · TC ${receipt.tipo_cambio}` : ''}</span></div>

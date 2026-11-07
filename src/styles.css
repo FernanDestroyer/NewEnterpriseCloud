@@ -1478,7 +1478,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .erp-shell[data-theme='light'] .hero-visual .signal-dot-two { background: #8b5cf6; box-shadow: 0 0 0 5px rgba(139, 92, 246, .13), 0 0 18px rgba(124, 58, 237, .62); }
 
 /* ---- Dashboard editorial: mismo lenguaje que la landing ---- */
-.content-area > * { animation: dash-rise .55s cubic-bezier(.2, .75, .25, 1) both; }
+/* `backwards` y no `both`: un keyframe final con transform mantiene un containing
+   block para position: fixed y descuadra los modales cuando la página está desplazada. */
+.content-area > * { animation: dash-rise .55s cubic-bezier(.2, .75, .25, 1) backwards; }
 .content-area > :nth-child(2) { animation-delay: .08s; }
 .content-area > :nth-child(3) { animation-delay: .16s; }
 .content-area > :nth-child(4) { animation-delay: .24s; }

@@ -1,0 +1,54 @@
+/* Purchases · shared light/dark workspace tokens. */
+.ec-purchases { min-width: 0; color: var(--ws-text); }
+.ec-purchases > .ec-page-header, .ec-purchase-metrics { margin-bottom: 24px; }
+.ec-purchases .ws-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border-radius: 10px; }
+.ec-purchase-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.ec-purchase-metrics article { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
+.ec-purchase-metrics article > span { display: flex; align-items: center; gap: 8px; color: var(--ws-muted); font-size: 12px; }
+.ec-purchase-metrics svg { color: var(--ws-primary); flex-shrink: 0; }
+.ec-purchase-metrics strong { color: var(--ws-text); font-size: clamp(18px, 1.5vw, 26px); font-variant-numeric: tabular-nums; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.ec-purchase-metrics small { color: var(--ws-muted); font-size: 11px; line-height: 1.5; margin-top: auto; }
+.ec-purchases .sourcing-card, .ec-purchases .panel, .ec-purchases .ws-card { border: 1px solid var(--ws-border); border-radius: 16px; background: var(--ws-surface); box-shadow: 0 3px 12px #00000004; }
+.ec-purchases .sourcing-card { overflow: visible; margin-block: 16px; }
+.ec-purchases .sourcing-card-head { padding: 22px; border-radius: 16px; background: var(--ws-raised); color: var(--ws-text); }
+.ec-purchases .sourcing-card-body { padding: 22px; }
+.ec-purchases .sourcing-form-body, .ec-purchases .sourcing-offer-form { gap: 20px; }
+.ec-purchases .sourcing-line { padding: 16px; margin-block: 12px; background: var(--ws-raised); border: 1px solid var(--ws-border); border-radius: 12px; }
+.ec-purchases .ec-combobox { min-width: 0; }
+.ec-purchases .ec-combobox:focus-within { z-index: 8; }
+.ec-purchases .ec-segments { flex-wrap: wrap; }
+.ec-purchases .ec-segment { display: flex; }
+.ec-purchases .ec-segment span { font-size: 11px; }
+.workspace-shell.erp-shell .ec-purchases .record-table th { padding: 15px 18px; background: var(--ws-raised); border-bottom: 1px solid var(--ws-border); color: var(--ws-muted); font-size: 10px; letter-spacing: .04em; }
+.workspace-shell.erp-shell .ec-purchases .record-table td { padding: 18px; background: transparent; color: var(--ws-text); border-bottom: 1px solid var(--ws-border); font-variant-numeric: tabular-nums; }
+.ec-purchases .record-table tbody tr:hover { background: var(--ws-raised); }
+.ec-purchases .record-table small, .ec-offer-line small { display: block; color: var(--ws-muted); font-size: 11px; line-height: 1.6; }
+.ec-purchases .row-action, .ec-purchase-row-actions button { border: 1px solid var(--ws-border); border-radius: 9px; color: var(--ws-muted); background: var(--ws-surface); }
+.ec-purchases .row-action:hover { color: var(--ws-primary); background: var(--ws-primary-soft); }
+.ec-purchases input[type='number'], .ec-purchase-number, .ec-purchases .line-subtotal, .ec-purchases .purchase-totals { font-variant-numeric: tabular-nums; }
+.workspace-shell.erp-shell .ec-purchases input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not(.ec-combobox-validation), .workspace-shell.erp-shell .ec-purchases textarea { border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); color: var(--ws-text); padding: 10px 12px; min-width: 0; }
+.ec-purchases input:focus-visible, .ec-purchases textarea:focus-visible, .ec-purchases button:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 3px; }
+.ec-purchases input[aria-invalid='true'], .ec-purchases input:user-invalid { border-color: var(--ws-red) !important; }
+.ec-purchases .line-row { gap: 14px; padding: 16px; border: 1px solid var(--ws-border); border-radius: 12px; margin-bottom: 10px; background: var(--ws-surface); }
+.ec-purchases .line-row.checked { border-color: color-mix(in srgb, var(--ws-primary) 40%, var(--ws-border)); background: color-mix(in srgb, var(--ws-primary-soft) 25%, var(--ws-surface)); }
+.ec-purchases .line-head { color: var(--ws-muted); padding: 14px 16px; font-size: 11px; }
+.ec-purchases .purchase-totals { border: 1px solid var(--ws-border); border-radius: 12px; padding: 20px; background: var(--ws-raised); }
+.ec-purchase-row-actions { display: flex; gap: 6px; }
+.ec-purchase-scope { display: block; color: var(--ws-muted); padding: 0 24px 16px; font-size: 11px; }
+.ec-offer-lines { display: grid; gap: 12px; min-width: 0; }
+.ec-offer-line { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(110px, .6fr) minmax(190px, 1.2fr) minmax(140px, .8fr) auto; gap: 14px; align-items: center; padding: 18px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-raised); }
+.ec-offer-line input { width: 100%; box-sizing: border-box; }
+.ec-offer-line label { display: grid; gap: 8px; font-size: 11px; color: var(--ws-muted); }
+.ec-purchase-number { text-align: right; }
+.ec-cost-history { grid-column: 1 / -1; padding: 12px; border-top: 1px solid var(--ws-border); }
+.ec-offer-total { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; border-radius: 12px; background: var(--ws-primary-soft); color: var(--ws-text); font-variant-numeric: tabular-nums; }
+.ec-offer-total strong { font-size: 22px; color: var(--ws-primary); }
+.workspace-shell.erp-shell .ec-purchases.ws-receipt-modal { border: 1px solid var(--ws-border); border-radius: 20px; background: var(--ws-surface); }
+.ec-purchases .ws-receipt-line { padding: 18px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-raised); gap: 18px; }
+.ec-purchases .ws-receipt-line .status-pill { display: inline-flex; margin-top: 10px; font-size: 10px; }
+.ec-receipt-progress { display: block; width: 100%; height: 6px; margin-top: 12px; accent-color: var(--ws-primary); border: 0; border-radius: 9px; overflow: hidden; background: var(--ws-border); }
+.ec-receipt-progress::-webkit-progress-bar { background: var(--ws-border); }
+.ec-receipt-progress::-webkit-progress-value { background: var(--ws-primary); border-radius: 9px; }
+.ec-purchases .ws-receipt-history-item { padding: 16px; border: 1px solid var(--ws-border); border-radius: 12px; margin-top: 10px; }
+@media (max-width: 1150px) { .ec-purchase-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ec-offer-line { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .ec-purchase-metrics { grid-template-columns: minmax(0, 1fr); } .ec-offer-line { grid-template-columns: minmax(0, 1fr); } .ec-purchase-number { text-align: left; } .ec-offer-total { flex-wrap: wrap; } .ec-purchases .sourcing-card-body { padding: 14px; } }

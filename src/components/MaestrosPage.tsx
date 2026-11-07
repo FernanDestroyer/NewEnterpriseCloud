@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { Building2, Check, Edit3, MapPinned, Package, Plus, RefreshCw, Save, Truck, UserRound, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { catalogLabels, fetchBusinessCatalogs, fetchMasterChoices, fetchMasterPeople, saveBusinessCatalog, saveMasterPerson, toggleBusinessCatalog, toggleMasterPerson, type BusinessCatalog, type MasterPerson } from '../services/masters'
-import { friendlyError } from '../services/records'
+import { friendlyError, fetchAllCurrencies, saveCurrencyRate, type Currency } from '../services/records'
 
 type MasterTab = 'personas' | 'catalogos'
 const categoryList = Object.keys(catalogLabels) as BusinessCatalog['categoria'][]
@@ -14,6 +14,8 @@ export default function MaestrosPage() {
   const [tab, setTab] = useState<MasterTab>('personas')
   const [people, setPeople] = useState<{ transportistas: MasterPerson[]; vendedores: MasterPerson[] }>({ transportistas: [], vendedores: [] })
   const [catalogs, setCatalogs] = useState<BusinessCatalog[]>([])
+  const [currencies, setCurrencies] = useState<Currency[]>([])
+  const [currencyDrafts, setCurrencyDrafts] = useState<Record<string, string>>({})
   const [choices, setChoices] = useState<{ branches: Array<{ id: string; codigo: string; nombre: string }>; users: Array<{ id: string; nombre: string; email: string | null }> }>({ branches: [], users: [] })
   const [kind, setKind] = useState<'transportista' | 'vendedor'>('transportista')
   const [editingPerson, setEditingPerson] = useState<MasterPerson | null>(null)
@@ -25,8 +27,10 @@ export default function MaestrosPage() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [nextPeople, nextCatalogs, nextChoices] = await Promise.all([fetchMasterPeople(), fetchBusinessCatalogs(), fetchMasterChoices()])
+      const [nextPeople, nextCatalogs, nextChoices, nextCurrencies] = await Promise.all([fetchMasterPeople(), fetchBusinessCatalogs(), fetchMasterChoices(), fetchAllCurrencies()])
       setPeople(nextPeople); setCatalogs(nextCatalogs); setChoices(nextChoices)
+      setCurrencies(nextCurrencies)
+      setCurrencyDrafts(Object.fromEntries(nextCurrencies.map(item => [item.codigo, String(item.tipo_cambio)])))
     } catch (cause) { setError(friendlyError(cause)) }
     finally { setLoading(false) }
   }, [])
@@ -67,8 +71,21 @@ export default function MaestrosPage() {
     } catch (cause) { setError(friendlyError(cause)) }
     finally { setBusy(false) }
   }
-  const togglePerson = async (personKind: 'transportista' | 'vendedor', item: MasterPerson) => {
+  const saveRate = async (currency: Currency) => {
     if (busy || !can('settings', 'editar')) return
+    const raw = currencyDrafts[currency.codigo] ?? ''
+    const value = Number(raw)
+    setError(''); setMessage('')
+    if (!Number.isFinite(value) || value <= 0) { setError('Ingresa un tipo de cambio mayor que cero.'); return }
+    setBusy(true)
+    try {
+      await saveCurrencyRate(currency.codigo, value)
+      setMessage(`Tipo de cambio de ${currency.codigo} actualizado a S/ ${value.toFixed(6)}.`)
+      await load()
+    } catch (cause) { setError(friendlyError(cause)) }
+    finally { setBusy(false) }
+  }
+  const togglePerson = async (personKind: 'transportista' | 'vendedor', item: MasterPerson) => {    if (busy || !can('settings', 'editar')) return
     setBusy(true); setError(''); setMessage('')
     try { await toggleMasterPerson(personKind, item.id, item.estado !== 'Activo'); await load(); setMessage(`${item.nombre} ${item.estado === 'Activo' ? 'desactivado' : 'activado'}.`) }
     catch (cause) { setError(friendlyError(cause)) } finally { setBusy(false) }
@@ -106,6 +123,19 @@ export default function MaestrosPage() {
           {editingPerson.id && <label>Estado<select name="estado" defaultValue={editingPerson.estado}><option>Activo</option><option>Inactivo</option></select></label>}
         </div><div className="ws-heading-actions"><button type="button" className="cancel-button" onClick={() => setEditingPerson(null)}>Cancelar</button><button className="primary-button" type="submit" disabled={busy || !permitted}>{busy ? 'Guardando…' : <><Save size={15} />Guardar</>}</button></div></form>}
       </> : <>
+        <section className="ec-catalog-group" id="monedas">
+          <div className="ws-section-heading"><div><h2>Monedas y tipo de cambio</h2><p>El tipo de cambio se expresa en soles (PEN) por unidad de moneda. Ventas lo consume automáticamente al elegir USD.</p></div><Link className="export-button" to="/mantenimientos#catalogos">Administrar monedas</Link></div>
+          <div className="table-scroll"><table className="record-table"><thead><tr><th>Código</th><th>Moneda</th><th>Tipo de cambio (PEN)</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+            {currencies.map(currency => <tr key={currency.id}>
+              <td><span className="record-id">{currency.codigo}</span></td>
+              <td><strong>{currency.nombre}</strong><small>{currency.simbolo}</small></td>
+              <td><div className="ws-rate-editor"><span>S/</span><input aria-label={`Tipo de cambio de ${currency.codigo}`} type="number" min="0.000001" step="0.000001" value={currencyDrafts[currency.codigo] ?? ''} disabled={currency.codigo === 'PEN' || !can('settings', 'editar') || busy} onChange={event => setCurrencyDrafts(current => ({ ...current, [currency.codigo]: event.target.value }))} /></div></td>
+              <td><span className={`status-pill ${currency.activo ? 'green' : 'amber'}`}>{currency.activo ? 'Activa' : 'Inactiva'}</span></td>
+              <td><div className="row-actions">{currency.codigo !== 'PEN' && can('settings', 'editar') && <button type="button" className="export-button" disabled={busy} onClick={() => void saveRate(currency)}>Guardar</button>}</div></td>
+            </tr>)}
+            {!currencies.length && <tr><td colSpan={5}><span className="relation-hint">Sin monedas configuradas. Agrégalas desde Mantenimiento.</span></td></tr>}
+          </tbody></table></div>
+        </section>
         <div className="ec-module-toolbar"><p className="relation-hint">Los catálogos no sustituyen la emisión electrónica SUNAT. Las tasas parametrizan la operación; confirme su aplicación tributaria con su asesor.</p><button className="primary-button" type="button" disabled={!can('settings', 'crear')} onClick={() => setEditingCatalog({ ...blankCatalog(), id: '', activo: true, created_at: '', updated_at: '' } as BusinessCatalog)}><Plus size={15} />Agregar elemento</button></div>
         {catalogGroups.map(group => <section className="ec-catalog-group" key={group.category}><div className="ws-section-heading"><div><h2>{catalogLabels[group.category]}</h2><p>{group.rows.filter(row => row.activo).length} vigentes · se puede desactivar sin perder el registro</p></div></div><div className="table-scroll"><table className="record-table"><thead><tr><th>Código</th><th>Nombre</th><th>Tasa / detalle</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{group.rows.map(item => <tr key={item.id}><td><span className="record-id">{item.codigo}</span></td><td><strong>{item.nombre}</strong></td><td>{item.tasa !== null ? `${item.tasa}%` : item.descripcion || '—'}</td><td><span className={`status-pill ${item.activo ? 'green' : 'amber'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span></td><td><div className="row-actions">{can('settings', 'editar') && <button className="row-action" title="Editar" onClick={() => setEditingCatalog(item)}><Edit3 size={15} /></button>}{can('settings', 'editar') && <button className="export-button" disabled={busy} onClick={() => void toggleCatalog(item)}>{item.activo ? 'Desactivar' : 'Activar'}</button>}</div></td></tr>)}{!group.rows.length && <tr><td colSpan={5}><span className="relation-hint">Sin elementos definidos para esta categoría.</span></td></tr>}</tbody></table></div></section>)}
         {editingCatalog && <form key={editingCatalog.id || 'new-catalog'} className="ws-form ec-inline-form" onSubmit={catalogSubmit}><div className="ws-section-heading"><div><h2>{editingCatalog.id ? 'Editar' : 'Nuevo'} elemento de catálogo</h2></div><button type="button" className="ws-icon-button" aria-label="Cerrar" onClick={() => setEditingCatalog(null)}><X size={16} /></button></div><div className="ws-form-grid"><label>Categoría<select name="categoria" value={editingCatalog.categoria} onChange={event => setEditingCatalog(current => current ? { ...current, categoria: event.target.value as BusinessCatalog['categoria'] } : current)}>{categoryList.map(category => <option key={category} value={category}>{catalogLabels[category]}</option>)}</select></label><label>Código<input name="codigo" required minLength={2} maxLength={30} defaultValue={editingCatalog.codigo} /></label><label>Nombre<input name="nombre" required minLength={2} maxLength={120} defaultValue={editingCatalog.nombre} /></label>{editingCatalog.categoria === 'tasa_impuesto' && <label>Tasa (%)<input name="tasa" required type="number" min="0" max="100" step="0.0001" defaultValue={editingCatalog.tasa ?? ''} /></label>}<label className="ec-span-all">Descripción<input name="descripcion" maxLength={300} defaultValue={editingCatalog.descripcion ?? ''} /></label></div><div className="ws-heading-actions"><button type="button" className="cancel-button" onClick={() => setEditingCatalog(null)}>Cancelar</button><button className="primary-button" type="submit" disabled={busy}>{busy ? 'Guardando…' : <><Save size={15} />Guardar catálogo</>}</button></div></form>}

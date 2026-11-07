@@ -14,6 +14,8 @@ import { formatoFecha, tipoLabel } from './rules'
 import type { AlmacenLogistica } from './storage'
 import { useAlmacenLogistica } from './useAlmacen'
 import type { Conductor, Despacho, EstadoDespacho, Vehiculo } from './types'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { LogisticaMetrics, exportarDespachos } from './LogisticaUI'
 
 type Pestana = 'por-despachar' | 'despachos'
 type DialogState = { tipo: 'despacho'; despacho?: Despacho; ventas?: VentaDespachable[] } | { tipo: 'cancelar'; item: Despacho } | null
@@ -78,12 +80,13 @@ function DespachosContenido({ almacen }: { almacen: AlmacenLogistica }) {
   const vehiculosActivos = vehiculos.filter(item => item.estado === 'activo')
   const conductoresActivos = conductores.filter(item => item.estado === 'activo')
 
-  return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">LOGÍSTICA Y TRANSPORTE</span><h1>Planificación de despachos y rutas</h1><p>Agrupa las ventas por entregar, ordena la ruta por zona y reserva vehículo y conductor sin cruces de horario.</p></div>
-      <div className="ws-heading-actions">
+  return <div className="ec-logistica">
+    <PageHeader section="Logística / Planificación" title="Despachos y rutas" description="Selecciona pedidos, organiza destinos y asigna los recursos de transporte." icon={Truck} actions={<>
         <button className="ws-button ws-button-secondary" type="button" disabled={cargando} onClick={recargar}><RefreshCw size={16} className={cargando ? 'ws-spin' : ''} />Actualizar</button>
-        {permisos.crear && pestana === 'por-despachar' && <button className="ws-button" type="button" disabled={!elegidas.length} title={elegidas.length ? undefined : 'Marca al menos una venta'} onClick={() => setDialog({ tipo: 'despacho', ventas: elegidas })}><Plus size={16} />Crear despacho{elegidas.length > 0 && ` (${elegidas.length})`}</button>}
-      </div></section>
+        {permisos.crear && <button className="ws-button" type="button" disabled={cargando || Boolean(error)} onClick={() => { if (elegidas.length) setDialog({ tipo: 'despacho', ventas: elegidas }); else { setPestana('por-despachar'); notify('Marca al menos un pedido para crear y asignar su ruta.') } }}><Plus size={16} />{elegidas.length ? `Asignar ruta (${elegidas.length})` : 'Nuevo despacho'}</button>}
+        <button className="ws-button ws-button-secondary" disabled={cargando || Boolean(error) || !visibles.length} onClick={() => exportarDespachos(visibles)}>Exportar despachos consultados</button>
+      </>} />
+    <LogisticaMetrics despachos={despachos} loading={cargando} error={error} />
     {almacen.origen === 'navegador' && <div className="ws-notice" role="status"><AlertTriangle size={18} /><span><b>Datos guardados solo en este navegador.</b> Las tablas de Logística no están disponibles en tu base de datos, por lo que los despachos no se comparten con otras personas ni quedan en la bitácora. Las ventas, clientes y zonas sí son las reales del sistema.</span></div>}
     {almacen.despachosEnNavegador && <div className="ws-notice" role="status"><AlertTriangle size={18} /><span><b>Los despachos se guardan solo en este navegador.</b> Falta la tabla <code>despachos</code> en tu base de datos: ejecuta <code>20261104010000_despachos.sql</code> en el SQL Editor de Supabase para compartirlos con el equipo y registrarlos en la bitácora. Vehículos, conductores y asignaciones ya usan la base de datos.</span></div>}
     {error && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={18} /><span>{error}</span><button className="ws-text-button" type="button" onClick={recargar}>Reintentar</button></div>}
@@ -121,7 +124,7 @@ function DespachosContenido({ almacen }: { almacen: AlmacenLogistica }) {
             return <tr key={item.id}>
               <td><span className="record-id">{item.numero}</span></td><td>{formatoFecha(item.fecha)}</td>
               <td><span className={`status-pill ${PRIORIDAD_TONO[item.prioridad]}`}>{item.prioridad === 'normal' ? 'Normal' : item.prioridad === 'alta' ? 'Alta' : 'Urgente'}</span></td>
-              <td>{item.paradas.length} {item.paradas.length === 1 ? 'parada' : 'paradas'}<small className="ws-fleet-motivo">{zonasDeRuta(item.paradas).join(' → ')}</small></td>
+              <td>{item.paradas.length} {item.paradas.length === 1 ? 'parada' : 'paradas'}<small className="ws-fleet-motivo">{zonasDeRuta(item.paradas).join(' → ')}</small>{item.paradas.map(p => <small key={p.id}>{p.ventaCodigo} · {p.clienteNombre}<br />{p.direccion || 'Sin dirección'}</small>)}</td>
               <td>{vehiculo ? `${vehiculo.placa} · ${tipoLabel(vehiculo.tipo)}` : '—'}</td><td>{conductor?.nombre ?? '—'}</td>
               <td>{unidadesDeDespacho(item)} u.{item.pesoEstimadoKg != null && <small className="ws-fleet-motivo">{item.pesoEstimadoKg.toLocaleString('es-PE')} kg</small>}</td>
               <td><span className={`status-pill ${estado.tone}`}>{estado.label}</span></td>
@@ -139,7 +142,7 @@ function DespachosContenido({ almacen }: { almacen: AlmacenLogistica }) {
 
     {dialog?.tipo === 'despacho' && <DespachoDialog servicio={servicio} fuente={fuente} despacho={dialog.despacho} ventas={dialog.ventas} despachos={despachos} vehiculos={dialog.despacho ? vehiculos : vehiculosActivos} conductores={dialog.despacho ? conductores : conductoresActivos} almacenes={contexto.almacenes} onClose={() => setDialog(null)} onSaved={alGuardar} />}
     {dialog?.tipo === 'cancelar' && <CancelarDespachoDialog servicio={servicio} item={dialog.item} onClose={() => setDialog(null)} onSaved={alGuardar} />}
-  </>
+  </div>
 }
 
 export default function DespachosPage() {

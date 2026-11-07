@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { fetchMeasurementUnits, type MeasurementUnit } from '../services/records'
 import { createPurchaseRequest, editPurchaseRequest, type SourcingRequest } from '../services/purchaseSourcing'
 import type { RecordItem } from '../types'
+import { SearchablePicker } from './SearchablePicker'
+import { Copy, Trash2 } from 'lucide-react'
+import '../purchases-ui.css'
 
 type DraftLine = { producto_id: string; unidad_medida_id: string; descripcion: string; cantidad: string }
 const key = () => globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -85,7 +88,7 @@ export default function SourcingRequestComposer({
     } finally { setBusy(false) }
   }
 
-  return <section className="ws-card sourcing-form">
+  return <section className="ws-card sourcing-form ec-purchases">
     <div className="ws-card-heading"><div><h2>{request ? `Editar borrador ${request.codigo} · v${request.version}` : 'Nueva solicitud interna'}</h2><p>{request ? 'Solo se puede editar la versión vigente mientras no haya ofertas.' : 'Se guardará como borrador; ábrela cuando esté lista para cotizar.'}</p></div></div>
     {unitError && <div className="ws-notice ws-notice-warning" role="alert">{unitError}</div>}
     <form onSubmit={submit} className="sourcing-form-body">
@@ -99,23 +102,15 @@ export default function SourcingRequestComposer({
           const product = products.find(item => item.rowId === line.producto_id)
           const productUnits = line.producto_id ? units.filter(unit => unit.id === product?.unidadMedidaId) : units
           return <div className="sourcing-line" key={index}>
-            <select className="ws-control" aria-label={`Producto maestro de línea ${index + 1}`} value={line.producto_id} onChange={event => {
-              const selected = products.find(item => item.rowId === event.target.value)
-              updateLine(index, { producto_id: event.target.value, unidad_medida_id: selected?.unidadMedidaId ?? '', descripcion: line.descripcion || selected?.name || '' })
-            }}>
-              <option value="">Servicio / especificación libre</option>
-              {products.filter(item => item.rowId && item.unidadMedidaId).map(item => {
-                const usedByOtherLine = lines.some((other, otherIndex) => otherIndex !== index && other.producto_id === item.rowId)
-                return <option key={item.rowId} value={item.rowId} disabled={usedByOtherLine}>{item.id} · {item.name}{usedByOtherLine ? ' · ya agregado' : ''}</option>
-              })}
-            </select>
+            <SearchablePicker ariaLabel={`Producto maestro de línea ${index + 1}`} value={line.producto_id} searchPlaceholder="Buscar SKU o nombre…" onChange={value => {
+              const selected = products.find(item => item.rowId === value)
+              updateLine(index, { producto_id: value, unidad_medida_id: selected?.unidadMedidaId ?? '', descripcion: line.descripcion || selected?.name || '' })
+            }} options={[{ id: '', label: 'Servicio / especificación libre' }, ...products.filter(item => item.rowId && item.unidadMedidaId).map(item => ({ id: item.rowId!, label: item.name, detail: item.id, disabled: lines.some((other, otherIndex) => otherIndex !== index && other.producto_id === item.rowId) }))]} />
             <input className="ws-control" required maxLength={240} aria-label={`Descripción de línea ${index + 1}`} placeholder="Descripción del bien o servicio" value={line.descripcion} onChange={event => updateLine(index, { descripcion: event.target.value })} />
             <input className="ws-control" required type="number" min="0.001" step="0.001" aria-label={`Cantidad de línea ${index + 1}`} value={line.cantidad} onChange={event => updateLine(index, { cantidad: event.target.value })} />
-            <select className="ws-control" required aria-label={`Unidad maestra de línea ${index + 1}`} value={line.unidad_medida_id} disabled={Boolean(line.producto_id)} onChange={event => updateLine(index, { unidad_medida_id: event.target.value })}>
-              <option value="">Seleccionar unidad</option>{productUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.nombre} ({unit.simbolo})</option>)}
-            </select>
+            <SearchablePicker required ariaLabel={`Unidad maestra de línea ${index + 1}`} value={line.unidad_medida_id} disabled={Boolean(line.producto_id)} onChange={value => updateLine(index, { unidad_medida_id: value })} options={productUnits.map(unit => ({ id: unit.id, label: `${unit.nombre} (${unit.simbolo})` }))} />
             {!line.producto_id && <small className="sourcing-wide">Unidad solicitada: {units.find(unit => unit.id === line.unidad_medida_id)?.simbolo ?? 'pendiente'}</small>}
-            {lines.length > 1 && <button type="button" className="ws-icon-button" aria-label="Quitar línea" onClick={() => setLines(current => current.filter((_, i) => i !== index))}>×</button>}
+            <div className="ec-purchase-row-actions"><button type="button" className="ws-icon-button" disabled={Boolean(line.producto_id)} title={line.producto_id ? 'Un producto maestro no puede repetirse' : 'Duplicar especificación libre'} aria-label={`Duplicar línea ${index + 1}`} onClick={() => setLines(current => [...current, { ...line }])}><Copy size={15} /></button>{lines.length > 1 && <button type="button" className="ws-icon-button" aria-label={`Quitar línea ${index + 1}`} onClick={() => setLines(current => current.filter((_, i) => i !== index))}><Trash2 size={15} /></button>}</div>
           </div>
         })}
         <button type="button" className="ws-text-button" onClick={() => setLines(current => [...current, { producto_id: '', unidad_medida_id: '', descripcion: '', cantidad: '1' }])}>+ Agregar línea</button>

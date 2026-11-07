@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { Boxes, RefreshCw } from 'lucide-react'
+import { PageHeader } from './ui/PageHeader'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { inventoryQueryError, loadInventoryStocks, loadInventoryWarehouses, type InventoryStock, type InventoryWarehouse } from '../services/inventoryQueries'
 import '../inventory-operations.css'
+import '../inventory-ui.css'
 
 export function useInventoryReference() {
   const { can } = useAuth()
@@ -52,7 +54,7 @@ export function useInventoryReference() {
 }
 
 export function InventoryHeader({ title, description, onRefresh, loading }: { title: string; description: string; onRefresh: () => Promise<void> | void; loading: boolean }) {
-  return <header className="ws-page-heading inv-heading"><div><span className="ws-eyebrow">INVENTARIO Y KARDEX · OPERACIÓN</span><h1>{title}</h1><p>{description}</p></div><div className="ws-heading-actions"><button type="button" className="ws-button ws-button-secondary" onClick={() => { void Promise.resolve(onRefresh()).catch(() => {}) }} disabled={loading}><RefreshCw size={15} className={loading ? 'ws-spin' : ''} />Actualizar</button></div></header>
+  return <PageHeader section="Inventario y Kardex" title={title} description={description} icon={Boxes} actions={<button type="button" className="ws-button ws-button-secondary" onClick={() => { void Promise.resolve(onRefresh()).catch(() => {}) }} disabled={loading}><RefreshCw size={15} className={loading ? 'ws-spin' : ''} />Actualizar</button>} />
 }
 
 export function InventoryMessage({ children, tone = 'warning' }: { children: ReactNode; tone?: 'warning' | 'success' }) {

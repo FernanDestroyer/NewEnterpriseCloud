@@ -29,15 +29,17 @@ async function list<T>(table: string, columns: string): Promise<T[]> {
   }
 }
 export async function loadSalesOperations() {
-  const [quotes, versions, orders, receipts, guides, credits, customers, products, warehouses, inventory, reservations] = await Promise.all([
+  const [quotes, versions, orders, receipts, guides, credits, customers, products, warehouses, inventory, reservations, rate] = await Promise.all([
     list<SalesQuote>('ec_cotizaciones', '*'), list<SalesQuoteVersion>('ec_cotizacion_versiones', '*'), list<SalesOrder>('ec_pedidos', '*'),
     list<SalesReceipt>('ec_comprobantes', '*'), list<SalesGuide>('ec_guias', '*'),
     list<SalesCredit>('ec_notas_credito', '*'), list<SalesCustomer>('clientes', 'id,razon_social,tipo_doc,documento'),
     list<SalesCatalog>('productos', 'id,nombre,precio,stock'), list<SalesWarehouse>('almacenes', 'id,nombre,activo'),
     list<WarehouseStock>('inventarios', 'producto_id,almacen_id,cantidad'),
     list<SalesReservation>('ec_reservas', 'pedido_id,producto_id,cantidad,entregado'),
+    requireSupabase().rpc('ec_tipo_cambio_venta_v1', { p_codigo: 'USD' }),
   ])
-  return { quotes, versions, orders, receipts, guides, credits, customers, products, warehouses: warehouses.filter(item => item.activo), inventory, reservations }
+  if (rate.error) throw rate.error
+  return { quotes, versions, orders, receipts, guides, credits, customers, products, warehouses: warehouses.filter(item => item.activo), inventory, reservations, exchangeRate: Number(rate.data ?? 0) }
 }
 
 async function rpc(name: string, input: Record<string, unknown>): Promise<string> {
@@ -48,7 +50,14 @@ async function rpc(name: string, input: Record<string, unknown>): Promise<string
 export const saveSalesQuote = (input: { id: string | null; cliente: string; vence: string; moneda: string; cambio: number; lineas: SaleLine[]; key: string }) => rpc('ec_guardar_cotizacion', { p_id: input.id, p_cliente_id: input.cliente, p_vence_el: input.vence, p_moneda: input.moneda, p_tipo_cambio: input.cambio, p_lineas: input.lineas, p_key: input.key })
 export const createSalesOrder = (input: { cliente: string; almacen: string; moneda: string; cambio: number; lineas: SaleLine[]; key: string }) => rpc('ec_crear_pedido', { p_cliente_id: input.cliente, p_almacen_id: input.almacen, p_moneda: input.moneda, p_tipo_cambio: input.cambio, p_lineas: input.lineas, p_key: input.key })
 export const convertSalesQuote = (input: { quote: string; almacen: string; tipo: string | null; serie: string | null; numero: number | null; key: string }) => rpc('ec_convertir_cotizacion', { p_cotizacion_id: input.quote, p_almacen_id: input.almacen, p_tipo: input.tipo, p_serie: input.serie, p_numero: input.numero, p_key: input.key })
-export const invoiceSalesOrder = (order: string, tipo: string, serie: string, numero: number, key: string) => rpc('ec_facturar_pedido', { p_pedido_id: order, p_tipo: tipo, p_serie: serie, p_numero: numero, p_key: key })
+export type SalePayment = { method: string; cashShiftId: string | null }
+export const invoiceSalesOrder = (order: string, tipo: string, serie: string, numero: number, key: string, payment: SalePayment | null = null) =>
+  payment?.method
+    ? rpc('ec_facturar_pedido_pago', { p_pedido_id: order, p_tipo: tipo, p_serie: serie, p_numero: numero, p_medio_pago: payment.method, p_caja_turno_id: payment.cashShiftId, p_key: key })
+    : rpc('ec_facturar_pedido', { p_pedido_id: order, p_tipo: tipo, p_serie: serie, p_numero: numero, p_key: key })
+/** Registra el cobro de una venta ya facturada. La RPC valida el saldo de la CxC. */
+export const collectSalesOrder = (sale: string, method: string, cashShiftId: string | null, key: string) =>
+  rpc('ec_registrar_cobro_venta', { p_venta_id: sale, p_medio_pago: method, p_caja_turno_id: cashShiftId, p_key: key })
 export const cancelSalesOrder = (order: string, key: string) => rpc('ec_anular_pedido', { p_pedido_id: order, p_key: key })
 export const guideSalesOrder = (order: string, origen: string, destino: string, key: string) => rpc('ec_emitir_guia', { p_pedido_id: order, p_origen: origen, p_destino: destino, p_key: key })
 export const creditSalesOrder = (order: string, lines: Array<{ producto_id: string; cantidad: number }>, reason: string, stock: boolean, key: string) => rpc('ec_nota_credito', { p_pedido_id: order, p_lineas: lines, p_motivo: reason, p_devolver_stock: stock, p_key: key })

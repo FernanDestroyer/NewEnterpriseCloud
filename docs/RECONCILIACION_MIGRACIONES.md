@@ -1,8 +1,32 @@
 # Reconciliación del historial de migraciones
 
-**Estado:** 41 versiones registradas en el historial remoto; 25 archivos históricos/futuros siguen por conciliar.  
-**Esquema remoto usado como evidencia:** lecturas del 26, 29 y 30 de octubre de 2026.  
+**Estado:** 48 versiones registradas en el historial remoto; 25 archivos históricos/futuros siguen por conciliar.  
+**Esquema remoto usado como evidencia:** lecturas del 26, 29 y 30 de octubre y 2 y 3 de noviembre de 2026.  
 **Proyecto:** `auxqjoxnsasnmtnakgmg`.
+
+## Actualización del 3 de noviembre de 2026 (módulos de Erick)
+
+Se versionaron y aplicaron cuatro migraciones forward-only con `apply_migration` (nunca `db push`) para los módulos Inventario y Kardex, Ventas y Compras:
+
+1. `restaurar_modelo_a_compras` (20261102060000) — restaura de forma idempotente `solicitudes_compra`, `solicitud_compra_lineas`, `ofertas_compra` y `detalle_ofertas_compra` (tablas, restricciones, RLS, permisos y RPC del Modelo A). Era necesario porque el DDL original solo existía en el proyecto remoto.
+2. `inventario_kardex_ec` (20261119000001) — versiona el backend de inventario: `ec_ajustes`, `ec_transferencias`, `ec_transferencia_lineas`, `ec_conteos_fisicos`, `ec_conteo_lineas`, `ec_operaciones_inventario`, `ec_kardex_valorizado`, `ec_capas_peps`, `ec_consumos_peps`, lotes/series y sus RPC.
+3. `compras_abrir_solicitud_v2` (20261119000002) — agrega el RPC faltante `abrir_solicitud_compra_v2(uuid, text)`.
+4. `compras_fix_seleccion_oferta` (20261119000003) — corrige `seleccionar_oferta_compra_v4` (`x.line_total` → `x.total`).
+
+Decisión de arquitectura: la interfaz activa de Compras vuelve al Modelo A (`solicitudes_compra` → `ofertas_compra` → orden). El Modelo B (`requisiciones_compra` → `ofertas_proveedor`) queda como backend alternativo inactivo y no se elimina. Los módulos de Ventas e Inventario usan el esquema `ec_*` versionado en esta entrega.
+
+Verificación remota al cierre: 45 migraciones registradas, 118 tablas públicas (RLS en las 118), 261 políticas, 317 funciones en `public` y 61 en `app_private`. Se comprobaron las firmas y ACL de los RPC de Compras, Ventas e Inventario, las políticas RLS de las tablas participantes y los triggers de trazabilidad/valorización. La prueba funcional cubrió Compras (solicitud → oferta → selección), Ventas (pedido con reserva → anulación) e Inventario (ajuste +1 → ajuste −1 → Kardex). Las filas de prueba se eliminaron en orden de claves foráneas y la cuenta temporal de QA se retiró.
+
+## Actualización del 4 de noviembre de 2026 (tipo de cambio de Ventas)
+
+Se aplicaron tres migraciones forward-only con `apply_migration` (nunca `db push`) para centralizar el tipo de cambio y corregir su persistencia:
+
+1. `monedas_tipo_cambio_venta` (20261119000004) — agrega `monedas.tipo_cambio` (`numeric(14,6)`), siembra PEN en 1 y USD en 3.75, y crea `ec_tipo_cambio_venta_v1(text)` para consulta y `ec_actualizar_tipo_cambio_v1(text,numeric)` para edición protegida por `configuracion:editar`.
+2. `monedas_lectura_configuracion` (20261119000005) — amplía la política `monedas_select` para que Configuración pueda leer las monedas que edita en Maestros, sin abrir la escritura directa.
+3. `ventas_moneda_tipo_cambio` (20261119000006) — corrige `ec_facturar_pedido` para copiar `moneda` y `tipo_cambio` del pedido a `ventas`; antes la cabecera quedaba en PEN/1 aunque el comprobante y la CxC fueran USD.
+4. `ventas_cobro_pedido` (20261119000007) — agrega `ec_registrar_cobro_venta` y `ec_facturar_pedido_pago` para permitir venta directa y cobro opcional al facturar o cobrar pedidos facturados con métodos de pago (Efectivo con turno de caja, Yape, Plin, Transferencia bancaria y Tarjeta a crédito).
+
+Ventas ya no captura el tipo de cambio: lo lee de Maestros al abrir el módulo y guarda una copia en cada cotización, pedido y comprobante. El formulario convierte los precios de catálogo (PEN) a USD con esa tasa y permite ajustar el precio unitario en la moneda elegida. La edición de la tasa se hace en Maestros → Catálogos; Mantenimiento solo administra las monedas.
 
 ## Actualización del 30 de octubre de 2026
 
@@ -22,7 +46,7 @@ Verificación remota al cierre: 41 migraciones registradas, 118 tablas públicas
 
 ### Conciliación de `20261102057000_estado_anulacion_cancelada.sql`
 
-El archivo local es una reconstrucción de la versión remota `20261030032206_estado_anulacion_cancelada_funciones`. Las firmas de las seis funciones coinciden con el remoto (`app_private._anular_requisicion_compra`, `app_private._proteger_cancelacion_orden_contrato_v1`, `public.cancelar_orden_compra_v1`, `public.cancelar_solicitud_compra_v1`, `public.listar_solicitudes_compra_paginado_v1`, `public.registrar_devolucion_compra`). La definición remota de `registrar_devolucion_compra` evolucionó después: descuenta las reversiones de `public.detalle_reversiones_devolucion_compra` (tabla del equipo concurrente) y llama `registrar_movimiento_inventario` con la cantidad como cuarto argumento. El archivo local se corrigió para reflejar esa definición y ya no contiene el error tipográfico `v_detaille` ni la llamada de ocho argumentos. No se reejecutó en remoto: la fuente de verdad es la definición actual de Postgres. `cancelar_solicitud_compra_v1` y `listar_solicitudes_compra_paginado_v1` siguen apuntando a las tablas heredadas `solicitudes_compra`/`ofertas_compra`; el flujo canónico nuevo es `requisiciones_compra` → `ofertas_proveedor` → orden.
+El archivo local es una reconstrucción de la versión remota `20261030032206_estado_anulacion_cancelada_funciones`. Las firmas de las seis funciones coinciden con el remoto (`app_private._anular_requisicion_compra`, `app_private._proteger_cancelacion_orden_contrato_v1`, `public.cancelar_orden_compra_v1`, `public.cancelar_solicitud_compra_v1`, `public.listar_solicitudes_compra_paginado_v1`, `public.registrar_devolucion_compra`). La definición remota de `registrar_devolucion_compra` evolucionó después: descuenta las reversiones de `public.detalle_reversiones_devolucion_compra` (tabla del equipo concurrente) y llama `registrar_movimiento_inventario` con la cantidad como cuarto argumento. El archivo local se corrigió para reflejar esa definición y ya no contiene el error tipográfico `v_detaille` ni la llamada de ocho argumentos. No se reejecutó en remoto: la fuente de verdad es la definición actual de Postgres. `cancelar_solicitud_compra_v1` y `listar_solicitudes_compra_paginado_v1` siguen apuntando a las tablas heredadas `solicitudes_compra`/`ofertas_compra`; el flujo canónico nuevo es `requisiciones_compra` → `ofertas_proveedor` → orden. **Actualización 03-11-2026:** la interfaz activa de la entrega volvió al Modelo A restaurado (`solicitudes_compra` → `ofertas_compra`); el Modelo B queda inactivo como alternativa de backend.
 
 ## Actualización del 29 de octubre de 2026
 

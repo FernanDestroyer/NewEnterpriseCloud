@@ -10,6 +10,9 @@ import type { AlmacenInfo, FuenteDespacho } from './fuentes'
 import { ahoraLima, etiquetaVehiculoCorta, type Errores } from './rules'
 import { nuevoId } from './storage'
 import type { Conductor, Despacho, DespachoInput, Parada, PrioridadDespacho, Vehiculo } from './types'
+import { SearchablePicker } from '../../components/SearchablePicker'
+import { SegmentedControl } from '../../components/ui/SegmentedControl'
+import { AsignacionFicha } from './LogisticaUI'
 
 type Props = {
   servicio: DespachoService
@@ -115,9 +118,9 @@ export function DespachoDialog({ servicio, fuente, despacho, ventas = [], despac
           <h3>Datos del despacho</h3>
           <div className="ws-form-grid">
             <Field label="Fecha" error={campos.fecha}><input type="date" value={form.fecha} onChange={event => cambiarFecha(event.target.value)} data-autofocus={soloLectura ? undefined : true} /></Field>
-            <Field label="Prioridad"><select value={form.prioridad} onChange={event => cambiar('prioridad', event.target.value as PrioridadDespacho)}>{PRIORIDADES.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+            <Field label="Prioridad"><SegmentedControl ariaLabel="Prioridad de entrega" disabled={soloLectura} value={form.prioridad} onChange={value => cambiar('prioridad', value)} options={PRIORIDADES} /></Field>
             <Field label="Almacén de origen">{almacenes.length
-              ? <select value={form.almacenId} onChange={event => setForm(actual => ({ ...actual, almacenId: event.target.value, almacenNombre: almacenes.find(item => item.id === event.target.value)?.nombre ?? '' }))}>{!form.almacenId && <option value="">Sin almacén</option>}{almacenes.map(item => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select>
+              ? <SearchablePicker ariaLabel="Almacén de origen" disabled={soloLectura} value={form.almacenId} onChange={value => setForm(actual => ({ ...actual, almacenId: value, almacenNombre: almacenes.find(item => item.id === value)?.nombre ?? '' }))} options={almacenes.map(item => ({ id: item.id, label: item.nombre }))} />
               : <input value={form.almacenNombre} onChange={event => cambiar('almacenNombre', event.target.value)} placeholder="Ej. Almacén central" maxLength={60} />}</Field>
             <Field label="Peso estimado de la carga (kg)" error={campos.pesoEstimadoKg}><input type="number" min={1} step="any" value={form.peso} onChange={event => cambiar('peso', event.target.value)} placeholder="Opcional" /></Field>
             <Field label="Observaciones (opcional)" wide><input value={form.observaciones} onChange={event => cambiar('observaciones', event.target.value)} maxLength={200} /></Field>
@@ -150,12 +153,12 @@ export function DespachoDialog({ servicio, fuente, despacho, ventas = [], despac
         <section className="ws-dispatch-section">
           <h3>Vehículo y conductor</h3>
           <div className="ws-form-grid">
-            <Field label="Vehículo" error={errores.vehiculoId}><select value={form.vehiculoId} onChange={event => cambiar('vehiculoId', event.target.value)}><option value="">Elige un vehículo</option>{vehiculos.map(item => <option key={item.id} value={item.id}>{etiquetaVehiculoCorta(item)}</option>)}</select></Field>
-            <Field label="Conductor" error={errores.conductorId}><select value={form.conductorId} onChange={event => cambiar('conductorId', event.target.value)}><option value="">Elige un conductor</option>{conductores.map(item => <option key={item.id} value={item.id}>{item.nombre} · {item.licenciaCategoria}</option>)}</select></Field>
+            <Field label="Vehículo" error={errores.vehiculoId}><SearchablePicker ariaLabel="Vehículo del despacho" disabled={soloLectura} value={form.vehiculoId} onChange={value => cambiar('vehiculoId', value)} options={vehiculos.map(item => ({ id: item.id, label: etiquetaVehiculoCorta(item), detail: `${item.marca} ${item.modelo} · ${item.capacidadKg} kg` }))} /></Field>
+            <Field label="Conductor" error={errores.conductorId}><SearchablePicker ariaLabel="Conductor del despacho" disabled={soloLectura} value={form.conductorId} onChange={value => cambiar('conductorId', value)} options={conductores.map(item => ({ id: item.id, label: item.nombre, detail: `DNI ${item.documento} · ${item.licenciaCategoria}` }))} /></Field>
             <Field label="Sale a las" error={campos.desde}><input type="datetime-local" value={form.desde} onChange={event => cambiar('desde', event.target.value)} /></Field>
             <Field label="Regresa a las" error={campos.hasta}><input type="datetime-local" value={form.hasta} onChange={event => cambiar('hasta', event.target.value)} /></Field>
           </div>
-          {vehiculo && <small className="ws-dispatch-hint">Capacidad del vehículo: {vehiculo.capacidadKg.toLocaleString('es-PE')} kg</small>}
+          <AsignacionFicha vehiculo={vehiculo} conductor={conductores.find(item => item.id === form.conductorId)} peso={form.peso.trim() ? Number(form.peso) : undefined} />
         </section>
       </fieldset>
 

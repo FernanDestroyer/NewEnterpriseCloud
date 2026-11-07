@@ -3,6 +3,16 @@ import { Fingerprint, Package, RefreshCw } from 'lucide-react'
 import { inventoryQueryError } from '../services/inventoryQueries'
 import { configureTrace, identifyLot, identifySerial, inventoryKey, loadLotBalances, loadPendingLots, loadPendingSerials, loadTraceModes, type LotBalance, type PendingLot, type PendingSerial, type TraceMode } from '../services/inventoryOperations'
 import { InventoryGate, InventoryHeader, InventoryMessage, localDateTime, units, useInventoryReference } from './inventoryShared'
+import { SearchablePicker } from './SearchablePicker'
+import { SegmentedControl } from './ui/SegmentedControl'
+import { businessDate } from '../data/workspace'
+
+function ExpiryBadge({ date }: { date: string }) {
+  if (!date) return <small>Sin vencimiento indicado</small>
+  const today = businessDate(new Date().toISOString())
+  const days = Math.round((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000)
+  return <span className={`inv-badge ${days < 0 ? 'red' : days <= 30 ? 'amber' : 'green'}`}>{days < 0 ? 'Vencido' : days === 0 ? 'Vence hoy' : days <= 30 ? `Vence en ${days} días` : 'Vigente'}</span>
+}
 
 type LotDraft = { code: string; expiry: string; key: string }
 type SerialDraft = { number: string; key: string }
@@ -111,8 +121,8 @@ export default function InventoryTracePage() {
     <form className="inv-card" onSubmit={event => void saveMode(event)}>
       <div className="inv-card-heading"><Fingerprint size={18} /><div><strong>Configurar trazabilidad</strong><small>El modo es permanente: no se puede cambiar de lote a serie después de configurarlo.</small></div></div>
       <div className="inv-form-grid">
-        <label>Producto<select className="ws-control" value={productId} onChange={event => { setProductId(event.target.value); setLotPage(0); setSerialPage(0) }}><option value="">Seleccionar producto / ver todas las entradas</option>{products.map(item => <option key={item.rowId} value={item.rowId}>{item.id} · {item.name}</option>)}</select></label>
-        <label>Modo<select className="ws-control" value={configured?.modo ?? mode} disabled={Boolean(configured)} onChange={event => setMode(event.target.value as 'lote' | 'serie')}><option value="lote">Lotes · fecha de vencimiento</option><option value="serie">Serie única por unidad</option></select></label>
+        <div className="inv-field"><span>Producto</span><SearchablePicker ariaLabel="Producto para trazabilidad" value={productId} onChange={value => { setProductId(value); setLotPage(0); setSerialPage(0) }} options={[{ id: '', label: 'Todas las entradas' }, ...products.map(item => ({ id: item.rowId!, label: item.name, detail: item.id }))]} /></div>
+        <div className="inv-field"><span>Modo</span><SegmentedControl ariaLabel="Modo de trazabilidad" value={configured?.modo ?? mode} disabled={Boolean(configured)} onChange={setMode} options={[{ value: 'lote', label: 'Lotes · vencimiento' }, { value: 'serie', label: 'Serie por unidad' }]} /></div>
         <div className="inv-inline-stat"><span>Stock físico total</span><strong>{productId ? units(physicalStock) : '—'}</strong><span>Estado</span><span className={`inv-badge ${configured ? 'green' : physicalStock > 0 ? 'amber' : 'neutral'}`}>{configured ? `Configurado · ${configured.modo}` : productId && physicalStock > 0 ? 'Bloqueado · stock positivo' : 'Sin configurar'}</span></div>
       </div>
       <div className="inv-actions"><span>{configured ? 'Este producto ya tiene un modo de trazabilidad.' : physicalStock > 0 ? 'El stock histórico no puede asignarse a lotes o series desde esta pantalla.' : 'El backend verifica el stock otra vez antes de configurar.'}</span><button className="ws-button" type="submit" disabled={!editable || !productId || Boolean(configured) || physicalStock > 0 || Boolean(busy) || loading || traceLoading || Boolean(error) || Boolean(traceError)}>{busy === 'config' ? 'Configurando…' : 'Habilitar trazabilidad'}</button></div>
@@ -128,7 +138,7 @@ export default function InventoryTracePage() {
             <td><strong>{byProduct.get(lot.producto_id)?.name ?? lot.producto_id}</strong><small>{localDateTime(lot.creado_en)} · {lot.movimiento_entrada_id ?? lot.id}</small></td>
             <td>{rows.map(row => <small key={row.almacen_id}>{byWarehouse.get(row.almacen_id) ?? row.almacen_id}: {units(row.cantidad)}</small>)}</td>
             <td><form id={`lot-${lot.id}`} onSubmit={event => void saveLot(event, lot)} /><input form={`lot-${lot.id}`} className="ws-control" aria-label="Código de lote" value={draft.code} onChange={event => setLotDrafts(current => ({ ...current, [lot.id]: { ...draft, code: event.target.value, key: inventoryKey() } }))} required maxLength={120} placeholder="Código único" disabled={!editable || Boolean(busy)} /></td>
-            <td><input form={`lot-${lot.id}`} type="date" className="ws-control" aria-label="Vencimiento del lote" value={draft.expiry} onChange={event => setLotDrafts(current => ({ ...current, [lot.id]: { ...draft, expiry: event.target.value, key: inventoryKey() } }))} disabled={!editable || Boolean(busy)} /></td>
+            <td><input form={`lot-${lot.id}`} type="date" className="ws-control" aria-label="Vencimiento del lote" value={draft.expiry} onChange={event => setLotDrafts(current => ({ ...current, [lot.id]: { ...draft, expiry: event.target.value, key: inventoryKey() } }))} disabled={!editable || Boolean(busy)} /><ExpiryBadge date={draft.expiry} /></td>
             <td><button type="submit" form={`lot-${lot.id}`} className="ws-button ws-button-secondary" disabled={!editable || Boolean(busy) || !draft.code.trim() || traceLoading || Boolean(traceError)}>{busy === lot.id ? 'Guardando…' : 'Identificar'}</button></td>
           </tr>
         })}

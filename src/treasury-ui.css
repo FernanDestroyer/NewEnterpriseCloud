@@ -1,0 +1,54 @@
+/* Block 5 · liquidity, cash shifts and financial applications. */
+.ec-treasury { color: var(--ws-text); min-width: 0; }
+.ec-treasury > .ec-page-header { margin-bottom: 24px; }
+.ec-treasury > .ws-card { margin-block: 20px; }
+.ec-treasury .ws-card, .ec-treasury .ec-inline-form { border: 1px solid var(--ws-border); border-radius: 16px; background: var(--ws-surface); box-shadow: 0 4px 16px #00000006; }
+.ec-treasury .ws-card:has(.ec-combobox-popover), .ec-treasury .ec-module-card { overflow: visible; }
+.ec-treasury .ws-card-heading { padding: 22px 24px; border-bottom: 1px solid var(--ws-border); border-radius: 16px 16px 0 0; background: var(--ws-raised); }
+.ec-treasury .ws-card-heading h2 { color: var(--ws-text); font-size: 17px; letter-spacing: -.025em; }
+.ec-treasury .ws-card-heading p { color: var(--ws-muted); line-height: 1.6; }
+.ec-treasury .ws-form { padding: 24px; }
+.ec-treasury .ws-form-grid { gap: 20px; }
+.ec-treasury .ec-inline-form { margin: 20px; padding: 24px; }
+.ec-treasury .ec-inline-form .ws-section-heading { margin-bottom: 20px; }
+.ec-finance-field { position: relative; display: grid; gap: 8px; min-width: 0; color: var(--ws-muted); font-size: 12px; }
+.ec-treasury .ec-combobox:focus-within { z-index: 10; }
+.ec-treasury .ec-segments, .ec-finance-field .ec-segments { flex-wrap: wrap; }
+.ec-treasury .ec-segment, .ec-finance-field .ec-segment { display: flex; }
+.ec-treasury .ec-reconcile-picker > .ec-finance-field { flex: 1; }
+.ec-treasury .ws-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border-radius: 10px; text-decoration: none; }
+.ec-treasury .export-button { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; }
+.ec-finance-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-block: 24px; }
+.ec-finance-metrics article { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
+.ec-finance-metrics span, .ec-finance-metrics small { font-size: 11px; color: var(--ws-muted); line-height: 1.6; }
+.ec-finance-metrics small { margin-top: auto; }
+.ec-finance-metrics strong { font-size: clamp(18px, 1.5vw, 26px); color: var(--ws-text); letter-spacing: -.035em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.ec-finance-balance { display: flex; gap: 16px; align-items: center; padding: 24px; color: var(--ws-primary); }
+.ec-finance-balance > div { display: grid; gap: 8px; }
+.ec-finance-balance strong { font-size: 25px; font-variant-numeric: tabular-nums; color: var(--ws-text); }
+.ec-finance-balance small { font-size: 12px; color: var(--ws-muted); }
+.workspace-shell.erp-shell .ec-treasury .record-table th { padding: 16px 20px; background: var(--ws-raised); color: var(--ws-muted); border-bottom: 1px solid var(--ws-border); font-size: 10px; letter-spacing: .04em; }
+.workspace-shell.erp-shell .ec-treasury .record-table td { padding: 18px 20px; color: var(--ws-text); background: transparent; border-bottom: 1px solid var(--ws-border); }
+.ec-treasury .record-table tbody tr:hover { background: var(--ws-raised); }
+.ec-treasury .record-table small { display: block; font-size: 11px; color: var(--ws-muted); line-height: 1.6; margin-top: 5px; }
+.ec-treasury .record-value, .ec-treasury input[type='number'], .ec-treasury .cash-totals strong { font-variant-numeric: tabular-nums; }
+.ec-treasury .record-table td.ec-positive, .ec-treasury .ec-positive { color: var(--ws-green) !important; }
+.ec-treasury .record-table td.ec-negative, .ec-treasury .ec-negative { color: var(--ws-red) !important; }
+.ec-money-direction { display: inline-flex; align-items: center; gap: 8px; }
+.ec-treasury .status-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 10px; padding: 6px 10px; }
+.ec-treasury .status-pill::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.workspace-shell.erp-shell .ec-treasury input:not([type='radio']):not([type='checkbox']):not([type='hidden']):not(.ec-combobox-validation), .workspace-shell.erp-shell .ec-treasury textarea { color: var(--ws-text); background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 10px; padding: 10px 12px; min-height: 40px; }
+.ec-treasury input:focus-visible, .ec-treasury button:focus-visible, .ec-treasury textarea:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 3px; }
+.ec-treasury input[aria-invalid='true'], .ec-treasury input:user-invalid { border-color: var(--ws-red) !important; }
+.ec-payment-preview { display: grid; gap: 8px; margin-block: 18px; padding: 20px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-primary-soft); color: var(--ws-text); }
+.ec-payment-preview span { color: var(--ws-muted); font-size: 12px; }
+.ec-payment-preview strong { color: var(--ws-primary); font-size: 26px; font-variant-numeric: tabular-nums; }
+.ec-payment-breakdown { padding: 20px 24px; }
+.ec-payment-breakdown h3 { font-size: 14px; color: var(--ws-text); }
+.ec-payment-breakdown p { color: var(--ws-muted); font-size: 12px; line-height: 1.6; }
+.ec-treasury .cash-method, .ec-treasury .cash-totals { padding: 20px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-raised); }
+.ec-treasury .supplier-product-row { padding: 20px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-surface); }
+.ec-treasury .supplier-product-list { padding: 18px 24px; gap: 12px; }
+.ec-treasury .ec-match-box { margin: 20px; padding: 22px; border: 1px solid var(--ws-border); border-radius: 14px; background: var(--ws-raised); display: grid; gap: 18px; }
+@media (max-width: 1100px) { .ec-finance-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .ec-finance-metrics { grid-template-columns: minmax(0, 1fr); } .ec-treasury .ws-form, .ec-treasury .ws-card-heading { padding: 16px; } .ec-treasury .ec-inline-form { margin: 12px; padding: 16px; } .ec-finance-balance strong { font-size: 21px; } }

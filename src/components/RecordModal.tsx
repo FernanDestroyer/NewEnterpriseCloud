@@ -17,6 +17,13 @@ import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 import type { TaxTreatment } from '../services/records'
 import { useDialog } from './useDialog'
 import { fetchCashSetup, getOpenCashShifts, type CashBox, type CashShift } from '../services/caja'
+import { SearchablePicker } from './SearchablePicker'
+import { SegmentedControl } from './ui/SegmentedControl'
+import '../masters-ui.css'
+import '../purchases-ui.css'
+import TreasuryFormChoice from './TreasuryFormChoice'
+import '../treasury-ui.css'
+import { Trash2 } from 'lucide-react'
 
 /** Comprobante de venta: tipos con su serie y correlativo automático (editable). */
 const SALE_DOC_TYPES = ['Factura', 'Boleta', 'Cotización', 'Nota de venta'] as const
@@ -64,6 +71,7 @@ type LineDraft = { selected: boolean; qty: number; price: number; taxTreatment?:
 
 export default function RecordModal({ page, record, saving = false, onClose, onSave }: { page: DataPage; record: RecordItem | null; saving?: boolean; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void }) {
   const meta = pageMeta[page]
+  const isMaster = page === 'customers' || page === 'suppliers' || page === 'inventory'
   const editing = Boolean(record)
   const { records, catalog, lastSyncedAt } = useRecords()
   const { can } = useAuth()
@@ -626,7 +634,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => !saving && event.target === event.currentTarget && onClose()}>
-         <form ref={dialogRef} className={`record-modal record-modal--wide${page === 'purchases' || page === 'sales' || page === 'quotes' ? ' record-modal--split' : ''}`} onChange={() => { if (page === 'sales') setSaleRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`); if (page === 'purchases') setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }} onSubmit={onSave} role="dialog" aria-modal="true" aria-label={editing ? `Editar ${meta.title}` : meta.action}>
+         <form ref={dialogRef} className={`record-modal record-modal--wide${page === 'finance' ? ' ec-treasury' : ''}${page === 'purchases' ? ' ec-purchases' : ''}${isMaster ? ' ec-master-modal' : ''}${page === 'purchases' || page === 'sales' || page === 'quotes' ? ' record-modal--split' : ''}`} onChange={() => { if (page === 'sales') setSaleRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`); if (page === 'purchases') setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }} onSubmit={onSave} role="dialog" aria-modal="true" aria-label={editing ? `Editar ${meta.title}` : meta.action}>
         <div className="modal-heading"><div><span className="section-kicker"><i /> {meta.eyebrow}</span><h2>{editing ? `Editar registro de ${meta.title.toLocaleLowerCase()}` : meta.action}</h2><p>{editing ? 'Los cambios se guardarán en la base de datos.' : 'El registro se guardará en la base de datos.'}</p></div><button className="modal-close" type="button" aria-label="Cerrar" onClick={onClose}><GoogleIcon name="close" /></button></div>
         <div className="modal-fields">
           {page === 'sales' && <input type="hidden" name="idempotency_key" value={saleRequestKey} />}
@@ -635,6 +643,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
           {(hasClientRelation || hasSupplierRelation) && (page === 'purchases' ? (
             <div className="relation-field">
               <label>Proveedor de la orden</label>
+              <SearchablePicker ariaLabel="Proveedor de la orden" value={relatedId} onChange={value => { selectSupplier(value); setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }} searchPlaceholder="Buscar RUC, razón social o código…" options={options.filter(item => item.rowId).map(item => ({ id: item.rowId!, label: item.name, detail: `${item.id} · ${item.ruc ?? ''}` }))} />
               <input type="hidden" name="related_id" value={relatedId} />
               {linkedTarget ? (
                 <>
@@ -687,11 +696,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                       <div className="lines-pagination">
                         <span>{safeSupplierPage * supplierPageSize + 1}–{Math.min(safeSupplierPage * supplierPageSize + supplierPageSize, filteredSuppliers.length)} de {filteredSuppliers.length}</span>
                         <label>Filas
-                          <select value={supplierPageSize} onChange={(event) => { setSupplierPageSize(Number(event.target.value)); setSupplierPage(0) }} aria-label="Filas de proveedores por página">
-                            <option value={3}>3</option>
-                            <option value={5}>5</option>
-                            <option value={10}>10</option>
-                          </select>
+                          <SegmentedControl value={String(supplierPageSize)} onChange={value => { setSupplierPageSize(Number(value)); setSupplierPage(0) }} ariaLabel="Filas de proveedores por página" options={['3', '5', '10'].map(value => ({ value, label: value }))} />
                         </label>
                         <div>
                           <button className="ws-icon-button" type="button" aria-label="Proveedores anteriores" disabled={safeSupplierPage === 0} onClick={() => setSupplierPage(safeSupplierPage - 1)}><GoogleIcon name="chevron_left" className="small" /></button>
@@ -804,12 +809,12 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
               )}
             </div>
           ) : null)}
+          <fieldset className={isMaster ? 'ec-form-group' : 'ec-form-passthrough'}>
+          {isMaster && <legend>01 · Datos principales</legend>}
           <label>{meta.entityLabel}<input data-autofocus name="name" required minLength={2} value={nameValue} onChange={(event) => setNameValue(event.target.value)} placeholder={meta.entityLabel} /></label>
           {page === 'purchases' && <div className="ws-form-grid">
             <label>Moneda de la orden
-              <select name="moneda" value={purchaseCurrency} onChange={event => { const next = event.target.value === 'USD' ? 'USD' : 'PEN'; setPurchaseCurrency(next); if (next === 'PEN') setPurchaseExchangeRate('1') }}>
-                <option value="PEN">PEN · Sol peruano</option><option value="USD">USD · Dólar estadounidense</option>
-              </select>
+              <SegmentedControl name="moneda" value={purchaseCurrency} onChange={value => { setPurchaseCurrency(value); if (value === 'PEN') setPurchaseExchangeRate('1') }} ariaLabel="Moneda de compra" options={[{ value: 'PEN', label: 'PEN · Sol' }, { value: 'USD', label: 'USD · Dólar' }]} />
             </label>
             {purchaseCurrency === 'USD' ? (
               <label>Tipo de cambio manual (PEN por USD)
@@ -820,7 +825,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
               <input type="hidden" name="exchange_rate" value="1" />
             )}
           </div>}
-          {page === 'finance' && <label>Tipo de cuenta<select name="financeType" defaultValue={record?.financeType ?? (record?.id.startsWith('CXC') ? 'cobrar' : record?.id.startsWith('CXP') ? 'pagar' : '')} required><option value="">Selecciona el tipo</option><option value="cobrar">Cuenta por cobrar</option><option value="pagar">Cuenta por pagar</option></select></label>}
+          {page === 'finance' && <TreasuryFormChoice name="financeType" label="Tipo de cuenta" segmented required defaultValue={record?.financeType ?? (record?.id.startsWith('CXC') ? 'cobrar' : record?.id.startsWith('CXP') ? 'pagar' : '')} options={[{ id: 'cobrar', label: 'Cuenta por cobrar' }, { id: 'pagar', label: 'Cuenta por pagar' }]} />}
           {page === 'sales' && (
             <div className="relation-field">
               <label htmlFor="doc_type">Tipo de comprobante</label>
@@ -908,6 +913,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
             <label>{meta.detailLabel}<input name="detail" required={page !== 'suppliers'} value={detailValue} onChange={(event) => setDetailValue(event.target.value)} placeholder={page === 'suppliers' ? '(opcional)' : meta.detailLabel} /></label>
           )}
 
+          </fieldset>
           {hasDocumentLines ? (
             <div className="lines-section">
               <div className="lines-head">
@@ -941,7 +947,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                       : 'Selecciona un proveedor arriba para ver sus productos.'}
                 </small>
               {page === 'purchases' && <small className="relation-hint">Si no seleccionas artículos, se guardará como servicio o gasto: no generará recepción ni movimiento de almacén. Indica el importe base sin IGV en el campo de la orden.</small>}
-              {page === 'purchases' && <small className="relation-hint">Cada línea conserva su snapshot tributario. Las líneas históricas sin tratamiento permanecen sin reclasificar hasta que se elija uno explícitamente.</small>}
+              {page === 'purchases' && <><small className="relation-hint">Cada línea conserva su snapshot tributario. Las líneas históricas sin tratamiento permanecen sin reclasificar hasta que se elija uno explícitamente.</small><SearchablePicker ariaLabel="Agregar producto del proveedor" value="" disabled={!relatedId} placeholder="Agregar producto del catálogo…" searchPlaceholder="Buscar código o nombre…" options={visibleProducts.filter(product => product.rowId).map(product => ({ id: product.rowId!, label: product.name, detail: `${product.id} · ${product.relatedCode ?? ''}`, disabled: Boolean(lines[product.rowId!]?.selected) }))} onChange={value => { toggleLine(value); setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }} /></>}
               {page === 'purchases' && (
                 <div className="ws-tabs" role="tablist" aria-label="Filtrar productos">
                   <button type="button" role="tab" aria-selected={productFilter === 'all'} onClick={() => setProductFilter('all')}>Todos ({productCounts.total})</button>
@@ -985,10 +991,11 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     const rowHidden = productMatches && uuid ? !productMatches.has(uuid) : false
                     return (
                       <div key={uuid} className={`line-row${checked ? ' checked' : ''}${overStock ? ' over' : ''}`} style={rowHidden ? { display: 'none' } : undefined}>
-                        <label className="line-check">
+                        <div className="line-check">
                           <input
                             type="checkbox"
-                            name={`sel_${uuid}`}
+                             name={`sel_${uuid}`}
+                             aria-label={`Seleccionar ${product.name}`}
                             checked={checked}
                             disabled={(noStock && !checked) || (page === 'sales' && warehouseStockLoading) || (page === 'quotes' && record?.status === 'Completada')}
                             title={noStock && !checked ? 'Sin stock en el almacén seleccionado' : `Seleccionar ${product.name}`}
@@ -996,12 +1003,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                           />
                           <span className="line-copy">
                             <strong>{product.name}</strong>
-                            {isCatalogLine && checked && <select name={`tax_${uuid}`} aria-label={`Tratamiento tributario de ${product.name}`} value={draft?.taxTreatment ?? ''} onChange={event => changeLine(uuid, { taxTreatment: (event.target.value || null) as TaxTreatment | null })}>
-                              <option value="">Sin desglose (histórico)</option>
-                              <option value="Gravado">Gravado · IGV 18%</option>
-                              <option value="Exonerado">Exonerado · 0%</option>
-                              <option value="Inafecto">Inafecto · 0%</option>
-                            </select>}
+                            {isCatalogLine && checked && <SegmentedControl name={`tax_${uuid}`} ariaLabel={`Tratamiento tributario de ${product.name}`} value={draft?.taxTreatment ?? ''} onChange={value => changeLine(uuid, { taxTreatment: (value || null) as TaxTreatment | null })} options={[{ value: '', label: 'Histórico' }, { value: 'Gravado', label: 'IGV 18%' }, { value: 'Exonerado', label: 'Exonerado 0%' }, { value: 'Inafecto', label: 'Inafecto 0%' }]} />}
                             {isCatalogLine && checked && !draft?.taxTreatment && <small>Importe histórico: no se recalcula impuesto.</small>}
                             {!isCatalogLine && (
                               <small>
@@ -1013,7 +1015,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                             {checked && hasNoPrice && <small className="line-warn"><GoogleIcon name="sell" className="small" /> Sin {isCatalogLine ? 'costo' : 'precio'} definido: no se puede guardar. Defínelo {isCatalogLine ? 'en el catálogo del proveedor' : 'en Inventario'}.</small>}
                             {overStock && <small className="line-warn"><GoogleIcon name="warning" className="small" /> Máximo {stock} und. disponibles.</small>}
                           </span>
-                        </label>
+                        </div>
                         <label className="line-qty">{isCatalogLine ? null : 'Cant.'}
                           <input
                             type="number"
@@ -1050,6 +1052,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                           {isCatalogLine ? null : <small>{checked ? `${money(unit)} × ${qty}` : '—'}</small>}
                           {isCatalogLine && checked && draft?.taxTreatment && <small>Base {moneyCurrency(Math.round(qty * unit * 100) / 100, purchaseCurrency)} · impuesto {moneyCurrency(Math.round(Math.round(qty * unit * 100) / 100 * (draft.taxTreatment === 'Gravado' ? 18 : 0)) / 100, purchaseCurrency)}</small>}
                           <strong>{moneyCurrency(checked ? draft?.taxTreatment ? Math.round(qty * unit * 100) / 100 + Math.round(Math.round(qty * unit * 100) / 100 * (draft.taxTreatment === 'Gravado' ? 18 : 0)) / 100 : draft?.lineTotal ?? qty * unit : 0, page === 'purchases' ? purchaseCurrency : 'PEN')}</strong>
+                          {isCatalogLine && checked && <button type="button" className="ws-icon-button" aria-label={`Quitar ${product.name}`} onClick={() => { toggleLine(uuid); setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }}><Trash2 size={15} /></button>}
                         </span>
                       </div>
                     )
@@ -1080,11 +1083,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                   <div className="lines-pagination">
                     <span>{rangeStart}–{rangeEnd} de {matchingProducts.length}</span>
                     <label>Filas
-                      <select value={productPageSize} onChange={(event) => { setProductPageSize(Number(event.target.value)); setProductPage(0) }} aria-label="Filas por página">
-                        <option value={3}>3</option>
-                        <option value={5}>5</option>
-                        <option value={10}>10</option>
-                      </select>
+                      <SegmentedControl value={String(productPageSize)} onChange={value => { setProductPageSize(Number(value)); setProductPage(0) }} ariaLabel="Filas por página" options={['3', '5', '10'].map(value => ({ value, label: value }))} />
                     </label>
                     <div>
                       <button className="ws-icon-button" type="button" aria-label="Página anterior" disabled={safeProductPage === 0} onClick={() => setProductPage(safeProductPage - 1)}><GoogleIcon name="chevron_left" className="small" /></button>
@@ -1147,6 +1146,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
             <>
               {page === 'suppliers' && (
                 <>
+                  <fieldset className="ec-form-group"><legend>02 · Identificación fiscal y contacto</legend>
                   <label>RUC de la empresa (11 dígitos)
                     <div className="ws-doc-row">
                       <input name="ruc" inputMode="numeric" maxLength={11} required value={rucValue} onChange={(event) => setRucValue(event.target.value.replace(/\D/g, ''))} placeholder="20123456789" />
@@ -1158,17 +1158,13 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     <label>Correo<input name="correo" type="email" value={correoValue} onChange={(event) => setCorreoValue(event.target.value)} placeholder="contacto@empresa.pe" /></label>
                     <label>Teléfono<input name="telefono" inputMode="tel" value={telefonoValue} onChange={(event) => setTelefonoValue(event.target.value)} placeholder="987654321" /></label>
                   </div>
-                  <label>Condición de pago
-                    <select name="forma_pago" value={formaPagoValue} onChange={(event) => setFormaPagoValue(event.target.value)}>
-                      <option value="">Sin definir</option>
-                      {SUPPLIER_PAYMENT_TERMS.map((term) => <option key={term} value={term}>{term}</option>)}
-                    </select>
-                  </label>
+                  <div className="ec-master-field"><span>Condición de pago</span><SearchablePicker name="forma_pago" value={formaPagoValue} onChange={setFormaPagoValue} ariaLabel="Condición de pago" options={[{id:'',label:'Sin definir'}, ...SUPPLIER_PAYMENT_TERMS.map(term => ({id:term,label:term}))]} /></div>
                   {lookup.message
                     ? <small className={`relation-hint${lookup.ok ? ' linked' : ''}`}><GoogleIcon name={lookup.ok ? 'check_circle' : 'info'} className="small" />{lookup.message}</small>
                     : !isPeruLookupConfigured()
                       ? <small className="relation-hint"><GoogleIcon name="info" className="small" />Autocompletado desactivado: configura VITE_PERU_API_TOKEN en tu .env para consultar SUNAT.</small>
                       : <small className="relation-hint"><GoogleIcon name="badge" className="small" />Escribe el RUC y pulsa SUNAT para traer razón social y dirección. Identifica la empresa en cada orden de compra.</small>}
+                  </fieldset>
                   {!editing && (
                   <div className="lines-section">
                     <div className="lines-head">
@@ -1200,12 +1196,8 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
               )}
               {page === 'customers' && (
                 <>
-                  <label>Tipo de documento
-                    <select name="tipo_doc" value={docKind} onChange={(event) => setDocKind(event.target.value as DocType)}>
-                      <option value="DNI">DNI · persona natural (RENIEC)</option>
-                      <option value="RUC">RUC · empresa (SUNAT)</option>
-                    </select>
-                  </label>
+                  <fieldset className="ec-form-group"><legend>02 · Identificación fiscal</legend>
+                  <div className="ec-master-field"><span>Tipo de documento</span><SegmentedControl name="tipo_doc" value={docKind} onChange={setDocKind} ariaLabel="Tipo de documento" options={[{value:'DNI',label:'DNI · RENIEC'},{value:'RUC',label:'RUC · SUNAT'}]} /></div>
                   <label>{docKind} del cliente (opcional)
                     <div className="ws-doc-row">
                         <input name="documento" inputMode="numeric" maxLength={docKind === 'DNI' ? 8 : 11} value={docNumber} onChange={(event) => setDocNumber(event.target.value.replace(/\D/g, ''))} placeholder={docKind === 'DNI' ? '12345678' : '20123456789'} />
@@ -1217,23 +1209,24 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                     : !isPeruLookupConfigured()
                       ? <small className="relation-hint"><GoogleIcon name="info" className="small" />Autocompletado desactivado: configura VITE_PERU_API_TOKEN en tu .env para consultar RENIEC/SUNAT.</small>
                       : <small className="relation-hint"><GoogleIcon name="badge" className="small" />Escribe el documento y pulsa {docKind} para traer los datos oficiales. Se guardan con el cliente para reutilizarlos en ventas.</small>}
+                  </fieldset>
                 </>
               )}
+          <fieldset className={page === 'customers' ? 'ec-form-group' : 'ec-form-passthrough'}>
+          {page === 'customers' && <legend>03 · Condiciones comerciales</legend>}
           {meta.kind === 'money' && <label>{meta.amountLabel}<input name="amount" min="0" step="0.01" type="number" defaultValue={record?.amount} placeholder="0.00" /></label>}
+          </fieldset>
               {meta.kind === 'stock' && (
                 <>
-                  {page === 'inventory' && !productCategoryError && <label>Categoría<select name="categoria_id" className="ws-control" value={productCategoryId} onChange={event => setProductCategoryId(event.target.value)} disabled={productMastersLoading}>
-                    <option value="">Sin categoría</option>
-                    {productCategories.filter(item => item.activo || item.id === productCategoryId).map(item => <option key={item.id} value={item.id} disabled={!item.activo}>{item.nombre}{item.activo ? '' : ' · desactivada'}</option>)}
-                  </select></label>}
-                  {page === 'inventory' && can('settings', 'ver') && !measurementUnitError && <label>Unidad de medida<select name="unidad_medida_id" className="ws-control" value={measurementUnitId} onChange={event => setMeasurementUnitId(event.target.value)} disabled={productMastersLoading}>
-                    <option value="">Sin definir</option>
-                    {measurementUnits.filter(item => (item.activo && item.precisionDecimales === 0) || item.id === measurementUnitId).map(item => <option key={item.id} value={item.id} disabled={!item.activo || item.precisionDecimales !== 0}>{item.nombre} ({item.simbolo}){item.precisionDecimales !== 0 ? ' · requiere soporte decimal' : item.activo ? '' : ' · desactivada'}</option>)}
-                  </select></label>}
+                  <fieldset className="ec-form-group"><legend>02 · Clasificación del producto</legend>
+                  {page === 'inventory' && !productCategoryError && <div className="ec-master-field"><span>Categoría</span><SearchablePicker name="categoria_id" value={productCategoryId} onChange={setProductCategoryId} disabled={productMastersLoading} ariaLabel="Categoría del producto" options={[{id:'',label:'Sin categoría'}, ...productCategories.filter(item=>item.activo || item.id===productCategoryId).map(item=>({id:item.id,label:item.nombre,detail:item.activo ? item.descripcion ?? undefined : 'Desactivada',disabled:!item.activo}))]} /></div>}
+                  {page === 'inventory' && can('settings', 'ver') && !measurementUnitError && <div className="ec-master-field"><span>Unidad de medida</span><SearchablePicker name="unidad_medida_id" value={measurementUnitId} onChange={setMeasurementUnitId} disabled={productMastersLoading} ariaLabel="Unidad de medida" options={[{id:'',label:'Sin definir'}, ...measurementUnits.filter(item=>(item.activo && item.precisionDecimales===0) || item.id===measurementUnitId).map(item=>({id:item.id,label:`${item.nombre} (${item.simbolo})`,detail:`${item.codigo}${item.precisionDecimales!==0 ? ' · requiere soporte decimal' : item.activo ? '' : ' · desactivada'}`,disabled:!item.activo || item.precisionDecimales!==0}))]} /></div>}
                   {page === 'inventory' && productMastersLoading && <small className="relation-hint">Cargando categorías y unidades…</small>}
                   {page === 'inventory' && can('settings', 'ver') && !productMastersLoading && !measurementUnitError && measurementUnits.length === 0 && <small className="relation-hint">Aún no hay unidades. Configúralas en Maestros → Catálogos compartidos.</small>}
                   {page === 'inventory' && productCategoryError && <small className="relation-hint">No se pudieron cargar las categorías; conserva los datos existentes y recarga antes de cambiar la clasificación.</small>}
                   {page === 'inventory' && can('settings', 'ver') && measurementUnitError && <small className="relation-hint">No se pudieron cargar las unidades; conserva la unidad actual y recarga antes de cambiarla.</small>}
+                  </fieldset>
+                  <fieldset className="ec-form-group"><legend>03 · Precios y stock</legend>
                   <label>Unidades iniciales<input name="quantity" min="0" step="1" type="number" defaultValue={record?.quantity} placeholder="0" /></label>
                   {page === 'inventory' && (
                     <>
@@ -1246,6 +1239,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                       </small>
                     </>
                   )}
+                  </fieldset>
                 </>
               )}
             </>
@@ -1266,6 +1260,8 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
               <GoogleIcon name="monitoring" className="small" />
               El estado se calcula solo por el stock: 0 = Crítico, 1–{LOW_STOCK_THRESHOLD} = Bajo stock, más = Estable.
             </small>
+          ) : isMaster || page === 'purchases' || page === 'finance' ? (
+            <div className="ec-master-field"><span>Estado del registro</span><SegmentedControl name="status" ariaLabel="Estado del registro" value={statusValue} onChange={setStatusValue} options={statusOptions.map(value=>({value:value as RecordStatus,label:value}))} /></div>
           ) : (
             <label>Estado
               <select name="status" value={statusValue} onChange={(event) => setStatusValue(event.target.value as RecordStatus)}>

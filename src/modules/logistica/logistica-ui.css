@@ -1,0 +1,48 @@
+.ec-logistica { color: var(--ws-text); min-width: 0; }
+.ec-logistica > .ec-page-header { margin-bottom: 24px; }
+.ec-log-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
+.ec-log-metrics article { display: grid; gap: 14px; padding: 22px; border: 1px solid var(--ws-border); border-radius: 16px; background: var(--ws-surface); }
+.ec-log-metrics span, .ec-log-metrics small { color: var(--ws-muted); font-size: 12px; line-height: 1.6; }
+.ec-log-metrics strong { font-size: 28px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.ec-logistica .ws-card { border-radius: 16px; border: 1px solid var(--ws-border); background: var(--ws-surface); box-shadow: 0 4px 16px #00000006; }
+.ec-logistica .ws-button, .ws-fleet-dialog .ws-button { border-radius: 10px; min-height: 40px; gap: 8px; }
+.ec-logistica .ws-fleet-tabs, .ec-logistica .ws-filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.ec-logistica .ws-filter-chips { padding: 18px; }
+.ec-logistica .ws-filter-chips button { border-radius: 999px; transition: background .15s, color .15s; }
+.ec-logistica .ws-filter-chips button[aria-pressed='true'] { color: var(--ws-primary); background: var(--ws-primary-soft); border-color: var(--ws-primary); }
+.workspace-shell.erp-shell .ec-logistica :is(.record-table, .ws-fleet-table) th { padding: 16px 20px; color: var(--ws-muted); background: var(--ws-raised); font-size: 11px; border-bottom: 1px solid var(--ws-border); }
+.workspace-shell.erp-shell .ec-logistica :is(.record-table, .ws-fleet-table) td { padding: 18px 20px; color: var(--ws-text); background: transparent; border-bottom: 1px solid var(--ws-border); }
+.ec-logistica tbody tr:hover { background: var(--ws-raised); }
+.ec-logistica td small { display: block; margin-top: 6px; color: var(--ws-muted); font-size: 11px; line-height: 1.6; }
+.ec-logistica .status-pill, .ws-fleet-dialog .status-pill { border-radius: 999px; }
+.ec-logistica .status-pill::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; margin-right: 6px; }
+.ws-fleet-dialog .ec-log-field { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px; color: var(--ws-muted); font-size: 12px; }
+.ws-fleet-dialog .ec-log-field legend { padding: 0; margin-bottom: 8px; }
+.ws-fleet-dialog .ec-segments { flex-wrap: wrap; }
+.ws-fleet-dialog .ec-segment { display: flex; }
+.ws-fleet-dialog .ec-combobox:focus-within { z-index: 12; }
+.ws-fleet-dialog .ws-dispatch-fieldset { min-width: 0; }
+.ws-fleet-dialog .ws-form-grid { gap: 20px; }
+.ec-log-assignment { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px; }
+.ws-fleet-dialog .ec-log-assignment { margin-inline: 0; }
+.ec-log-assignment article { display: flex; gap: 12px; padding: 18px; border-radius: 12px; border: 1px solid var(--ws-border); background: var(--ws-raised); color: var(--ws-primary); }
+.ec-log-assignment article > div { display: grid; gap: 10px; min-width: 0; flex: 1; }
+.ec-log-assignment strong { color: var(--ws-text); font-size: 13px; }
+.ec-log-assignment small, .ec-log-assignment span { color: var(--ws-muted); font-size: 12px; line-height: 1.6; }
+.ec-log-assignment a { display: flex; align-items: center; gap: 8px; color: var(--ws-primary); }
+.ec-log-assignment progress { width: 100%; height: 8px; accent-color: var(--ws-primary); }
+.ec-log-assignment .ec-log-danger { color: var(--ws-red); }
+.ec-log-route { margin: 20px; }
+.ec-log-route ol { list-style: none; display: flex; flex-wrap: wrap; padding: 0; gap: 12px; }
+.ec-log-route li { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--ws-muted); font-size: 12px; padding-block: 10px; border-top: 2px solid var(--ws-border); }
+.ec-log-route li[data-done='true'] { border-color: var(--ws-primary); color: var(--ws-primary); }
+.ec-log-route li span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ws-raised); }
+.ec-log-note { padding: 14px 18px; margin: 12px 20px; border-left: 3px solid var(--ws-amber, #b98224); border-radius: 8px; background: var(--ws-raised); color: var(--ws-text); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.ec-log-note strong { display: block; margin-top: 8px; }
+.ws-fleet-dialog .ws-timeline { margin: 24px; }
+.ws-fleet-dialog .ws-timeline li { padding-bottom: 22px; }
+.ws-fleet-dialog .ws-timeline-dot { background: var(--ws-primary-soft); color: var(--ws-primary); }
+.ec-logistica button:focus-visible, .ws-fleet-dialog button:focus-visible, .ws-fleet-dialog input:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 3px; }
+@media (max-width: 1100px) { .ec-log-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .ec-log-metrics, .ec-log-assignment { grid-template-columns: minmax(0, 1fr); } .ec-log-route li { flex-basis: 40%; } }
+@media (prefers-reduced-motion: reduce) { .ec-logistica .ws-filter-chips button { transition: none; } }

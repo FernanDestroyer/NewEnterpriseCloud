@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { fetchSupplierOrderEvaluation, saveSupplierOrderEvaluation } from '../services/supplierEvaluations'
 import type { SupplierEvaluationScore, SupplierOrderEvaluation } from '../types/supplierEvaluations'
+import { SearchablePicker } from './SearchablePicker'
 
 const criterionFields: Array<{ key: 'calidad_producto' | 'cumplimiento_plazos' | 'nivel_servicio'; label: string }> = [
   { key: 'calidad_producto', label: 'Calidad del Producto' },
@@ -105,7 +106,7 @@ export default function SupplierOrderEvaluationPanel({ compraId, proveedorId, es
       {eligible && canEdit && <button className="ws-button ws-button-secondary ws-button-compact" type="button" onClick={() => setEditing(true)}>Editar evaluación</button>}
       {!eligible && <small className="ws-muted">Esta orden ya no cumple el estado requerido para modificar la evaluación.</small>}
     </> : !eligible ? <div className="ws-notice ws-notice-info">La evaluación estará disponible cuando exista al menos una recepción registrada.</div> : !canEdit ? <div className="ws-notice ws-notice-info">Tu rol puede consultar, pero no registrar ni actualizar evaluaciones.</div> : <form className="ws-order-evaluation-form" onSubmit={event => void save(event)}>
-      {criterionFields.map(field => <label key={field.key}>{field.label}<select className="ws-control" required value={scores[field.key]} onChange={event => setScores(current => ({ ...current, [field.key]: event.target.value }))}><option value="">Seleccionar puntaje</option>{[1,2,3,4,5].map(score => <option key={score} value={score}>{score} · {scoreLabels[score]}</option>)}</select></label>)}
+      {criterionFields.map(field => <div key={field.key}><small>{field.label}</small><SearchablePicker required ariaLabel={field.label} value={scores[field.key]} onChange={value => setScores(current => ({ ...current, [field.key]: value }))} options={[1,2,3,4,5].map(score => ({ id: String(score), label: `${score} · ${scoreLabels[score]}` }))} /></div>)}
       <div className="ws-order-evaluation-actions">{evaluation && <button className="ws-button ws-button-secondary" type="button" disabled={busy} onClick={() => { setEditing(false); setScores({ calidad_producto: String(evaluation.calidad_producto), cumplimiento_plazos: String(evaluation.cumplimiento_plazos), nivel_servicio: String(evaluation.nivel_servicio) }) }}>Cancelar</button>}<button className="ws-button" type="submit" disabled={busy || !scoresComplete}>{busy ? <><RefreshCw size={14} className="ws-spin"/>Guardando…</> : <><Check size={14}/>{evaluation ? 'Actualizar evaluación' : 'Registrar evaluación'}</>}</button></div>
     </form>}
   </section>

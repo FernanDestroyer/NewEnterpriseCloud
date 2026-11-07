@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { SegmentedControl } from './ui/SegmentedControl'
+import '../masters-ui.css'
 import {
   fetchMeasurementUnits,
   fetchProductCategories,
@@ -86,16 +88,13 @@ export default function ProductCatalogSetup({ canCreate, canEdit }: { canCreate:
     finally { setBusy(false) }
   }
 
-  return <div className="ws-product-catalog-setup">
-    <div className="ws-tabs" role="tablist" aria-label="Catálogos de productos">
-      <button type="button" role="tab" aria-selected={tab === 'categorias'} onClick={() => setTab('categorias')}>Categorías</button>
-      <button type="button" role="tab" aria-selected={tab === 'unidades'} onClick={() => setTab('unidades')}>Unidades de medida</button>
-    </div>
+  return <div className="ws-product-catalog-setup ec-master-catalog">
+    <SegmentedControl value={tab} onChange={setTab} ariaLabel="Catálogos de productos" options={[{value:'categorias',label:'Categorías'},{value:'unidades',label:'Unidades de medida'}]} />
     <p className="relation-hint">Desactivar conserva el historial y los productos vinculados. Las cantidades de V1 son enteras; las unidades fraccionarias requieren una migración coordinada de inventario y documentos.</p>
     {loading ? <div className="ws-empty-compact"><RefreshCw size={24} className="ws-spin" /><strong>Cargando catálogos…</strong></div> : tab === 'categorias' ? <>
       <div className="supplier-product-list">{categories.map(item => <div className="supplier-product-row" key={item.id}>
         <span className="supplier-product-copy"><strong>{item.nombre}</strong><small>{item.descripcion || 'Sin descripción'} · {item.activo ? 'Activa' : 'Desactivada'}</small></span>
-        {canEdit && <span className="supplier-product-actions"><button className="export-button" type="button" disabled={busy} onClick={() => void toggleCategory(item)}>{item.activo ? 'Desactivar' : 'Activar'}</button></span>}
+        {canEdit && <span className="supplier-product-actions"><button className="ec-master-toggle" type="button" role="switch" aria-checked={item.activo} aria-label={`Activar categoría ${item.nombre}`} disabled={busy} onClick={() => void toggleCategory(item)}>{item.activo ? 'Activa' : 'Inactiva'}</button></span>}
       </div>)}{!categories.length && <div className="ws-empty-compact">Aún no hay categorías.</div>}</div>
       {canCreate && <form className="ws-product-catalog-form" onSubmit={submit}>
         <label>Nombre<input name="nombre" required minLength={2} maxLength={80} placeholder="Ej. Materia prima" /></label>
@@ -105,7 +104,7 @@ export default function ProductCatalogSetup({ canCreate, canEdit }: { canCreate:
     </> : <>
       <div className="supplier-product-list">{units.map(item => <div className="supplier-product-row" key={item.id}>
         <span className="supplier-product-copy"><strong>{item.nombre} · {item.simbolo}</strong><small>{item.codigo} · {item.precisionDecimales} decimales · {item.activo ? 'Activa' : 'Desactivada'}</small></span>
-        {canEdit && <span className="supplier-product-actions"><button className="export-button" type="button" disabled={busy} onClick={() => void toggleUnit(item)}>{item.activo ? 'Desactivar' : 'Activar'}</button></span>}
+        {canEdit && <span className="supplier-product-actions"><button className="ec-master-toggle" type="button" role="switch" aria-checked={item.activo} aria-label={`Activar unidad ${item.nombre}`} disabled={busy} onClick={() => void toggleUnit(item)}>{item.activo ? 'Activa' : 'Inactiva'}</button></span>}
       </div>)}{!units.length && <div className="ws-empty-compact">Aún no hay unidades de medida.</div>}</div>
       {canCreate && <form className="ws-product-catalog-form" onSubmit={submit}>
         <label>Código<input name="codigo" required minLength={2} maxLength={12} pattern="[A-Za-z0-9_-]+" placeholder="UND" /></label>

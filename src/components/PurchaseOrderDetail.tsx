@@ -9,6 +9,10 @@ import { useAuth } from '../context/AuthContext'
 import { fetchPurchaseCloseSummary, type PurchaseCloseSummary } from '../services/purchaseReceipts'
 import SupplierOrderEvaluationPanel from './SupplierOrderEvaluationPanel'
 import SupplierEvaluationRating from './SupplierEvaluationRating'
+import { SegmentedControl } from './ui/SegmentedControl'
+import { PageHeader } from './ui/PageHeader'
+import { ShoppingCart } from 'lucide-react'
+import '../purchases-ui.css'
 
 /** Icono de Google (Material Symbols Outlined). */
 function GoogleIcon({ name, className = '' }: { name: string; className?: string }) {
@@ -129,7 +133,8 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
   const supplierContact = supplier ? [supplier.direccion, supplier.telefono, supplier.correo].filter(Boolean).join(' · ') : ''
 
   return (
-    <>
+    <div className="ec-purchases">
+      <PageHeader section="Compras / Órdenes" title={order.id} description={`${order.name} · ${order.detail}`} icon={ShoppingCart} />
       <div className="po-topbar">
         <button className="text-button" type="button" onClick={onBack}><GoogleIcon name="arrow_back" className="small" /> Volver a compras</button>
         <span style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
@@ -207,9 +212,7 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
         <div className="po-datos">
           <label>Fecha límite o aproximada<input type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>
           <label>Tipo de comprobante
-            <select value={COMPROBANTES.includes(compTipo) ? compTipo : 'Factura'} onChange={(event) => setCompTipo(event.target.value)}>
-              {COMPROBANTES.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
-            </select>
+            <SegmentedControl ariaLabel="Tipo de comprobante" value={COMPROBANTES.includes(compTipo) ? compTipo : 'Factura'} onChange={setCompTipo} options={COMPROBANTES.map(value => ({ value, label: value }))} />
           </label>
           <label>Número de comprobante<input value={compNum} onChange={(event) => setCompNum(event.target.value)} placeholder="F001-0001" /></label>
           <button className="export-button" type="button" disabled={busy || loadingLines || Boolean(lineError) || !can('purchases', 'editar')} onClick={() => void persist(order.status)}><GoogleIcon name="save" className="small" /> Guardar datos</button>
@@ -245,6 +248,6 @@ export default function PurchaseOrderDetail({ order, onBack }: { order: RecordIt
         </div>
         <p className="po-foot"><GoogleIcon name="schedule" className="small" /> Actualización: {order.date} · La obligación por pagar nace al registrar la recepción. Esta edición no crea ni actualiza CxP.</p>
       </section>
-    </>
+    </div>
   )
 }

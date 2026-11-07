@@ -4,6 +4,8 @@ import type { DocumentLine, RecordItem } from '../types'
 import { fetchActiveWarehouses, fetchDocumentLines, friendlyError, type ActiveWarehouse, type PurchaseReceiptInputLine } from '../services/records'
 import { fetchPurchaseReceiptHistory, fetchPurchaseReceiptProgress, type PurchaseReceiptEvent, type PurchaseReceiptProgress } from '../services/purchaseReceipts'
 import { useDialog } from './useDialog'
+import { SearchablePicker } from './SearchablePicker'
+import '../purchases-ui.css'
 
 function newRequestKey() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -90,15 +92,12 @@ export default function PurchaseReceiptModal({ order, busy, onClose, onSubmit }:
   const fillPending = () => change(() => setQuantities(Object.fromEntries(lines.map(line => [line.rowId ?? line.producto_id, String(remaining(line))]))))
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={event => !busy && event.target === event.currentTarget && onClose()}>
-    <form ref={dialogRef} className="record-modal ws-receipt-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-receipt-title" onSubmit={event => void submit(event)}>
+    <form ref={dialogRef} className="record-modal ws-receipt-modal ec-purchases" role="dialog" aria-modal="true" aria-labelledby="purchase-receipt-title" onSubmit={event => void submit(event)}>
       <div className="modal-heading"><div><span className="record-id">{order.id}</span><h2 id="purchase-receipt-title">Registrar recepción</h2><p>La recepción parcial crea el movimiento de almacén y su Kardex en una sola transacción.</p></div></div>
       {error && <div className="ws-notice ws-notice-warning" role="alert">{error}</div>}
       {loading ? <div className="ws-empty-compact"><RefreshCw size={18} className="ws-spin" /> Cargando líneas, avance y almacenes…</div> : <>
         <label className="ws-confirm-field">Almacén destino
-          <select value={warehouseId} onChange={event => change(() => setWarehouseId(event.target.value))} required>
-            <option value="">Selecciona un almacén</option>
-            {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.nombre}</option>)}
-          </select>
+          <SearchablePicker value={warehouseId} onChange={value => change(() => setWarehouseId(value))} required ariaLabel="Almacén destino" options={warehouses.map(warehouse => ({ id: warehouse.id, label: warehouse.nombre }))} />
         </label>
         {warehouses.length === 0 && <div className="ws-notice ws-notice-warning">No hay almacenes activos. Configura primero Sucursales y almacenes en Maestros.</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
@@ -112,7 +111,7 @@ export default function PurchaseReceiptModal({ order, busy, onClose, onSubmit }:
             const left = remaining(line)
             const overflow = Number(quantities[id] ?? 0) > left
             return <label className="ws-receipt-line" key={id}>
-              <span><strong>{line.nombre ?? line.codigo ?? 'Artículo de proveedor'}</strong><small>Ordenadas {line.cantidad} · Recibido bruto {already} · Devuelto {progress?.devuelto ?? 0} · Neto recibido {progress?.neto_recibido ?? 0} · Pendiente por recibir {left}</small></span>
+              <span><strong>{line.nombre ?? line.codigo ?? 'Artículo de proveedor'}</strong><small>Ordenadas {line.cantidad} · Recibido bruto {already} · Devuelto {progress?.devuelto ?? 0} · Neto recibido {progress?.neto_recibido ?? 0} · Pendiente por recibir {left}</small><span className={`status-pill ${left === 0 ? 'green' : 'amber'}`}>{left === 0 ? 'Recepción total' : already > 0 ? 'Recepción parcial' : 'Pendiente'}</span><progress className="ec-receipt-progress" max={line.cantidad || 1} value={Math.min(already, line.cantidad)} aria-label={`Recibido bruto de ${line.nombre ?? line.codigo}`} />{overflow && <small role="alert">La cantidad supera las {left} unidades pendientes.</small>}</span>
               <input className={overflow ? 'is-invalid' : undefined} aria-invalid={overflow || undefined} aria-label={`Cantidad a recibir de ${line.nombre ?? line.codigo ?? 'artículo'}`} type="number" min="0" max={left} step="1" value={quantities[id] ?? '0'} disabled={!left} onChange={event => change(() => setQuantities(current => ({ ...current, [id]: event.target.value })))} />
             </label>
           })}

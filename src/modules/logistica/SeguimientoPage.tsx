@@ -14,6 +14,8 @@ import { EntregaDialog, formatoMomento, LineaTiempoDialog, ReingresoDialog } fro
 import type { AlmacenLogistica } from './storage'
 import { useAlmacenLogistica } from './useAlmacen'
 import type { Conductor, Despacho, Parada, Vehiculo } from './types'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { LogisticaMetrics, AsignacionFicha, EstadoRuta, exportarDespachos } from './LogisticaUI'
 
 type Pestana = 'ruta' | 'devoluciones' | 'historial'
 type DialogState =
@@ -68,24 +70,16 @@ function SeguimientoContenido({ almacen }: { almacen: AlmacenLogistica }) {
   const historial = useMemo(() => despachos.filter(item => item.estado === 'completado' || item.estado === 'cancelado'), [despachos])
   const devoluciones = useMemo(() => devolucionesDe(despachos), [despachos])
   const pendientes = devoluciones.filter(item => item.estado === 'pendiente')
-  const entregasHoy = despachos.flatMap(item => item.paradas).filter(parada => parada.entrega && parada.entrega.resultado !== 'no_entregada'
-    && new Date(parada.entrega.registradoEn).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) === hoy).length
 
   if (!permisos.ver) return <section className="ws-card ws-empty-compact"><ShieldCheck size={28} /><strong>Acceso restringido a Logística</strong><span>Tu rol necesita permiso de consulta para ver el seguimiento.</span></section>
 
-  return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">LOGÍSTICA Y TRANSPORTE</span><h1>Seguimiento, entrega y devoluciones</h1><p>Sigue cada ruta: marca la salida, registra qué se entregó en cada parada y controla lo que vuelve al almacén.</p></div>
-      <div className="ws-heading-actions"><button className="ws-button ws-button-secondary" type="button" disabled={cargando} onClick={recargar}><RefreshCw size={16} className={cargando ? 'ws-spin' : ''} />Actualizar</button></div></section>
+  return <div className="ec-logistica">
+    <PageHeader section="Logística / Seguimiento" title="Entregas y devoluciones" description="Sigue la salida, los resultados por parada y el retorno al almacén." icon={Route} actions={<><button className="ws-button ws-button-secondary" type="button" disabled={cargando} onClick={recargar}><RefreshCw size={16} className={cargando ? 'ws-spin' : ''} />Actualizar</button><button className="ws-button ws-button-secondary" disabled={cargando || Boolean(error) || !despachos.length} onClick={() => exportarDespachos(despachos)}>Exportar despachos consultados</button></>} />
     {almacen.origen === 'navegador' && <div className="ws-notice" role="status"><AlertTriangle size={18} /><span><b>Datos guardados solo en este navegador.</b> Las tablas de Logística no están disponibles en tu base de datos.</span></div>}
     {almacen.despachosEnNavegador && <div className="ws-notice" role="status"><AlertTriangle size={18} /><span><b>Los despachos se guardan solo en este navegador.</b> Ejecuta <code>20261104010000_despachos.sql</code> y <code>20261104030000_seguimiento_despachos.sql</code> en el SQL Editor de Supabase para compartirlos y registrarlos en la bitácora.</span></div>}
     {error && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={18} /><span>{error}</span><button className="ws-text-button" type="button" onClick={recargar}>Reintentar</button></div>}
 
-    <div className="ws-seg-kpis">
-      <div className="ws-seg-kpi"><Play size={16} /><span>Por salir</span><b>{enCurso.filter(item => item.estado === 'programado').length}</b></div>
-      <div className="ws-seg-kpi is-blue"><Route size={16} /><span>En ruta</span><b>{enCurso.filter(item => item.estado === 'en_ruta').length}</b></div>
-      <div className="ws-seg-kpi is-green"><CheckCircle2 size={16} /><span>Entregas de hoy</span><b>{entregasHoy}</b></div>
-      <div className={`ws-seg-kpi${pendientes.length ? ' is-amber' : ''}`}><Undo2 size={16} /><span>Devoluciones pendientes</span><b>{pendientes.length}</b></div>
-    </div>
+    <LogisticaMetrics despachos={despachos} loading={cargando} error={error} />
 
     <div className="ws-tabs ws-fleet-tabs" role="tablist" aria-label="Secciones del seguimiento">
       <button role="tab" aria-selected={pestana === 'ruta'} onClick={() => setPestana('ruta')}><Truck size={14} />En curso<b>{enCurso.length}</b></button>
@@ -113,6 +107,8 @@ function SeguimientoContenido({ almacen }: { almacen: AlmacenLogistica }) {
               {permisos.editar && enRuta && <button className="ws-button" type="button" disabled={faltan.length > 0} title={faltan[0]} onClick={() => setDialog({ tipo: 'completar', despacho })}><CheckCircle2 size={15} />Completar despacho</button>}
             </div>
           </header>
+          <EstadoRuta despacho={despacho} />
+          <AsignacionFicha vehiculo={vehiculo} conductor={conductor} peso={despacho.pesoEstimadoKg ?? undefined} />
           <div className="ws-seg-progress"><div className="ws-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(resumen.porcentaje * 100)} aria-label="Paradas resueltas"><i className={resumen.porcentaje >= 1 ? 'green' : ''} style={{ width: `${resumen.porcentaje * 100}%` }} /></div>
             <small><b>{resumen.resueltas}</b> de {resumen.total} paradas resueltas{resumen.unidadesDevueltas > 0 && ` · ${resumen.unidadesDevueltas} u. por devolver`}</small></div>
           <ol className="ws-seg-stops">
@@ -124,6 +120,7 @@ function SeguimientoContenido({ almacen }: { almacen: AlmacenLogistica }) {
                   <strong>{parada.clienteNombre}</strong>
                   <small>{parada.ventaCodigo} · {parada.direccion || 'Sin dirección'}{parada.zonaNombre ? ` · ${parada.zonaNombre}` : ''} · {unidadesDeParada(parada)} u.</small>
                   {parada.entrega && <small className="ws-seg-result">{parada.entrega.receptor && `Recibió ${parada.entrega.receptor} · `}{formatoMomento(parada.entrega.registradoEn)}{parada.entrega.motivo && ` · ${motivoLabel(parada.entrega.motivo)}`}{parada.entrega.resultado === 'parcial' && ` · ${unidadesEntregadas(parada)} de ${unidadesDeParada(parada)} u.`}</small>}
+                  {parada.entrega?.nota && <p className="ec-log-note">{parada.entrega.nota}</p>}
                 </div>
                 <div className="ws-seg-stop-side">
                   {estado === 'pendiente' ? <span className="status-pill">Pendiente</span> : <span className={`status-pill ${RESULTADOS_ENTREGA[estado].tone}`}>{RESULTADOS_ENTREGA[estado].label}</span>}
@@ -172,7 +169,7 @@ function SeguimientoContenido({ almacen }: { almacen: AlmacenLogistica }) {
     {dialog?.tipo === 'tiempo' && <LineaTiempoDialog despacho={dialog.despacho} onClose={() => setDialog(null)} />}
     {dialog?.tipo === 'iniciar' && <ConfirmModal title="Iniciar ruta" message={`El despacho ${dialog.despacho.numero} pasará a «En ruta» y quedará registrada la hora de salida.`} confirmLabel="Iniciar ruta" onCancel={() => setDialog(null)} onConfirm={() => ejecutar(() => servicio.iniciarRuta(dialog.despacho), 'Ruta iniciada.')} />}
     {dialog?.tipo === 'completar' && <ConfirmModal title="Completar despacho" message={`Se cerrará la ruta ${dialog.despacho.numero} y se liberarán el vehículo y el conductor. Esta acción no se puede deshacer.`} confirmLabel="Completar despacho" onCancel={() => setDialog(null)} onConfirm={() => ejecutar(() => servicio.completar(dialog.despacho), 'Despacho completado.')} />}
-  </>
+  </div>
 }
 
 export default function SeguimientoPage() {

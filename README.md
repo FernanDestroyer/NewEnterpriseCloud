@@ -21,7 +21,7 @@ En PowerShell con restricciones de ejecución puedes utilizar `npm.cmd`.
 - Panel: ventas y compras por período, gráfico sobre fechas originales, inventario, alertas, actividad y saldos financieros.
 - Compras y recepciones: seguimiento Solicitud → Orden → Recepción → Factura → Pagada y catálogo de proveedores.
 - Ventas, cotizaciones y comprobantes: productos del inventario, conversión de cotizaciones y comprobantes imprimibles.
-- Inventario: existencias globales en `productos`, movimientos de Kardex y consulta de asignaciones por almacén.
+- Inventario y Kardex: existencias por almacén (`inventarios`), Kardex valorizado PEPS, transferencias, ajustes, conteo físico y control de lotes/series.
 - Finanzas: cuentas por cobrar/pagar y cancelación total persistida de una cuenta.
 - Bancos y conciliación (`/tesoreria`): cuentas bancarias con activación por RPC, ingresos/egresos, transferencias atómicas e idempotentes y conciliación de extracto con cierre validado.
 - Maestros (`/maestros`): transportistas y vendedores con activar/desactivar sin borrar historial, y catálogos comerciales/tributarios (`catalogos_negocio`).
@@ -75,3 +75,34 @@ Los tres submódulos de Logística y los tres de Metas ya tienen ruta y pantalla
 - **Permisos**: `metas` (ver/crear/editar/eliminar) y `logistica` (ver/crear/editar) se asignan por rol en `rol_permisos`. Administrador, Gerente y Supervisor pueden gestionar ambos módulos; Operador solo Logística; Vendedor solo consulta Metas. Sin el permiso, el sidebar oculta el módulo y RLS rechaza las escrituras.
 - **Migraciones**: `20261105090000_logistica_flota_base.sql`, `20261103000000_metas_objetivos.sql`, `20261104010000_despachos.sql`, `20261104020000_bitacora_operaciones.sql`, `20261104030000_seguimiento_despachos.sql`, `20261104040000_metas_ventas_automaticas.sql`, `20261104050000_vendedor_turno_sucursal.sql`, `20261104060000_caja_vendedor_asignado.sql` y `20261105091000_metas_logistica_permisos.sql`. Todas quedaron aplicadas y registradas en el proyecto `auxqjoxnsasnmtnakgmg`.
 - **Bitácora**: las tablas nuevas tienen trigger `fn_auditar`; la aplicación registra intentos denegados y operaciones fallidas con `registrar_evento_auditoria`.
+
+## Inventario, Ventas y Compras de Erick (03-11-2026)
+
+Se integraron los tres módulos de Erick y sus 19 submódulos abren una pantalla operativa real: Compras (7), Ventas (6) e Inventario y Kardex (6). Todas las rutas del sidebar tienen `path`, por lo que dejan de mostrarse como elementos deshabilitados o «Próximamente».
+
+### Compras: Modelo A activo
+
+La entrega activa de Compras usa el Modelo A: `solicitudes_compra` → `solicitud_compra_lineas` → `ofertas_compra` → `detalle_ofertas_compra`, con historial, idempotencia, moneda/tipo de cambio y selección de oferta. El Modelo B (`requisiciones_compra` → `ofertas_proveedor`) permanece como backend alternativo inactivo; no se eliminó ni se volvió a conectar a la interfaz. La restauración del Modelo A se hizo con una migración idempotente porque su DDL original solo existía en el proyecto remoto.
+
+### Ventas
+
+El flujo operativo usa `ec_cotizaciones`, `ec_cotizacion_versiones`, `ec_pedidos`, `ec_reservas`, `ec_comprobantes`, `ec_guias` y `ec_notas_credito`. Crear un pedido reserva stock; facturar genera la cuenta por cobrar; la salida física del almacén ocurre solo al emitir la guía. La anulación libera la reserva y no genera comprobante ni CxC.
+
+### Inventario y Kardex
+
+Las existencias se consultan por almacén en `inventarios` y el Kardex se alimenta de `movimientos_inventario`, con valorización PEPS (`ec_capas_peps`, `ec_consumos_peps`, `ec_kardex_valorizado`). Transferencias, ajustes, conteo físico y lotes/series usan RPC idempotentes (`ec_procesar_transferencia`, `ec_registrar_ajuste`, `ec_abrir_conteo_fisico`, `ec_cerrar_inventario_fisico`, `ec_configurar_trazabilidad`, `ec_identificar_lote`, `ec_identificar_serie`). La transferencia es atómica: salida y entrada se registran juntas.
+
+### Migraciones y validación
+
+Las migraciones aplicadas mediante `apply_migration` en `auxqjoxnsasnmtnakgmg` son:
+
+- `20261102060000_restaurar_modelo_a_compras.sql` — restauración idempotente del Modelo A.
+- `20261119000001_inventario_kardex_ec.sql` — versiona el backend de inventario y Kardex.
+- `20261119000002_compras_abrir_solicitud_v2.sql` — agrega el RPC faltante `abrir_solicitud_compra_v2`.
+- `20261119000003_compras_fix_seleccion_oferta.sql` — corrige `seleccionar_oferta_compra_v4` (`x.line_total` → `x.total`).
+- `20261119000004_monedas_tipo_cambio_venta.sql` — agrega `monedas.tipo_cambio`, siembra USD y crea las RPC de consulta/actualización del TC.
+- `20261119000005_monedas_lectura_configuracion.sql` — permite leer monedas desde Configuración además de Finanzas.
+- `20261119000006_ventas_moneda_tipo_cambio.sql` — conserva `moneda` y `tipo_cambio` del pedido al crear la venta facturada.
+- `20261119000007_ventas_cobro_pedido.sql` — integra el cobro con método de pago (`ec_registrar_cobro_venta` y `ec_facturar_pedido_pago`) en Ventas, venta directa y facturación de pedidos.
+
+Validación funcional realizada: 19 rutas renderizadas sin textos provisionales ni errores de consola; Compras completo (crear solicitud, abrir, registrar oferta y seleccionar); Ventas completo (crear pedido con reserva y anular); Inventario completo (ajuste de entrada +1, ajuste de salida −1, stock restituido y ambos movimientos visibles en Kardex). Los datos de prueba se eliminaron al terminar.

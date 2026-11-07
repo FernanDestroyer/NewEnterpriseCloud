@@ -1,0 +1,50 @@
+/* Block 4 · warehouse stock, operations and traceability. */
+.inv-page, .inventory-query { color: var(--ws-text); min-width: 0; }
+.inv-page { gap: 22px; }
+.inv-page .inv-card, .inventory-query .inventory-query-card { border-radius: 16px; border: 1px solid var(--ws-border); box-shadow: 0 4px 16px #00000006; }
+.inv-page .inv-card { overflow: visible; }
+.inv-page .inv-card-heading { padding: 20px 24px; border-radius: 16px 16px 0 0; background: var(--ws-raised); gap: 12px; }
+.inv-page .inv-card-heading strong { font-size: 15px; }
+.inv-page .inv-card-heading small { font-size: 12px; line-height: 1.6; }
+.inv-page .inv-form-grid { padding: 24px; gap: 22px; }
+.inv-page .inv-wide { grid-column: 1 / -1; }
+.inv-field { display: grid; gap: 8px; min-width: 0; align-content: start; font-size: 12px; color: var(--ws-muted); }
+.inv-page .inv-form-grid label:not(.ec-segment) { font-size: 12px; text-transform: none; letter-spacing: normal; gap: 8px; }
+.inv-page .ec-segments, .inventory-query .ec-segments { flex-wrap: wrap; }
+.inv-page .ec-segment { display: flex; text-transform: none; letter-spacing: normal; }
+.inv-page .ec-combobox, .inventory-query .ec-combobox { min-width: 0; }
+.inv-page .ec-combobox:focus-within, .inventory-query .ec-combobox:focus-within { z-index: 12; }
+.inv-page .inv-table .ec-combobox { min-width: 230px; }
+.inv-page .inv-table-wrap:has(.ec-combobox-popover) { padding-bottom: 330px; }
+.inv-page .inv-add-row > .ec-combobox { flex: 1; max-width: 460px; }
+.inv-page .inv-table th, .inventory-query .inventory-query-table th { padding: 16px 20px; background: var(--ws-raised); color: var(--ws-muted); border-bottom: 1px solid var(--ws-border); }
+.inv-page .inv-table td, .inventory-query .inventory-query-table td { padding: 18px 20px; color: var(--ws-text); border-bottom: 1px solid var(--ws-border); vertical-align: middle; }
+.inv-page .inv-table td small, .inventory-query .inventory-query-table td small { color: var(--ws-muted); font-size: 11px; line-height: 1.6; }
+.inv-page .inv-table .ws-control { min-height: 40px; height: auto; }
+.inv-page .ws-control, .inventory-query .ws-control { border-radius: 10px; background: var(--ws-surface); color: var(--ws-text); border: 1px solid var(--ws-border); }
+.inv-page input:focus-visible, .inv-page textarea:focus-visible, .inv-page button:focus-visible, .inventory-query button:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 3px; }
+.inv-page input[aria-invalid='true'], .inv-page input:user-invalid { border-color: var(--ws-red); background: var(--ws-red-soft); }
+.inv-page .inv-inline-stat { padding: 18px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-raised); gap: 14px; }
+.inv-page .inv-inline-stat strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.inv-page .inv-actions, .inv-page .inv-add-row { padding: 18px 24px; }
+.inv-page .inv-actions > span { font-size: 12px; line-height: 1.6; }
+.inv-page .ws-button, .inventory-query .ws-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border-radius: 10px; }
+.inv-page .inv-badge { gap: 5px; padding: 6px 10px; }
+.inv-page .inv-badge.red { background: var(--ws-red-soft); color: var(--ws-red); }
+.inv-page .inv-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.inv-danger, .inv-page .inv-table td small.inv-danger, .inventory-query .inventory-query-table .inv-danger { color: var(--ws-red); }
+.inv-positive, .inventory-query .inventory-query-table .inv-positive { color: var(--ws-green); }
+.inv-page .ws-num, .inventory-query .ws-num, .inv-page input[type='number'] { font-variant-numeric: tabular-nums; }
+.inventory-query .inventory-query-filters { padding: 20px; border: 1px solid var(--ws-border); border-radius: 14px; background: var(--ws-surface); gap: 18px; }
+.inv-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-block: 22px; }
+.inv-metrics article { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
+.inv-metrics small { font-size: 11px; line-height: 1.6; color: var(--ws-muted); }
+.inv-metrics small:last-child { margin-top: auto; }
+.inv-metrics strong { font-size: clamp(20px, 2vw, 28px); letter-spacing: -.035em; color: var(--ws-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.inv-kardex-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; margin-block: 22px; }
+.inv-kardex-controls > div { display: grid; gap: 8px; }
+.inv-kardex-controls small { color: var(--ws-muted); font-size: 11px; }
+.inventory-query .inventory-query-kardex .status-pill { white-space: nowrap; }
+.inventory-query .inventory-query-kardex time { white-space: nowrap; font-size: 12px; }
+@media (max-width: 1100px) { .inv-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .inv-metrics { grid-template-columns: minmax(0, 1fr); } .inv-page .inv-form-grid { padding: 16px; } .inv-page .inv-actions, .inv-page .inv-card-heading { padding: 16px; } .inv-page .inv-add-row > .ec-combobox { flex-basis: 100%; } }

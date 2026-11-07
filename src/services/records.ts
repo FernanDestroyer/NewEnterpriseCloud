@@ -1136,14 +1136,23 @@ export async function setPaymentMethodActive(id: string, activo: boolean): Promi
 }
 
 /** Monedas para mostrar importes (la base es el sol peruano). */
-export type Currency = { id: string; nombre: string; codigo: string; simbolo: string; activo: boolean }
+export type Currency = { id: string; nombre: string; codigo: string; simbolo: string; activo: boolean; tipo_cambio: number }
 
 export async function fetchAllCurrencies(): Promise<Currency[]> {
-  const { data, error } = await requireSupabase().from('monedas').select('id, nombre, codigo, simbolo, activo').order('nombre')
+  const { data, error } = await requireSupabase().from('monedas').select('id, nombre, codigo, simbolo, activo, tipo_cambio').order('nombre')
   if (error) throw error
-  return ((data ?? []) as Array<{ id: string; nombre: string; codigo: string; simbolo: string; activo: boolean }>)
+  return ((data ?? []) as Array<{ id: string; nombre: string; codigo: string; simbolo: string; activo: boolean; tipo_cambio: number | null }>)
     .filter((row) => row.nombre.trim() && row.codigo.trim())
-    .map((row) => ({ id: String(row.id), nombre: row.nombre.trim(), codigo: row.codigo.trim().toUpperCase(), simbolo: row.simbolo.trim() || 'S/', activo: Boolean(row.activo) }))
+    .map((row) => ({ id: String(row.id), nombre: row.nombre.trim(), codigo: row.codigo.trim().toUpperCase(), simbolo: row.simbolo.trim() || 'S/', activo: Boolean(row.activo), tipo_cambio: Number(row.tipo_cambio ?? 1) }))
+}
+
+/** Actualiza el tipo de cambio desde Maestros. La RPC valida el permiso configuracion:editar. */
+export async function saveCurrencyRate(codigo: string, tipoCambio: number): Promise<{ codigo: string; tipo_cambio: number }> {
+  const { data, error } = await requireSupabase().rpc('ec_actualizar_tipo_cambio_v1', { p_codigo: codigo, p_tipo_cambio: tipoCambio })
+  if (error) throw error
+  const row = data as { codigo: string; tipo_cambio: number } | null
+  if (!row) throw new Error('No se pudo actualizar el tipo de cambio.')
+  return { codigo: row.codigo, tipo_cambio: Number(row.tipo_cambio) }
 }
 
 export async function saveCurrency(input: { nombre: string; codigo: string; simbolo: string }): Promise<void> {
