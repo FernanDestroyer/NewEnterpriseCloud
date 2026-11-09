@@ -58,12 +58,17 @@ export async function loadInventoryKardex(filters: {
   warehouseId: string | null
   page: number
   pageSize: number
+  search?: string | null
 }): Promise<{ rows: InventoryMovement[]; total: number }> {
   const from = (filters.page - 1) * filters.pageSize
-  const { data, error, count } = await requireSupabase().rpc('ec_consultar_kardex', {
+  let request = requireSupabase().rpc('ec_consultar_kardex', {
     p_producto_id: filters.productId,
     p_almacen_id: filters.warehouseId,
-  }, { count: 'exact' }).order('fecha', { ascending: false }).order('movimiento_id', { ascending: false })
+  }, { count: 'exact' })
+  // PostgREST reserves commas, parentheses and asterisks inside or() filters.
+  const term = (filters.search ?? '').replace(/[,()*%\\]/g, ' ').trim()
+  if (term) request = request.or(`referencia.ilike.*${term}*,motivo.ilike.*${term}*`)
+  const { data, error, count } = await request.order('fecha', { ascending: false }).order('movimiento_id', { ascending: false })
     .range(from, from + filters.pageSize - 1)
   if (error) throw error
   return { rows: (data ?? []) as InventoryMovement[], total: count ?? 0 }

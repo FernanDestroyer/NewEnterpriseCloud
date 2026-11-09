@@ -13,6 +13,7 @@
 .ec-treasury .ec-inline-form .ws-section-heading { margin-bottom: 20px; }
 .ec-finance-field { position: relative; display: grid; gap: 8px; min-width: 0; color: var(--ws-muted); font-size: 12px; }
 .ec-treasury .ec-combobox:focus-within { z-index: 10; }
+.ec-treasury .ws-picker, .ec-treasury .ws-picker-trigger { min-width: 0; }
 .ec-treasury .ec-segments, .ec-finance-field .ec-segments { flex-wrap: wrap; }
 .ec-treasury .ec-segment, .ec-finance-field .ec-segment { display: flex; }
 .ec-treasury .ec-reconcile-picker > .ec-finance-field { flex: 1; }
@@ -37,7 +38,9 @@
 .ec-money-direction { display: inline-flex; align-items: center; gap: 8px; }
 .ec-treasury .status-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 10px; padding: 6px 10px; }
 .ec-treasury .status-pill::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.workspace-shell.erp-shell .ec-treasury input:not([type='radio']):not([type='checkbox']):not([type='hidden']):not(.ec-combobox-validation), .workspace-shell.erp-shell .ec-treasury textarea { color: var(--ws-text); background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 10px; padding: 10px 12px; min-height: 40px; }
+.workspace-shell.erp-shell .ec-treasury input:not([type='radio']):not([type='checkbox']):not([type='hidden']):not(.ec-combobox-validation):not(.ws-table-search input):not(.ws-picker-search input), .workspace-shell.erp-shell .ec-treasury textarea { color: var(--ws-text); background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 10px; padding: 10px 12px; min-height: 40px; }
+.workspace-shell.erp-shell .ec-treasury .ws-table-search input, .workspace-shell.erp-shell .ec-treasury .ws-picker-search input { border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; outline: none !important; }
+.ec-treasury .ws-table-search input:focus-visible, .ec-treasury .ws-picker-search input:focus-visible { outline: none !important; }
 .ec-treasury input:focus-visible, .ec-treasury button:focus-visible, .ec-treasury textarea:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 3px; }
 .ec-treasury input[aria-invalid='true'], .ec-treasury input:user-invalid { border-color: var(--ws-red) !important; }
 .ec-payment-preview { display: grid; gap: 8px; margin-block: 18px; padding: 20px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-primary-soft); color: var(--ws-text); }

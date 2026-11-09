@@ -302,7 +302,10 @@ export function friendlyError(error: unknown): string {
   const haystack = `${err?.message ?? ''} ${err?.details ?? ''} ${err?.hint ?? ''}`
   if (err?.code === '42501' || err?.code === 'PGRST116') return 'Tu rol no tiene permiso para realizar esta acción.'
   if (err?.code === '23505') return 'Ya existe un registro con esos datos.'
-  if (err?.code === '23514') return 'Alguno de los valores no es válido (revisa montos y estado).'
+  if (err?.code === '23514') {
+    if (err?.message && !/violates check constraint/i.test(err.message)) return err.message
+    return 'Alguno de los valores no es válido (revisa montos y estado).'
+  }
   if (err?.code === '42703' || err?.code === 'PGRST204' || (/proveedor_id|precio|\bruc\b|tipo_doc|documento|direccion|correo|telefono|forma_pago|descuento|medio_pago/i.test(haystack) && /column|schema cache/i.test(haystack))) {
     if (/precio/i.test(haystack)) return 'La base de datos no tiene la columna de precio que necesita productos. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
     if (/\bruc\b/i.test(haystack)) return 'La base de datos no tiene la columna RUC que necesita proveedores. Revisa el historial y aplica solo la migración aprobada antes de reintentar.'
@@ -583,7 +586,12 @@ export async function fetchRecordsSnapshot(pages: DataPage[] = DATA_PAGES) {
         // Las cuentas cerradas antes del libro de tesorería siguen siendo históricas;
         // no se convierten en deuda nueva por no tener movimientos retroactivos.
         if (item.status === 'Completada' && balance.montoAplicado === 0) return item
-        return { ...item, amount: balance.saldoPendiente, status: balance.saldoPendiente === 0 ? 'Completada' : balance.montoAplicado > 0 ? 'En curso' : item.status }
+        const completed = balance.saldoPendiente === 0
+        return {
+          ...item,
+          amount: completed ? (balance.montoOriginal || item.amount) : balance.saldoPendiente,
+          status: completed ? 'Completada' : balance.montoAplicado > 0 ? 'En curso' : item.status,
+        }
       })
     } catch (error) {
       errors.finance = friendlyError(error)

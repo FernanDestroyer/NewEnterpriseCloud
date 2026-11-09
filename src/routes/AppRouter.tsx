@@ -1,5 +1,11 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+
+/** Legacy redirect that keeps query params such as ?q= intact. */
+function RedirectWithSearch({ to }: { to: string }) {
+  const { search } = useLocation()
+  return <Navigate to={`${to}${search}`} replace />
+}
 import AppLayout from '../components/layout/AppLayout'
 import LoadingScreen from '../components/LoadingScreen'
 import { useAuth } from '../context/AuthContext'
@@ -93,7 +99,7 @@ export default function AppRouter() {
         <Route path="/inventario/fisico" element={<PhysicalInventoryPage />} />
         <Route path="/inventario/lotes-series" element={<InventoryTracePage />} />
         <Route path="/ingreso-kardex" element={<ModuloPage page="purchases" view="receipts" />} />
-        <Route path="/movimiento-kardex" element={<Navigate to="/inventario/kardex" replace />} />
+        <Route path="/movimiento-kardex" element={<RedirectWithSearch to="/inventario/kardex" />} />
         <Route path="/facturacion" element={<Navigate to="/sales" replace />} />
         <Route path="/estado-cuenta" element={<Navigate to="/finance" replace />} />
         <Route path="/mantenimientos" element={<MaintenancePage />} />

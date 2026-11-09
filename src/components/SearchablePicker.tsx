@@ -113,10 +113,15 @@ export function SearchablePicker({
       closePicker(false)
     }
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); closePicker() }
+      if (event.key !== 'Escape') return
+      // Keep Escape scoped to the picker so parent dialogs stay open.
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      closePicker()
     }
     document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
     const previousOverflow = document.body.style.overflow
     if (mode === 'modal') document.body.style.overflow = 'hidden'
     const onScroll = (event: Event) => {
@@ -130,7 +135,7 @@ export function SearchablePicker({
     return () => {
       window.clearTimeout(focusTimer)
       document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, true)
       if (mode === 'modal') document.body.style.overflow = previousOverflow
       else {
         window.removeEventListener('scroll', onScroll, true)
@@ -209,7 +214,17 @@ export function SearchablePicker({
   const portalTarget = triggerRef.current?.closest('.workspace-shell') ?? document.body
 
   return <>
-    {name && <input type="hidden" name={name} value={value} />}
+    {(name || required) && <input
+      className="ec-combobox-validation"
+      tabIndex={-1}
+      aria-hidden="true"
+      name={name}
+      value={value}
+      required={required}
+      disabled={disabled}
+      onChange={() => {}}
+      onFocus={() => triggerRef.current?.focus()}
+    />}
     <button
       ref={triggerRef}
       type="button"

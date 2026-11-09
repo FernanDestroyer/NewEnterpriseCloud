@@ -14,7 +14,7 @@
 .ec-purchases .sourcing-card-body { padding: 22px; }
 .ec-purchases .sourcing-form-body, .ec-purchases .sourcing-offer-form { gap: 20px; }
 .ec-purchases .sourcing-line { padding: 16px; margin-block: 12px; background: var(--ws-raised); border: 1px solid var(--ws-border); border-radius: 12px; }
-.ec-purchases .ec-combobox { min-width: 0; }
+.ec-purchases .ec-combobox, .ec-purchases .ws-picker, .ec-purchases .ws-picker-trigger { min-width: 0; }
 .ec-purchases .ec-combobox:focus-within { z-index: 8; }
 .ec-purchases .ec-segments { flex-wrap: wrap; }
 .ec-purchases .ec-segment { display: flex; }
@@ -26,7 +26,9 @@
 .ec-purchases .row-action, .ec-purchase-row-actions button { border: 1px solid var(--ws-border); border-radius: 9px; color: var(--ws-muted); background: var(--ws-surface); }
 .ec-purchases .row-action:hover { color: var(--ws-primary); background: var(--ws-primary-soft); }
 .ec-purchases input[type='number'], .ec-purchase-number, .ec-purchases .line-subtotal, .ec-purchases .purchase-totals { font-variant-numeric: tabular-nums; }
-.workspace-shell.erp-shell .ec-purchases input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not(.ec-combobox-validation), .workspace-shell.erp-shell .ec-purchases textarea { border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); color: var(--ws-text); padding: 10px 12px; min-width: 0; }
+.workspace-shell.erp-shell .ec-purchases input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not(.ec-combobox-validation):not(.ws-table-search input):not(.ws-picker-search input), .workspace-shell.erp-shell .ec-purchases textarea { border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); color: var(--ws-text); padding: 10px 12px; min-width: 0; }
+.workspace-shell.erp-shell .ec-purchases .ws-table-search input, .workspace-shell.erp-shell .ec-purchases .ws-picker-search input { border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; outline: none !important; }
+.ec-purchases .ws-table-search input:focus-visible, .ec-purchases .ws-picker-search input:focus-visible { outline: none !important; }
 .ec-purchases input:focus-visible, .ec-purchases textarea:focus-visible, .ec-purchases button:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 3px; }
 .ec-purchases input[aria-invalid='true'], .ec-purchases input:user-invalid { border-color: var(--ws-red) !important; }
 .ec-purchases .line-row { gap: 14px; padding: 16px; border: 1px solid var(--ws-border); border-radius: 12px; margin-bottom: 10px; background: var(--ws-surface); }

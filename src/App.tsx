@@ -1,4 +1,6 @@
 import './styles.css'
+import './workspace.css'
+import './enterprise-ui.css'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { RecordsProvider } from './context/RecordsContext'

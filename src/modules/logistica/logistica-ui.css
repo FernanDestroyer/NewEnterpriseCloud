@@ -21,6 +21,7 @@
 .ws-fleet-dialog .ec-segments { flex-wrap: wrap; }
 .ws-fleet-dialog .ec-segment { display: flex; }
 .ws-fleet-dialog .ec-combobox:focus-within { z-index: 12; }
+.ws-fleet-dialog .ws-picker, .ws-fleet-dialog .ws-picker-trigger { min-width: 0; }
 .ws-fleet-dialog .ws-dispatch-fieldset { min-width: 0; }
 .ws-fleet-dialog .ws-form-grid { gap: 20px; }
 .ec-log-assignment { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px; }

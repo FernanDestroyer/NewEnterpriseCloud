@@ -12,11 +12,12 @@
 .inv-page .inv-form-grid label:not(.ec-segment) { font-size: 12px; text-transform: none; letter-spacing: normal; gap: 8px; }
 .inv-page .ec-segments, .inventory-query .ec-segments { flex-wrap: wrap; }
 .inv-page .ec-segment { display: flex; text-transform: none; letter-spacing: normal; }
-.inv-page .ec-combobox, .inventory-query .ec-combobox { min-width: 0; }
+.inv-page .ec-combobox, .inventory-query .ec-combobox, .inv-page .ws-picker, .inventory-query .ws-picker { min-width: 0; }
 .inv-page .ec-combobox:focus-within, .inventory-query .ec-combobox:focus-within { z-index: 12; }
-.inv-page .inv-table .ec-combobox { min-width: 230px; }
+.inv-page .inv-table .ec-combobox, .inv-page .inv-table .ws-picker { min-width: 230px; }
+.inv-page .inv-table .ws-picker-trigger { min-height: 40px; }
 .inv-page .inv-table-wrap:has(.ec-combobox-popover) { padding-bottom: 330px; }
-.inv-page .inv-add-row > .ec-combobox { flex: 1; max-width: 460px; }
+.inv-page .inv-add-row > .ec-combobox, .inv-page .inv-add-row > .ws-picker { flex: 1; max-width: 460px; }
 .inv-page .inv-table th, .inventory-query .inventory-query-table th { padding: 16px 20px; background: var(--ws-raised); color: var(--ws-muted); border-bottom: 1px solid var(--ws-border); }
 .inv-page .inv-table td, .inventory-query .inventory-query-table td { padding: 18px 20px; color: var(--ws-text); border-bottom: 1px solid var(--ws-border); vertical-align: middle; }
 .inv-page .inv-table td small, .inventory-query .inventory-query-table td small { color: var(--ws-muted); font-size: 11px; line-height: 1.6; }
@@ -47,4 +48,4 @@
 .inventory-query .inventory-query-kardex .status-pill { white-space: nowrap; }
 .inventory-query .inventory-query-kardex time { white-space: nowrap; font-size: 12px; }
 @media (max-width: 1100px) { .inv-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 650px) { .inv-metrics { grid-template-columns: minmax(0, 1fr); } .inv-page .inv-form-grid { padding: 16px; } .inv-page .inv-actions, .inv-page .inv-card-heading { padding: 16px; } .inv-page .inv-add-row > .ec-combobox { flex-basis: 100%; } }
+@media (max-width: 650px) { .inv-metrics { grid-template-columns: minmax(0, 1fr); } .inv-page .inv-form-grid { padding: 16px; } .inv-page .inv-actions, .inv-page .inv-card-heading { padding: 16px; } .inv-page .inv-add-row > .ec-combobox, .inv-page .inv-add-row > .ws-picker { flex-basis: 100%; max-width: none; } }

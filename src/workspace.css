@@ -118,8 +118,8 @@
 .workspace-shell .ws-main { width: calc(100% - var(--ws-sidebar-width)); min-width: 0; margin-left: var(--ws-sidebar-width); transition: margin-left .2s, width .2s; }
 .workspace-shell.erp-shell .ws-topbar { height: 66px; min-height: 66px; padding: 0 26px; gap: 16px; background: var(--ws-surface); border-bottom: 1px solid var(--ws-border); z-index: 35; box-shadow: none; backdrop-filter: none; }
 .ws-topbar-location, .ws-topbar-actions { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.ws-topbar-actions { gap: 6px; margin-left: auto; }
-.ws-icon-button { display: inline-grid; place-items: center; width: 33px; height: 33px; padding: 0; color: var(--ws-muted); background: transparent; border: 1px solid transparent; border-radius: 7px; flex-shrink: 0; }
+.ws-topbar-actions { gap: 10px; margin-left: auto; }
+.ws-icon-button { display: inline-grid; place-items: center; width: 35px; height: 35px; padding: 0; color: var(--ws-muted); background: transparent; border: 1px solid transparent; border-radius: 8px; flex-shrink: 0; }
 .ws-icon-button:hover { background: var(--ws-raised); color: var(--ws-primary); border-color: var(--ws-border); }
 .ws-breadcrumb { display: flex; align-items: center; gap: 10px; min-width: 0; white-space: nowrap; font-size: 10px; color: var(--ws-subtle); }
 .ws-breadcrumb strong { font-weight: 650; color: var(--ws-text); overflow: hidden; text-overflow: ellipsis; }
@@ -247,10 +247,13 @@
 .ws-dashboard-bottom { display: grid; grid-template-columns: minmax(0, 2.5fr) minmax(235px, 1fr); gap: 20px; }
 .ws-activity-toolbar { padding: 0 20px 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .ws-tabs { display: inline-flex; align-items: center; gap: 3px; padding: 3px; background: var(--ws-raised); border: 1px solid var(--ws-border); border-radius: 7px; max-width: 100%; flex-wrap: wrap; }
-.ws-tabs button { padding: 6px 12px; border: 0; border-radius: 5px; background: transparent; color: var(--ws-muted); font-size: 10px; }
+.ws-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border: 0; border-radius: 5px; background: transparent; color: var(--ws-muted); font-size: 10px; }
 .ws-tabs button[aria-selected='true'] { color: var(--ws-primary); background: var(--ws-surface); box-shadow: 0 1px 4px #13264210; font-weight: 700; }
-.ws-table-search { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 35px; border: 1px solid var(--ws-border); border-radius: 7px; background: var(--ws-surface); color: var(--ws-muted); }
-.ws-table-search input { width: 100%; min-width: 0; background: none; border: 0; outline: 0; color: var(--ws-text); font-size: 11px; }
+.ws-table-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 38px; height: 38px; box-sizing: border-box; border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); color: var(--ws-muted); transition: border-color .18s, box-shadow .18s; }
+.ws-table-search:focus-within { border-color: var(--ws-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-primary) 14%, transparent); }
+.ws-table-search svg { flex-shrink: 0; }
+.ws-table-search input, .workspace-shell.erp-shell .ws-table-search input, .workspace-shell.erp-shell :is(.ec-purchases, .ec-treasury, .ec-master-modal) .ws-table-search input { width: 100% !important; min-width: 0 !important; height: 100% !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; outline: 0 !important; color: var(--ws-text) !important; font-size: 12px; -webkit-appearance: none; appearance: none; }
+.ws-table-search input:focus-visible, .workspace-shell.erp-shell .ws-table-search input:focus-visible { outline: none !important; box-shadow: none !important; }
 .workspace-shell.erp-shell .table-scroll { position: relative; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
 .workspace-shell.erp-shell .record-table { width: 100%; min-width: 650px; border-collapse: collapse; font-size: 12px; }
 .workspace-shell.erp-shell .record-table th { padding: 12px 17px; background: var(--ws-raised); color: var(--ws-muted); border-top: 1px solid var(--ws-border); border-bottom: 1px solid var(--ws-border); font-size: 10px; font-weight: 650; text-align: left; letter-spacing: .1px; white-space: nowrap; }
@@ -293,7 +296,8 @@
 .ws-notice { display: flex; align-items: center; gap: 11px; padding: 13px 16px; margin-bottom: 20px; color: var(--ws-primary); background: var(--ws-primary-soft); border: 1px solid color-mix(in srgb, var(--ws-primary) 20%, transparent); border-radius: 8px; font-size: 11px; }
 .ws-notice-warning { color: var(--ws-amber); background: var(--ws-amber-soft); border-color: color-mix(in srgb, var(--ws-amber) 20%, transparent); }
 .sourcing-filters { margin-bottom: 14px; padding: 14px 16px; }
-.sourcing-filters .ws-activity-toolbar { flex-wrap: wrap; align-items: end; gap: 10px; }
+.sourcing-filters .ws-activity-toolbar { flex-wrap: wrap; align-items: end; gap: 12px; padding: 0 0 14px; }
+.sourcing-filters .ws-activity-toolbar .ws-table-search { flex: 1 1 280px; }
 .sourcing-filters label:not(.ws-table-search) { display: grid; gap: 5px; color: var(--ws-muted); font-size: 10px; font-weight: 650; }
 .sourcing-filters .ws-control { min-width: 130px; }
 .sourcing-supplier-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -468,7 +472,7 @@
 .workspace-shell.erp-shell .row-action { width: 28px; height: 28px; padding: 0; color: var(--ws-muted); background: transparent; border: 1px solid transparent; border-radius: 6px; }
 .workspace-shell.erp-shell .row-action:hover { color: var(--ws-primary); background: var(--ws-primary-soft); border-color: transparent; }
 .workspace-shell.erp-shell .row-action.delete:hover { color: var(--ws-red); background: var(--ws-red-soft); }
-.workspace-shell.erp-shell .row-actions { display: flex; align-items: center; gap: 3px; justify-content: flex-end; }
+.workspace-shell.erp-shell .row-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .workspace-shell.erp-shell .row-action-text { min-height: 30px; padding: 4px 12px; white-space: nowrap; }
 .workspace-shell.erp-shell .linked-badge { color: var(--ws-green); background: var(--ws-green-soft); border-color: transparent; font-size: 8px; }
 .workspace-shell.erp-shell .linked-badge.muted { color: var(--ws-muted); background: var(--ws-raised); }
@@ -525,7 +529,16 @@
 .workspace-shell.erp-shell .confirm-modal { width: min(450px, 100%); padding: 25px; }
 .workspace-shell.erp-shell .confirm-modal h2 { margin: 0 0 9px; color: var(--ws-text); font-size: 18px; }
 .workspace-shell.erp-shell .confirm-modal p { margin: 0 0 20px; color: var(--ws-muted); font-size: 12px; line-height: 1.8; }
-.workspace-shell.erp-shell .confirm-modal .modal-actions { padding: 0; border: 0; position: static; }
+.workspace-shell.erp-shell .confirm-modal .modal-actions { padding: 16px 0 0; border: 0; border-top: 1px solid var(--ws-border); position: static; margin-top: 20px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.confirm-modal-body { display: grid; gap: 14px; margin-top: 14px; }
+.confirm-modal-body > .ec-payment-preview { margin-block: 4px 6px; }
+.confirm-modal-body > .ws-confirm-field { margin: 0; }
+.confirm-modal-body > .ec-finance-field { margin: 0; }
+.workspace-shell.erp-shell .ws-catalog-modal { width: min(540px, 100%); }
+.ws-currency-add-form { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ws-border); display: flex; flex-direction: column; gap: 10px; }
+.ws-currency-add-inputs { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, 0.8fr); gap: 8px; }
+.ws-currency-add-inputs input { width: 100%; min-width: 0; height: 38px; padding: 0 10px; background: var(--ws-raised); color: var(--ws-text); border: 1px solid var(--ws-border); border-radius: 7px; font-size: 12px; }
+.ws-currency-add-form .primary-button { align-self: flex-end; min-height: 36px; padding: 0 16px; }
 .workspace-shell.erp-shell .danger-button { min-height: 36px; padding: 8px 14px; color: #fff; background: #c44349; border: 1px solid #c44349; border-radius: 7px; font-size: 11px; }
 .workspace-shell.erp-shell .voucher-modal { width: min(750px, 100%); }
 .workspace-shell.erp-shell .voucher-paper { margin: 20px; border: 1px solid #dce2e9; }

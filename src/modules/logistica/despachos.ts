@@ -55,12 +55,14 @@ export type LineaVenta = { productoId: string; codigo: string; nombre: string; c
 export type ZonaCliente = { id: string; nombre: string }
 
 /** Convierte las ventas y clientes ya cargados en la lista de ventas que se pueden despachar. */
-export function ventasDespachables(ventas: RecordItem[], clientes: RecordItem[], zonaPorCliente: Record<string, ZonaCliente>): VentaDespachable[] {
+export function ventasDespachables(ventas: RecordItem[], clientes: RecordItem[], zonaPorCliente: Record<string, ZonaCliente>, ventasConGuia: ReadonlySet<string> = new Set()): VentaDespachable[] {
   const clientePorId = new Map<string, RecordItem>()
   for (const cliente of clientes) if (cliente.rowId) clientePorId.set(cliente.rowId, cliente)
   const resultado: VentaDespachable[] = []
   for (const venta of ventas) {
     if (!venta.rowId || !ESTADOS_VENTA_DESPACHABLES.includes(venta.status)) continue
+    // Sales invoiced from an ec_pedidos order leave the warehouse through their remission guide.
+    if (ventasConGuia.has(venta.rowId)) continue
     const cliente = venta.cliente_id ? clientePorId.get(venta.cliente_id) : undefined
     const zona = venta.cliente_id ? zonaPorCliente[venta.cliente_id] : undefined
     resultado.push({

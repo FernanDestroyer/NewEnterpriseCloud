@@ -617,7 +617,8 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       if (medio.trim().toLocaleLowerCase('es') === 'efectivo' && !cashShiftId) throw new Error('Selecciona una caja con turno abierto para registrar el movimiento en efectivo.')
       await registerTreasuryPayment({ accountId: record.rowId, type: record.financeType === 'pagar' ? 'pago' : 'cobro', amount, method: medio, idempotencyKey, cashShiftId })
       await reload()
-      notify(`${record.id}: movimiento de ${record.financeType === 'pagar' ? 'pago' : 'cobro'} por ${money(amount)} registrado. El saldo se recalculó en Supabase.`)
+      const isFull = (record.amount ?? 0) <= amount
+      notify(`${record.id}: movimiento de ${record.financeType === 'pagar' ? 'pago' : 'cobro'} por ${money(amount)} registrado${isFull ? ' (cuenta completada).' : '.'} El saldo se recalculó en Supabase.`)
       return true
     } catch (error) { notify(friendlyError(error)); return false }
     finally { setSaving(false) }

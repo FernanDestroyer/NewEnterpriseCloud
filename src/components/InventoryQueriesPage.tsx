@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeftRight, ChevronLeft, ChevronRight, Download, Package, RefreshCw, Search, Wrench } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { inventoryQueryError, loadInventoryKardex, loadInventoryStocks, loadInventoryWarehouses, type InventoryMovement, type InventoryStock, type InventoryWarehouse } from '../services/inventoryQueries'
@@ -37,7 +37,16 @@ export default function InventoryQueriesPage({ view }: { view: 'stocks' | 'karde
   const [total, setTotal] = useState(0)
   const [warehouseId, setWarehouseId] = useState('')
   const [productId, setProductId] = useState('')
-  const [query, setQuery] = useState('')
+  const [searchParams] = useSearchParams()
+  const urlQuery = searchParams.get('q') ?? ''
+  const [query, setQuery] = useState(urlQuery)
+  const [kardexQuery, setKardexQuery] = useState(urlQuery)
+  useEffect(() => { setQuery(urlQuery); setKardexQuery(urlQuery); setPage(1) }, [urlQuery])
+  useEffect(() => {
+    if (view !== 'kardex') return
+    const timer = window.setTimeout(() => { setKardexQuery(query); setPage(1) }, 350)
+    return () => window.clearTimeout(timer)
+  }, [query, view])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -69,7 +78,7 @@ export default function InventoryQueriesPage({ view }: { view: 'stocks' | 'karde
           const data = await loadInventoryStocks()
           if (active) setStocks(data)
         } else {
-          const data = await loadInventoryKardex({ productId: productId || null, warehouseId: warehouseId || null, page, pageSize: PAGE_SIZE })
+          const data = await loadInventoryKardex({ productId: productId || null, warehouseId: warehouseId || null, page, pageSize: PAGE_SIZE, search: kardexQuery })
           if (active) { setMovements(data.rows); setTotal(data.total) }
         }
       } catch (cause) { if (active) setError(inventoryQueryError(cause)) }
@@ -77,7 +86,7 @@ export default function InventoryQueriesPage({ view }: { view: 'stocks' | 'karde
     }
     void load()
     return () => { active = false }
-  }, [view, productId, warehouseId, page, version, can])
+  }, [view, productId, warehouseId, page, version, can, kardexQuery])
 
   const scopedStocks = useMemo(() => stocks.filter(row => {
     if (warehouseId && row.almacen_id !== warehouseId) return false
@@ -101,12 +110,12 @@ export default function InventoryQueriesPage({ view }: { view: 'stocks' | 'karde
   if (!can('inventory', 'ver')) return <section className="ws-card"><div className="ws-empty-compact"><strong>No tienes permiso para consultar Inventario.</strong></div></section>
 
   return <section className="inventory-query">
-    <PageHeader section="Inventario y Kardex" title={view === 'stocks' ? 'Existencias por almacén' : 'Kardex de movimientos'} description={view === 'stocks' ? 'Stock físico, reservado y libre por almacén.' : 'Trazabilidad de entradas, salidas y saldos persistidos.'} icon={Package} actions={<><button type="button" className="ws-button ws-button-secondary" onClick={reload} disabled={loading}><RefreshCw size={15} className={loading ? 'ws-spin' : ''} />Actualizar</button><button className="ws-button ws-button-secondary" type="button" disabled={loading || Boolean(error)} onClick={exportView}><Download size={15} />{view === 'stocks' ? 'Exportar consulta' : 'Exportar Kardex · página'}</button>{(can('inventory', 'crear') || can('inventory', 'editar')) && <><button type="button" className="ws-button" onClick={() => navigate('/inventario/transferencias')}><ArrowLeftRight size={15} />Nueva transferencia</button><button type="button" className="ws-button ws-button-secondary" onClick={() => navigate('/inventario/ajustes')}><Wrench size={15} />Registrar ajuste</button></>}</>} />
+    <PageHeader section="Inventario y Kardex" title={view === 'stocks' ? 'Existencias por almacén' : 'Kardex de movimientos'} description={view === 'stocks' ? 'Stock físico, reservado y libre por almacén.' : 'Trazabilidad de entradas, salidas y saldos persistidos.'} icon={Package} actions={<>{(can('inventory', 'crear') || can('inventory', 'editar')) && <><button type="button" className="ws-button" onClick={() => navigate('/inventario/transferencias')}><ArrowLeftRight size={15} />Nueva transferencia</button><button type="button" className="ws-button ws-button-secondary" onClick={() => navigate('/inventario/ajustes')}><Wrench size={15} />Registrar ajuste</button></>}<button className="ws-button ws-button-secondary" type="button" disabled={loading || Boolean(error)} onClick={exportView}><Download size={15} />{view === 'stocks' ? 'Exportar consulta' : 'Exportar Kardex · página'}</button><button type="button" className="ws-button ws-button-secondary" onClick={reload} disabled={loading}><RefreshCw size={15} className={loading ? 'ws-spin' : ''} />Actualizar</button></>} />
     <nav className="inventory-query-nav" aria-label="Consultas de inventario"><button type="button" className={view === 'stocks' ? 'is-current' : ''} onClick={() => navigate('/inventario/existencias')} aria-current={view === 'stocks' ? 'page' : undefined}><Package size={15} />Existencias</button><button type="button" className={view === 'kardex' ? 'is-current' : ''} onClick={() => navigate('/inventario/kardex')} aria-current={view === 'kardex' ? 'page' : undefined}><ArrowLeftRight size={15} />Kardex</button></nav>
     <div className="inventory-query-filters">
       <div className="inv-field"><span>Almacén</span><SearchablePicker ariaLabel="Filtrar por almacén" value={warehouseId} onChange={value => { setWarehouseId(value); setPage(1) }} options={[{ id: '', label: 'Todos los almacenes' }, ...warehouses.map(item => ({ id: item.id, label: item.nombre, detail: item.activo ? 'Activo' : 'Inactivo' }))]} /></div>
       <div className="inv-field"><span>Producto</span><SearchablePicker ariaLabel="Filtrar por producto" value={productId} onChange={value => { setProductId(value); setPage(1) }} options={[{ id: '', label: 'Todos los productos' }, ...products.map(item => ({ id: item.rowId!, label: item.name, detail: item.id }))]} /></div>
-      {view === 'stocks' && <label>Buscar producto o almacén<span className="ws-table-search"><Search size={15} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Nombre o código…" /></span></label>}
+      <label>{view === 'stocks' ? 'Buscar producto o almacén' : 'Buscar referencia o motivo'}<span className="ws-table-search"><Search size={15} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={view === 'stocks' ? 'Nombre o código…' : 'Guía, nota de crédito, documento…'} /></span></label>
     </div>
     {view === 'stocks' ? <><section className="inv-metrics" aria-label="Resumen de la consulta"><article className="ec-card"><small>SKUs con existencia física</small><strong>{loading || error ? '—' : new Set(visibleStocks.filter(row => Number(row.stock_fisico) > 0).map(row => row.producto_id)).size}</strong><small>Productos únicos en esta consulta</small></article><article className="ec-card"><small>Valorización estimada · precio de venta</small><strong>{loading || error ? '—' : missingPrice ? 'Incompleta' : money(valuation)}</strong><small>Físico por almacén × precio maestro; no costo contable</small></article><article className="ec-card"><small>Bajo stock / crítico</small><strong>{loading || error ? '—' : new Set(visibleStocks.filter(row => Number(row.stock_libre) <= LOW_STOCK_THRESHOLD).map(row => row.producto_id)).size}</strong><small>Libre ≤ {LOW_STOCK_THRESHOLD} en algún almacén de la consulta</small></article><article className="ec-card"><small>Transferencias en tránsito</small><strong>No aplica</strong><small>El modelo registra salida y entrada atómicas</small></article></section><div className="ec-filter-chips" role="group" aria-label="Estado de stock">{['Todos', 'Disponible', 'Reservado', 'Agotado', 'Bajo stock'].map(value => <button type="button" key={value} aria-pressed={stockFilter === value} onClick={() => setStockFilter(value)}>{value}<span>{loading || error ? '—' : scopedStocks.filter(row => stockMatches(row, value)).length}</span></button>)}</div></> : <div className="inv-kardex-controls"><div><small>Tipo de movimiento · filtro de esta página</small><SegmentedControl ariaLabel="Tipo de movimiento" value={movementFilter} onChange={setMovementFilter} options={['Todos', 'entrada', 'salida', 'transferencia', 'ajuste'].map(value => ({ value, label: `${value} · ${loading || error ? '—' : movements.filter(row => value === 'Todos' || row.tipo === value).length}` }))} /></div><div><small>Valorización visible</small><SegmentedControl ariaLabel="Método de costeo visible" value={costMethod} onChange={setCostMethod} options={[{ value: 'peps', label: 'PEPS' }, { value: 'promedio', label: 'Promedio' }]} /></div></div>}
     {error && <div className="ws-notice ws-notice-warning" role="alert"><span>{error}</span><button type="button" className="ws-text-button" onClick={reload}>Reintentar</button></div>}

@@ -51,7 +51,7 @@ export default function PurchaseReceiptModal({ order, busy, onClose, onSubmit }:
         setHistoryTotal(receiptHistory.total)
         setWarehouses(activeWarehouses)
         setWarehouseId(activeWarehouses[0]?.id ?? '')
-        setQuantities(Object.fromEntries(documentLines.map(line => [line.rowId ?? line.producto_id, '0'])))
+        setQuantities(Object.fromEntries(documentLines.map(line => [line.rowId ?? line.producto_id, String(Math.max(0, line.cantidad - (progress.get(line.rowId ?? '')?.recibido_bruto ?? 0)))])))
       } catch (loadError) {
         if (active) setError(friendlyError(loadError))
       } finally { if (active) setLoading(false) }
@@ -101,7 +101,7 @@ export default function PurchaseReceiptModal({ order, busy, onClose, onSubmit }:
         </label>
         {warehouses.length === 0 && <div className="ws-notice ws-notice-warning">No hay almacenes activos. Configura primero Sucursales y almacenes en Maestros.</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-          <button className="ws-text-button" type="button" disabled={!lines.some(line => remaining(line) > 0)} onClick={fillPending}><PackageCheck size={14} />Completar pendientes</button>
+          <button className="ws-text-button" type="button" disabled={!lines.some(line => remaining(line) > 0)} onClick={fillPending}><PackageCheck size={14} />Rellenar cantidades pendientes</button>
         </div>
        <div className="ws-receipt-lines">
           {lines.map(line => {

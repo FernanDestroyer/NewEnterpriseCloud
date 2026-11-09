@@ -21,7 +21,7 @@ type Pestana = 'por-despachar' | 'despachos'
 type DialogState = { tipo: 'despacho'; despacho?: Despacho; ventas?: VentaDespachable[] } | { tipo: 'cancelar'; item: Despacho } | null
 type VentaFila = VentaDespachable & { cobertura: CoberturaVenta }
 
-const CONTEXTO_VACIO: ContextoLogistico = { almacenes: [], zonaPorCliente: {}, avisos: [] }
+const CONTEXTO_VACIO: ContextoLogistico = { almacenes: [], zonaPorCliente: {}, ventasConPedido: [], avisos: [] }
 const PRIORIDAD_TONO = { normal: '', alta: 'amber', urgente: 'red' } as const
 
 function DespachosContenido({ almacen }: { almacen: AlmacenLogistica }) {
@@ -58,7 +58,7 @@ function DespachosContenido({ almacen }: { almacen: AlmacenLogistica }) {
   const recargar = useCallback(() => setVersion(actual => actual + 1), [])
   const alGuardar = useCallback((mensaje: string) => { setDialog(null); setSeleccion(new Set()); notify(mensaje); recargar() }, [notify, recargar])
 
-  const ventas = useMemo<VentaFila[]>(() => ventasDespachables(records.sales, records.customers, contexto.zonaPorCliente)
+  const ventas = useMemo<VentaFila[]>(() => ventasDespachables(records.sales, records.customers, contexto.zonaPorCliente, new Set(contexto.ventasConPedido))
     .map(venta => ({ ...venta, cobertura: coberturaVenta(venta.ventaId, despachos) }))
     .filter(venta => venta.cobertura !== 'completa'), [records.sales, records.customers, contexto.zonaPorCliente, despachos])
   const elegidas = ventas.filter(venta => seleccion.has(venta.ventaId))

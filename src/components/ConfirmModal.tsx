@@ -33,7 +33,7 @@ export default function ConfirmModal({
       <div ref={dialogRef} className="confirm-modal" role="alertdialog" aria-modal="true" aria-label={title}>
         <h2>{title}</h2>
         <p>{message}</p>
-        {children}
+        {children && <div className="confirm-modal-body">{children}</div>}
         <div className="modal-actions">
           <button className="cancel-button" type="button" disabled={blocked} onClick={onCancel}>Cancelar</button>
           <button className={tone === 'primary' ? 'primary-button' : 'danger-button'} type="button" disabled={blocked} onClick={() => void confirm()}>{blocked ? 'Guardando…' : confirmLabel}</button>
