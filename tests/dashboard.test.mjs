@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildSalesSeries, financialSnapshot, percentage, totalAmount } from '../src/data/dashboard.ts'
+import { amountByCurrency, amountByCurrencyLabel, buildSalesSeries, financialSnapshot, percentage, totalAmount } from '../src/data/dashboard.ts'
 import { buildExecutiveReport } from '../src/data/executiveReport.ts'
 import { renderExecutiveReport } from '../src/data/executiveReportHtml.ts'
 
 const record = (id, amount, status = 'Pendiente', detail = '') => ({ id, amount, status, detail, name: id, date: 'Registrado ahora' })
+
+test('agrupa importes por moneda y asume PEN solo cuando el registro no informa una moneda', () => {
+  assert.deepEqual(amountByCurrency([
+    { ...record('V-PEN', 100), moneda: 'PEN' },
+    { ...record('V-USD', 25), moneda: 'USD' },
+    record('V-LEGACY', 10),
+  ]), { PEN: 110, USD: 25 })
+  assert.match(amountByCurrencyLabel([
+    { ...record('V-PEN', 100), moneda: 'PEN' },
+    { ...record('V-USD', 25), moneda: 'USD' },
+  ]), /S\/.*USD/)
+})
 
 test('las cuentas completadas no forman parte de los compromisos pendientes', () => {
   const result = financialSnapshot([
@@ -90,7 +102,7 @@ test('el informe ejecutivo usa el período peruano y mantiene los saldos actuale
   assert.deepEqual(report.sales.map(sale => sale.id), ['V-10', 'V-2'])
   assert.equal(report.salesTotal, 300)
   assert.equal(report.purchasesTotal, 120)
-  assert.equal(report.operationBalance, 180)
+  assert.equal(report.currency, 'PEN')
   assert.equal(report.averageTicket, 150)
   // El período anterior incluye dos ventas del 12/10 en el calendario peruano.
   assert.equal(report.salesChange, -71.4)
@@ -105,10 +117,39 @@ test('el informe ejecutivo usa el período peruano y mantiene los saldos actuale
   assert.deepEqual(sales, original)
 })
 
+test('el informe ejecutivo filtra y rotula ventas, compras y finanzas por la moneda seleccionada', () => {
+  const report = buildExecutiveReport({
+    sales: [
+      { ...record('V-PEN', 100), createdAt: '2026-10-12T12:00:00.000Z', moneda: 'PEN' },
+      { ...record('V-USD', 25), createdAt: '2026-10-12T13:00:00.000Z', moneda: 'USD' },
+    ],
+    purchases: [
+      { ...record('OC-PEN', 40), createdAt: '2026-10-12T12:00:00.000Z', moneda: 'PEN' },
+      { ...record('OC-USD', 7), createdAt: '2026-10-12T13:00:00.000Z', moneda: 'USD' },
+    ],
+    finance: [
+      { ...record('CXC-PEN', 80, 'Pendiente', 'Cuenta por cobrar'), moneda: 'PEN' },
+      { ...record('CXC-USD', 5, 'Pendiente', 'Cuenta por cobrar'), moneda: 'USD' },
+    ],
+    range: { from: '2026-10-12', to: '2026-10-12' },
+    currency: 'USD',
+    now: new Date('2026-10-13T12:00:00.000Z'),
+  })
+  assert.equal(report.currency, 'USD')
+  assert.deepEqual(report.sales.map(sale => sale.id), ['V-USD'])
+  assert.equal(report.salesTotal, 25)
+  assert.equal(report.purchasesTotal, 7)
+  assert.equal(report.finance.receivable, 5)
+  const html = renderExecutiveReport(report, { name: 'EnterpriseCloud', periodLabel: '12/10/2026', autoPrint: false })
+  assert.ok(html.includes('Importes en USD'))
+  assert.ok(html.includes('Importe (USD)'))
+  assert.ok(!html.includes('Importe (S/)'))
+  assert.ok(!html.includes('Balance de operaciones'))
+})
+
 test('las fuentes no disponibles del PDF no se representan como saldos cero', () => {
   const report = buildExecutiveReport({ sales: [], range: { from: '', to: '' } })
   assert.equal(report.purchasesTotal, null)
-  assert.equal(report.operationBalance, null)
   assert.equal(report.inventory, null)
   assert.equal(report.finance, null)
   assert.deepEqual(report.sources, ['Ventas'])

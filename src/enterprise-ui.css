@@ -1,5 +1,6 @@
 /* Shared enterprise primitives: colors inherit the workspace theme. */
 .ec-page-header { display: grid; gap: 22px; min-width: 0; color: var(--ws-text); }
+.ws-content > .ec-page-header { margin-bottom: 24px; }
 .ec-breadcrumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--ws-muted); font-size: 11px; }
 .ec-breadcrumbs a { color: inherit; text-decoration: none; }
 .ec-breadcrumbs a:hover { color: var(--ws-primary); }
@@ -39,7 +40,7 @@
 .ec-combobox-empty { padding: 20px 10px; text-align: center; color: var(--ws-muted); font-size: 12px; }
 .ec-combobox-validation { position: absolute; opacity: 0; pointer-events: none; width: 1px !important; height: 1px; min-height: 0 !important; padding: 0 !important; bottom: 0; }
 .ec-skeleton { height: 46px; margin: 12px 20px; border-radius: 9px; background: linear-gradient(100deg, var(--ws-raised) 20%, var(--ws-surface) 45%, var(--ws-raised) 70%); background-size: 250% 100%; animation: ec-shimmer 1.8s infinite; }
-.ec-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 24px; }
+.ec-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 24px 18px; border-bottom: 1px solid var(--ws-border); }
 .ec-filter-chips button { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--ws-border); border-radius: 999px; background: var(--ws-surface); color: var(--ws-muted); font: inherit; font-size: 11px; cursor: pointer; }
 .ec-filter-chips button[aria-pressed='true'] { color: var(--ws-primary); border-color: color-mix(in srgb, var(--ws-primary) 35%, var(--ws-border)); background: var(--ws-primary-soft); }
 .ec-filter-chips button:hover { border-color: var(--ws-primary); }

@@ -4,7 +4,7 @@ import { brandLogoUrl, defaultStatus, escapeCell, isStockAlert, money, stockStat
 import { customerCredit, consumesCreditLine } from '../data/workspace'
 import { requiresTreasuryPermission } from '../data/operationPermissions'
 import { fetchCompanyProfile, type CompanyProfile } from '../services/company'
-import { convertQuoteToSale, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchPurchaseFiscalSummaries, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertPurchaseWithLines, insertQuoteWithLines, insertRecord, insertSaleWithLines, registerPurchaseReceipt, registerTreasuryPayment, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput, type PurchaseReceiptInputLine } from '../services/records'
+import { convertQuoteToSale, deleteRecord, emptyRecords, enrichCatalog, fetchRecordsSnapshot, fetchDocumentLines, fetchPurchaseFiscalSummaries, fetchSupplierCatalogRaw, friendlyError, insertCatalogItem, insertQuoteWithLines, insertRecord, insertSaleWithLines, registerPurchaseReceipt, registerTreasuryPayment, requestPurchaseApproval, updatePurchaseWithLines, updateQuoteWithLines, updateRecord, updateSaleWithLines, updateStatuses, type LineInput, type PurchaseReceiptInputLine } from '../services/records'
 import { DATA_PAGES } from '../data/catalog'
 import { csvContent } from '../data/exports'
 import { useAuth } from './AuthContext'
@@ -382,6 +382,13 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
 
     setSaving(true)
     try {
+      if (page === 'purchases' && !record) {
+        const approvalId = await requestPurchaseApproval(input, lines)
+        await reload()
+        setRecordModal(null)
+        notify(`Solicitud de orden enviada a la bandeja de aprobaciones (${approvalId.slice(0, 8)}). La orden se creará cuando la apruebe otra persona.`)
+        return
+      }
       let saved: RecordItem
       if (page === 'sales') {
         // En ventas siempre se usa la ruta con líneas para recalcular stock/cobranza.
@@ -433,16 +440,13 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
             : await insertQuoteWithLines(input, lines)
         }
       } else if (page === 'purchases') {
+        if (!record) throw new Error('Las órdenes nuevas deben enviarse a aprobación antes de crearse.')
         if (!lines.length && record?.rowId) {
           const previous = await fetchDocumentLines('purchases', record.rowId)
           const previousInput: LineInput[] = previous.map((line) => ({ detalle_compra_id: line.rowId, producto_id: line.producto_id, cantidad: line.cantidad, precio: line.precio, tratamiento_tributario: line.taxTreatment, tasa_tributaria: line.taxRate }))
-          saved = record
-            ? await updatePurchaseWithLines(record.id, input, previousInput, record.updatedAt)
-            : await insertPurchaseWithLines(input, [])
+          saved = await updatePurchaseWithLines(record.id, input, previousInput, record.updatedAt)
         } else {
-          saved = record
-            ? await updatePurchaseWithLines(record.id, input, lines, record.updatedAt)
-            : await insertPurchaseWithLines(input, lines)
+          saved = await updatePurchaseWithLines(record.id, input, lines, record.updatedAt)
         }
       } else {
         saved = record ? await updateRecord(page, record.id, input) : await insertRecord(page, input)
@@ -548,7 +552,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
       : new Map()
     const header = page === 'suppliers'
       ? ['Referencia', 'Nombre', 'Fecha', 'RUC', 'Estado']
-      : ['Referencia', 'Nombre', 'Detalle', 'Fecha', page === 'inventory' ? 'Existencias' : page === 'customers' ? 'Disponible' : 'Importe', 'Estado', ...(page === 'inventory' ? ['Precio de venta'] : []), ...(page === 'customers' ? ['Línea de crédito'] : []), ...(page === 'purchases' ? ['Moneda', 'Tipo de cambio', 'Base imponible', 'Impuesto', 'Total fiscal'] : [])]
+      : ['Referencia', 'Nombre', 'Detalle', 'Fecha', page === 'inventory' ? 'Existencias' : page === 'customers' ? 'Disponible' : 'Importe', 'Estado', ...(page === 'inventory' ? ['Precio de venta'] : []), ...(page === 'customers' ? ['Línea de crédito'] : []), ...(page === 'sales' ? ['Moneda', 'Tipo de cambio'] : []), ...(page === 'purchases' ? ['Moneda', 'Tipo de cambio', 'Base imponible', 'Impuesto', 'Total fiscal'] : [])]
     const rows = items.map((item) => page === 'suppliers'
       ? [
         item.id,
@@ -566,6 +570,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
        page === 'inventory' ? stockStatus(item.quantity ?? 0) : item.status,
        ...(page === 'inventory' ? [item.precio !== undefined ? String(item.precio) : ''] : []),
        ...(page === 'customers' ? [item.amount !== undefined ? String(item.amount) : ''] : []),
+       ...(page === 'sales' ? [item.moneda ?? 'PEN', item.exchangeRate == null ? '' : String(item.exchangeRate)] : []),
        ...(page === 'purchases' ? (() => {
          const summary = item.rowId ? fiscalSummaries.get(item.rowId) : undefined
          return [item.moneda ?? 'PEN', item.exchangeRate == null ? '' : String(item.exchangeRate), summary?.complete ? String(summary.base) : '', summary?.complete ? String(summary.tax) : '', summary?.complete ? String(summary.total) : item.amount === undefined ? '' : String(item.amount)]

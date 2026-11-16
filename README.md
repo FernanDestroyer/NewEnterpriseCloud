@@ -45,11 +45,15 @@ La imagen se guarda en `configuracion` con código `YAPE_QR`. El cliente ingresa
 
 ## Consulta RENIEC/SUNAT
 
-1. Configura en `.env` tu `VITE_PERU_API_TOKEN` (y `VITE_PERU_API_URL`, por defecto `https://dniruc.apisperu.com/api/v1`; también compatible con `https://api.apis.net.pe/v1`). Reinicia el servidor.
-2. Ejecuta en Supabase la migración `supabase/migrations/20261017000000_cliente_documento.sql` para guardar el documento del cliente.
-3. En **Clientes** elige DNI o RUC, escribe el número y pulsa el botón de búsqueda: se completan nombre y detalle. En **Proveedores** escribe el RUC y pulsa **SUNAT**.
+La consulta usa la Edge Function autenticada `peru-document-lookup`. El proveedor se llama desde el servidor, y su token no debe incluirse en variables `VITE_` ni enviarse al navegador.
 
-Sin token o sin la migración, todo sigue funcionando con digitación manual: la búsqueda avisa qué falta en lugar de fallar.
+1. Copia `supabase/functions/.env.example` como `supabase/functions/.env` y completa `PERU_API_TOKEN`. La función llama los endpoints oficiales v2 de DNI y RUC en `api.apis.net.pe`; el token solo viaja en el encabezado `Authorization`.
+2. Inicia el stack local de Supabase y sirve las funciones (`supabase start` y `supabase functions serve`). El archivo `supabase/functions/.env` se carga localmente y está excluido de Git.
+3. En producción, configura `PERU_API_TOKEN` en los secretos de Edge Functions del proyecto. Si declaras `PERU_API_URL`, debe ser exactamente `https://api.apis.net.pe` (sin `/v1` ni rutas); despliega `peru-document-lookup`. La función exige JWT, valida la sesión contra Supabase Auth y requiere permiso de lectura de Clientes o Proveedores según el formulario.
+4. Ejecuta en Supabase la migración `supabase/migrations/20261017000000_cliente_documento.sql` para guardar el documento del cliente.
+5. En **Clientes** elige DNI o RUC, escribe el número y pulsa el botón de búsqueda. En **Proveedores** escribe el RUC y pulsa **SUNAT**.
+
+Sin secreto, función desplegada o migración, la búsqueda informa el problema; el registro manual sigue disponible. Si `VITE_PERU_API_TOKEN` se usó antes, rótalo en el proveedor porque un secreto expuesto en una aplicación web debe considerarse comprometido.
 
 ## Semántica de los datos existentes
 

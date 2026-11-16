@@ -58,7 +58,7 @@ function DespachosContenido({ almacen }: { almacen: AlmacenLogistica }) {
   const recargar = useCallback(() => setVersion(actual => actual + 1), [])
   const alGuardar = useCallback((mensaje: string) => { setDialog(null); setSeleccion(new Set()); notify(mensaje); recargar() }, [notify, recargar])
 
-  const ventas = useMemo<VentaFila[]>(() => ventasDespachables(records.sales, records.customers, contexto.zonaPorCliente, new Set(contexto.ventasConPedido))
+  const ventas = useMemo<VentaFila[]>(() => ventasDespachables(records.sales, records.customers, contexto.zonaPorCliente)
     .map(venta => ({ ...venta, cobertura: coberturaVenta(venta.ventaId, despachos) }))
     .filter(venta => venta.cobertura !== 'completa'), [records.sales, records.customers, contexto.zonaPorCliente, despachos])
   const elegidas = ventas.filter(venta => seleccion.has(venta.ventaId))

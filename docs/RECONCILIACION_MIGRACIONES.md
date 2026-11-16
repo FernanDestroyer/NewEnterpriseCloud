@@ -1,10 +1,15 @@
 # Reconciliación del historial de migraciones
 
-**Estado:** 48 versiones registradas en el historial remoto; 25 archivos históricos/futuros siguen por conciliar.  
-**Esquema remoto usado como evidencia:** lecturas del 26, 29 y 30 de octubre y 2 y 3 de noviembre de 2026.  
+**Corte remoto vigente (13-11-2026, lectura MCP):** 58 migraciones registradas; última versión `20261113144509`, nombre `seguridad_rls_y_indice_duplicado_v1`. El proyecto confirmado es `ERP EnterpriseCloud` (`auxqjoxnsasnmtnakgmg`), activo en PostgreSQL 17.11. Hay 121/121 tablas públicas con RLS, 270 políticas, seis tablas `app_private` con RLS, 331 funciones públicas y 69 funciones privadas. `auth.users` y `public.usuarios` tienen 10 filas cada una.
+- **Cruce local/remoto actualizado:** 105 archivos locales; 29 coinciden por versión y nombre, 27 migraciones remotas tienen un archivo local con el mismo nombre pero otra versión, dos nombres remotos no tienen contraparte local idéntica y 76 archivos locales no coinciden con una versión remota. Las migraciones de PEPS, notificaciones, aprobaciones, Tesorería/Caja y saneamiento de políticas/índice están alineadas con su versión remota. Las diferencias históricas restantes no son una cola de cambios pendientes; no ejecutar lotes ni reparar el historial.
+- **Copia de esquema actual (13-11):** la CLI autenticada y enlazada generó `.local-validation-postgres/remote-schema-20261113.sql` (899,527 bytes), solo con `public,app_private`. Se restauró en una instancia nueva y separada de PostgreSQL local 17.5: 121 tablas públicas con RLS, 270 políticas públicas y seis tablas `app_private` con RLS. Auth quedó simulado y vacío (0 usuarios locales); el remoto conserva 10 cuentas y 10 perfiles. No se exportaron filas comerciales, Auth, Storage ni secretos. El servidor de validación se detuvo tras la comprobación. Esta es una copia de esquema para validar migraciones, no una copia completa del servicio.
+- **Asesores remotos (13-11, corte vigente):** 11 tablas con RLS y sin políticas siguen cerradas a roles API. Seguridad informa 73 funciones `SECURITY DEFINER` públicas ejecutables por `authenticated`, ninguna por `anon`; la limpieza no elevó esa alerta. Persisten `btree_gist` en `public` y la protección de contraseñas filtradas desactivada. Rendimiento informa 118 claves foráneas sin índice y 90 índices sin uso. Los seis grupos de políticas permisivas y el índice duplicado en `contratos_compra` se eliminaron sin cambios de permisos efectivos. Salud no reporta hallazgos. Las RPC añadidas tienen `search_path` fijado; las públicas son `SECURITY INVOKER`, se permiten a `authenticated` y se deniegan a `anon`.
+- **Funciones Edge (13-11):** `peru-document-lookup` y `project-analyzer` están `ACTIVE` v1 con `verify_jwt=true`. No se alteró la historia SQL, las cuentas ni los secretos. Después de los despliegues, `auth.users=10` y `public.usuarios=10`. No se consultó ni se modificó `PERU_API_TOKEN`; RENIEC/SUNAT sigue pendiente de probar con una sesión autorizada y una credencial válida. El Analizador ya invoca una API propia de Supabase; queda por aclarar si el instructor exige además un proveedor externo de IA.
+- **Corte histórico del 12-11:** la copia aislada se restauró y verificó antes de las dos migraciones aditivas posteriores; PEPS y notificaciones se probaron y aplicaron por separado. La cadena histórica sigue sin reconciliar y no se reproducirá ni reparará en bloque.
+**Esquema remoto usado como evidencia en las secciones históricas:** lecturas del 26, 29 y 30 de octubre y 2 y 3 de noviembre de 2026.
 **Proyecto:** `auxqjoxnsasnmtnakgmg`.
 
-## Actualización del 3 de noviembre de 2026 (módulos de Erick)
+## Evidencia histórica: actualización del 3 de noviembre de 2026 (módulos de Erick)
 
 Se versionaron y aplicaron cuatro migraciones forward-only con `apply_migration` (nunca `db push`) para los módulos Inventario y Kardex, Ventas y Compras:
 
@@ -17,7 +22,7 @@ Decisión de arquitectura: la interfaz activa de Compras vuelve al Modelo A (`so
 
 Verificación remota al cierre: 45 migraciones registradas, 118 tablas públicas (RLS en las 118), 261 políticas, 317 funciones en `public` y 61 en `app_private`. Se comprobaron las firmas y ACL de los RPC de Compras, Ventas e Inventario, las políticas RLS de las tablas participantes y los triggers de trazabilidad/valorización. La prueba funcional cubrió Compras (solicitud → oferta → selección), Ventas (pedido con reserva → anulación) e Inventario (ajuste +1 → ajuste −1 → Kardex). Las filas de prueba se eliminaron en orden de claves foráneas y la cuenta temporal de QA se retiró.
 
-## Actualización del 4 de noviembre de 2026 (tipo de cambio de Ventas)
+## Evidencia histórica: actualización del 4 de noviembre de 2026 (tipo de cambio de Ventas)
 
 Se aplicaron tres migraciones forward-only con `apply_migration` (nunca `db push`) para centralizar el tipo de cambio y corregir su persistencia:
 
@@ -28,7 +33,7 @@ Se aplicaron tres migraciones forward-only con `apply_migration` (nunca `db push
 
 Ventas ya no captura el tipo de cambio: lo lee de Maestros al abrir el módulo y guarda una copia en cada cotización, pedido y comprobante. El formulario convierte los precios de catálogo (PEN) a USD con esa tasa y permite ajustar el precio unitario en la moneda elegida. La edición de la tasa se hace en Maestros → Catálogos; Mantenimiento solo administra las monedas.
 
-## Actualización del 30 de octubre de 2026
+## Evidencia histórica: actualización del 30 de octubre de 2026
 
 Se integraron los módulos de Logística y Transporte y Metas y Objetivos con nueve migraciones forward-only aplicadas mediante `apply_migration` (nunca `db push`):
 
@@ -54,11 +59,11 @@ Nueve versiones forward-only nuevas aplicadas directamente con `apply_migration`
 
 ## Objetivo y criterio
 
-En el corte anterior había 13 versiones remotas y 38 archivos locales: 25 no aparecían en el historial. Ahora hay 48 archivos locales y 23 versiones registradas que coinciden exactamente con archivos locales. El 26 de octubre se aplicaron diez migraciones forward-only, incluida la revocación de DELETE en `empresas`. Los 25 archivos restantes no deben ejecutarse como bloque. De ellos, 18 tienen versiones con fecha hasta el 26 de octubre inclusive y sí requieren conciliación; siete están fechados después del corte (`20261027000000`, `20261031000000`, `20261031120000`, `20261101000000`, `20261102000000`, `20261102010000`, `20261102020000`) y se tratan como migraciones futuras locales, no como ausencia de una migración remota. La falta de una fila en `supabase_migrations.schema_migrations` no demuestra por sí sola que un SQL antiguo no se haya ejecutado: se observaron tablas, columnas y políticas creadas por varias de esas etapas.
+Este apartado resume un corte histórico anterior a la integración de los módulos de Erick y a las migraciones remotas posteriores. Sus conteos de 13/38/25 y su clasificación de siete archivos futuros ya no describen el árbol actual. La sección del 12 de noviembre es una evidencia histórica; el corte remoto actual está al inicio de este documento.
 
-La sesión MCP conectada permite consultar el estado remoto; la matriz organiza la comparación, pero no certifica por sí sola la equivalencia completa de restricciones, funciones, triggers, permisos, políticas ni efectos sobre las filas. Para cerrar la revisión hacen falta una exportación restaurable y la CLI autenticada/enlazada, tanto para guardar un baseline como para operar el historial con seguridad. **No se debe ejecutar este conjunto como bloque ni reparar el historial basándose solo en esta matriz.**
+La sesión MCP conectada permitía consultar el estado remoto; aquella matriz no certificaba equivalencia completa. La copia de esquema y la CLI enlazada se verificaron en el corte del 12 de noviembre. **No se debe ejecutar este conjunto como bloque ni reparar el historial basándose solo en esta matriz histórica.**
 
-## Matriz de los 25 archivos sin versión registrada
+## Matriz histórica del corte anterior: 25 archivos sin versión registrada
 
 | Versión local | Evidencia disponible al corte | Riesgo si se repite | Disposición provisional |
 |---|---|---|---|
@@ -96,17 +101,111 @@ El `DEFAULT PRIVILEGES` del rol `postgres` conserva DML para `authenticated` y p
 
 `20261026182706_un_solo_turno_abierto.sql` protegió la regla de un turno global. `20261026182720_orden_compra_atomica.sql` registra orden, líneas y cuenta por pagar en una transacción idempotente. `20261026182728_venta_credito_permisos.sql` permite que Ventas cree la cuenta por cobrar derivada y exige Tesorería solo para un cobro inmediato. Después se aplicaron `20261026195955_cajas_multisucursal.sql`, `20261026200116_cajas_indices_fk.sql` y `20261026200340_unificar_lectura_sucursales.sql`: agregan el catálogo de cajas ligado a sucursal, turnos por caja con compatibilidad para el turno legado, RLS, grants, auditoría, índices de claves foráneas y una sola política de lectura de sucursales. `20261026200923_almacenes_por_sucursal.sql` hace obligatoria la sucursal del almacén y limita la unicidad de su nombre a esa sucursal. `20261026202241_registrar_auto_rls.sql` registra la función y el event trigger que activa RLS en tablas públicas nuevas. `20261026203451_empresas_sin_borrado_api.sql` revocó DELETE a `authenticated` en `empresas`; se comprobó que el privilegio quedó retirado. Las 23 versiones están registradas; se verificaron el event trigger activo, su ACL, las 40 tablas con RLS y la conservación de las cuentas. No se ejecutaron escrituras de negocio en remoto.
 
-El 26 de octubre de 2026 se reprodujeron 47 archivos SQL locales en orden en un PostgreSQL 17 temporal con stubs mínimos de `auth.users` y `auth.uid()`. La nueva migración `20261026203451` se aplicó en Supabase y se verificó su efecto en ACL; todavía falta repetir la reproducción desde cero con los 48 archivos. Esto no restaura la estructura y los datos reales ni certifica RLS con los nueve usuarios. La CLI aún no está enlazada (`ProjectRefNotLinkedError`) y Docker no tiene motor activo; no se realizaron escrituras de negocio en remoto.
+En el corte del 26 de octubre se reportó una reproducción temporal de 47 archivos y una verificación de ACL. Ese ensayo es histórico y no representa la secuencia local revisada el 12 de noviembre, con 103 archivos entonces: la reproducción limpia se detuvo en el archivo 41.
 
 ## Procedimiento de cierre de reconciliación
 
-1. Obtener una exportación de esquema y datos de referencia; restaurarla en una base local desechable y verificar que 9 cuentas/perfiles siguen intactos en remoto.
-2. Ejecutar `npx supabase migration list --linked` y guardar salida con fecha. No ejecutar `db push`, `db reset --linked` ni `migration repair`.
-3. Comparar por migración tablas, columnas, tipos, constraints, secuencias, funciones (definición y seguridad), triggers, políticas, grants/default ACL y efectos en filas.
-4. Completar una fila por archivo con resultado demostrado: `equivalente`, `parcial`, `ausente`, `obsoleta` o `no segura`. Adjuntar consultas/evidencia, no solo conteos.
-5. Reproducir en orden en la base desechable. Cuando una migración histórica sea destructiva, no reejecutarla: crear una migración forward-only nueva que lleve el remoto al estado objetivo.
-6. Reparar el historial únicamente para versiones cuyo efecto completo esté demostrado. Aplicar los cambios nuevos en una migración por vez, con respaldo restaurable y revisión posterior de RLS, ACL, Auth y datos.
+1. Usar la copia verificada de esquema de `public` y `app_private` como baseline local; no copiar filas comerciales ni Auth. Consultar y registrar las 10 cuentas y 10 perfiles remotos antes y después de cada cambio remoto.
+2. Capturar `npx supabase migration list --linked` y clasificar coincidencias exactas, candidatos por nombre, versiones locales futuras y archivos locales históricos.
+3. Comparar los efectos relevantes por objetos: columnas/tipos/constraints, funciones y seguridad, triggers, políticas, grants/default ACL e índices; la igualdad del nombre no es evidencia suficiente.
+4. Conservar intacto el historial existente. No usar `db push`, `db reset --linked` ni `migration repair` para reconciliar cambios cuyo efecto no esté demostrado.
+5. Para cada módulo nuevo, crear una migración forward-only con la CLI, probarla primero en una copia local aislada del esquema actual y comprobar RLS/grants con roles de prueba.
+6. Aplicar una migración remota por vez solo después de revisar su diff y el asesor de seguridad; verificar objetos, Auth/perfiles y comportamiento funcional al terminar.
 
-## Limitación actual
+## Limitación del corte del 26 de octubre (superada parcialmente)
 
-El corte remoto actual es del 26 de octubre de 2026. Las 18 versiones con fecha hasta el corte permanecen como clasificación por evidencia incompleta; las siete versiones con fecha posterior son archivos futuros locales. La CLI devuelve `ProjectRefNotLinkedError` en `migration list --linked`; hay que enlazar el proyecto antes de exportar y operar el historial. Docker Desktop tampoco tiene motor disponible. Se verificó remotamente que existen 23 migraciones registradas, 40 tablas con RLS, 9 cuentas y 9 perfiles. Siguen pendientes la conciliación de las 25 versiones locales sin coincidencia y una exportación restaurable de los datos/esquema reales.
+Este texto conserva el estado histórico del 26 de octubre. La CLI se autenticó y enlazó después; el corte actual, incluido el dump y la restauración local del 13 de noviembre, aparece al inicio. Sigue pendiente completar la conciliación de efectos entre archivos locales e historial remoto; las diferencias de versión no son cambios que deban ejecutarse en lote. No se exportaron filas comerciales ni usuarios Auth.
+
+## Corte histórico de auditoría — 12 de noviembre de 2026 (hora de Lima)
+
+Esta sección conserva las cifras verificadas en aquel corte. El corte remoto del 13 de noviembre, arriba, las actualiza y marca los límites de la copia de esquema.
+
+- Proyecto MCP confirmado: `ERP EnterpriseCloud` (`auxqjoxnsasnmtnakgmg`), región `us-east-1`, PostgreSQL 17.11. En ese corte, Auth y perfiles tenían 10 filas cada uno; el remoto registraba 119 tablas `public` con RLS, 6 tablas `app_private`, 264 políticas, 385 funciones y 163 triggers.
+- En aquel corte, el historial remoto tenía 54 versiones y el directorio local 101 archivos SQL: 25 versiones exactas, 76 locales sin versión exacta y 29 remotas sin versión exacta. El árbol llegó a 105 archivos en el corte vigente; la reconciliación actualizada está al inicio.
+- La reproducción completa, desde una base PostgreSQL 17.5 vacía con Auth simulado, pasó 40 archivos y se detuvo en el 41.º, `20261029120000_compras_solicitudes_comparativo.sql`: sus políticas y funciones llaman a `app_private._tiene_permiso`, que los archivos locales solo crean en `20261102000000_seguridad_funciones.sql`. Dos archivos locales anteriores (`20261029150000_devoluciones_proveedor.sql` y `20261029170000_inventario_transferencias_ajustes.sql`) también dependen de ese helper antes de su creación. El helper sí está en el esquema remoto restaurado. Resultado: la secuencia local no es una reconstrucción ejecutable del proyecto remoto; no se debe reordenar ni ejecutar como bloque en remoto.
+- La CLI Supabase 2.121.0 quedó autenticada y enlazada al proyecto confirmado. Se generó `public` + `app_private` mediante `npx supabase db dump --linked` y se restauró en PostgreSQL local 17.5. Esa copia base coincidía entonces con 118 tablas públicas/RLS, 6 privadas, 261 políticas, 383 funciones y 163 triggers. La restauración usó roles y funciones Auth simuladas; `auth.users` y `public.usuarios` tienen 0 filas localmente, mientras que el remoto conserva 10 cuentas y 10 perfiles. No se exportaron filas comerciales ni datos Auth, según la instrucción del usuario. La copia temporal está excluida de Git.
+- El asesor de seguridad mantiene 11 tablas con RLS sin políticas y 72 funciones `SECURITY DEFINER` ejecutables por `authenticated`, junto a los avisos de `btree_gist` en `public` y protección contra contraseñas filtradas desactivada. La nueva función es `SECURITY INVOKER`: `anon` no puede ejecutarla y `authenticated` sí; el acceso a datos queda filtrado por RLS y `inventario:ver`.
+- **Regla de despliegue:** la copia del esquema es el baseline. No se repara ni reordena la cadena histórica. Se permite una migración forward-only a la vez solo tras comprobar que su objeto no exista, comparar tablas/permisos/RLS relevantes, probarla en el baseline, revisar seguridad y guardar evidencia antes/después. Con esa puerta se aplicaron `20261113035956_ec_consultar_valorizacion_peps_actual_v1` y `20261113043804_persistent_operational_notifications`; no cambiaron filas comerciales, cuentas Auth ni perfiles. `db push`, `migration repair` y la reproducción del historial completo siguen prohibidos hasta reconciliar esa cadena.
+- La inspección estática encontró 70 funciones con alguna referencia en el cuerpo a `auth.uid()` o a los helpers de autorización; las otras dos (`ec_facturar_pedido_pago` y `editar_orden_compra_operativa_v2`) delegan en funciones revisadas previamente. Las 72 tienen `search_path` definido y ninguna es ejecutable por `anon`. Este filtro estático y las revisiones por delegación no reemplazan pruebas por rol para cada operación.
+- `public.ec_series` y `public.ec_movimiento_series` son tablas de trazabilidad de producto/inventario. No son series de numeración de facturas, compras u otros documentos; la configuración de folios debe auditar primero los flujos ya existentes para evitar duplicarlos.
+
+### Cruce de versiones observado el 12 de noviembre
+
+El historial remoto, contrastado entonces con los nombres de los 101 archivos locales, confirmó 25 versiones exactas y 29 versiones remotas sin coincidencia exacta. De estas últimas, 27 tenían un archivo local con el mismo nombre y dos un candidato semántico con otro nombre. La comparación por nombre es solo un punto de partida: no prueba equivalencia de SQL ni autoriza ejecutar archivos. El cruce numérico vigente, con los 105 archivos actuales, está al inicio.
+
+| Versión remota | Nombre registrado | Archivo local candidato (solo para comparación) |
+|---|---|---|
+| `20261030024159` | `retiro_modelo_a_compras` | `20261102030000_retiro_modelo_a_compras.sql` |
+| `20261030024732` | `requisiciones_compra_extension` | `20261102040000_requisiciones_compra_extension.sql` |
+| `20261030030722` | `funciones_requisiciones_compra` | `20261102050000_funciones_requisiciones_compra.sql` |
+| `20261030031945` | `compras_cantidad_fraccionaria` | `20261102055000_compras_cantidad_fraccionaria.sql` |
+| `20261030032144` | `estado_anulacion_cancelada` | `20261102057000_estado_anulacion_cancelada.sql` |
+| `20261030032206` | `estado_anulacion_cancelada_funciones` | `20261102057000_estado_anulacion_cancelada.sql` (candidato combinado) |
+| `20261030033217` | `ajuste_inventario_dedup_retorno` | `20261102058000_ajuste_inventario_dedup_retorno.sql` |
+| `20261030034328` | `maestros_tesoreria_comisiones_schema` | `20261103060000_maestros_tesoreria_comisiones_schema.sql` |
+| `20261030034434` | `maestros_tesoreria_comisiones_funciones` | `20261103061000_maestros_tesoreria_comisiones_funciones.sql` |
+| `20261031003710` | `logistica_flota_base` | `20261105090000_logistica_flota_base.sql` |
+| `20261031003718` | `metas_objetivos` | `20261103000000_metas_objetivos.sql` |
+| `20261031003725` | `logistica_despachos` | `20261104010000_despachos.sql` (candidato con otro nombre) |
+| `20261031003731` | `bitacora_operaciones` | `20261104020000_bitacora_operaciones.sql` |
+| `20261031003734` | `seguimiento_despachos` | `20261104030000_seguimiento_despachos.sql` |
+| `20261031003743` | `metas_ventas_automaticas` | `20261104040000_metas_ventas_automaticas.sql` |
+| `20261031003755` | `vendedor_turno_sucursal` | `20261104050000_vendedor_turno_sucursal.sql` |
+| `20261031003802` | `caja_vendedor_asignado` | `20261104060000_caja_vendedor_asignado.sql` |
+| `20261031003945` | `metas_logistica_permisos` | `20261105091000_metas_logistica_permisos.sql` |
+| `20261102173405` | `restaurar_modelo_a_compras` | `20261102060000_restaurar_modelo_a_compras.sql` |
+| `20261102173411` | `inventario_kardex_ec` | `20261119000001_inventario_kardex_ec.sql` |
+| `20261102173941` | `compras_abrir_solicitud_v2` | `20261119000002_compras_abrir_solicitud_v2.sql` |
+| `20261102174209` | `compras_fix_seleccion_oferta` | `20261119000003_compras_fix_seleccion_oferta.sql` |
+| `20261104090001` | `monedas_tipo_cambio_venta` | `20261119000004_monedas_tipo_cambio_venta.sql` |
+| `20261104090725` | `monedas_lectura_configuracion` | `20261119000005_monedas_lectura_configuracion.sql` |
+| `20261104091110` | `ventas_moneda_tipo_cambio` | `20261119000006_ventas_moneda_tipo_cambio.sql` |
+| `20261106185226` | `ventas_cobro_pedido` | `20261119000007_ventas_cobro_pedido.sql` |
+| `20261109194031` | `integracion_correcciones_logica_seguridad` | `20261119000008_integracion_correcciones_logica_seguridad.sql` |
+| `20261109195613` | `recepcion_compras_pendientes` | `20261119000009_recepcion_compras_pendientes.sql` |
+| `20261109202148` | `sincronizar_compra_venta_al_pagar` | `20261119000010_sincronizar_compra_venta_al_pagar.sql` |
+
+Las diez candidatas fechadas el 19 de noviembre son posteriores al historial remoto actual. No ejecutarlas: primero comparar sus objetos con el esquema restaurado y comprobar si son versiones reconstruidas de cambios ya aplicados con otra marca temporal. Los otros diez archivos que eran posteriores al corte remoto anterior tampoco se consideran pendientes por su fecha solamente: `20261110000000_recepcion_devolucion_completa`, `20261111000000_creditos_reposicion_cierre_compra`, `20261112000000_contratos_marco_esquema_activacion`, `20261113000000_contratos_liberaciones_cupo`, `20261114000000_cierre_contrato_compra`, `20261115000000_importaciones_carpetas_gastos_prorrateo`, `20261116000000_importacion_estados_gastos_nacionalizacion`, `20261117000000_evaluaciones_proveedor_por_orden`, `20261118000000_fix_import_product_mapping` y `20261119000000_ventas_integrales`. `20261113000000_contratos_liberaciones_cupo` ya no es posterior a la versión remota actual, pero sigue sin coincidir por versión; la fecha tampoco demuestra equivalencia.
+
+La migración `20261113035956_ec_consultar_valorizacion_peps_actual_v1.sql` se creó con la CLI, se probó en la copia PostgreSQL 17.5 dentro de una transacción revertida y luego se aplicó con `apply_migration`. Supabase la registró bajo la misma versión y el archivo local se renombró para coincidir. Después se verificaron su definición, `SECURITY INVOKER`, `search_path`, ACL (`anon=false`, `authenticated=true`) y cuentas/perfiles. Una prueba remota temporal como rol `authenticated`, revertida, recibió 3 ubicaciones: 1 valorizada y 2 con incidencias. No se insertaron ni modificaron filas.
+
+La migración `20261113043804_persistent_operational_notifications.sql` se probó en PostgreSQL local dentro de una transacción revertida con dos identidades ficticias. La prueba confirmó lectura propia, rechazo de escritura para otra identidad y bloqueo del RPC sin permiso del módulo. Aplicada en Supabase, creó una tabla con RLS y tres políticas, junto a una RPC `SECURITY INVOKER`; la ejecución para `anon` es falsa y para `authenticated` verdadera. Se comparó el registro remoto con el archivo local de la misma versión. Después, `auth.users` y `public.usuarios` siguieron en 10; `public.notificaciones` quedó en cero filas. El asesor mantuvo los conteos previos: 11 avisos informativos de RLS sin políticas en tablas cerradas, una extensión en `public`, 72 funciones `SECURITY DEFINER` expuestas a `authenticated` y la protección de contraseñas filtradas desactivada; no reportó problemas de salud.
+
+### Aprobaciones V1 aplicada y verificada — 13 de noviembre de 2026
+
+Se creó con la CLI para la política V1 confirmada y se alineó su archivo local con el número remoto: `supabase/migrations/20261113113300_20261113051710_approvals_purchase_and_inventory_v1.sql`. La migración añade la bandeja y sus eventos con RLS; agrega `aprobaciones:ver/aprobar`; requiere una persona Gerente o Administrador distinta del solicitante; registra snapshots y motivo de rechazo; enruta órdenes manuales, conversiones de ofertas, liberaciones de contrato y conteos físicos con diferencias por RPC transaccionales. Los cierres de conteo sin diferencia usan una RPC separada que no crea movimientos. También elimina políticas de escritura de `compras` y `detalle_compras`, revoca escrituras directas a `authenticated`, mantiene lectura y bloquea los escritores internos legados. La carga CSV histórica queda separada bajo `compras:importar`.
+
+**Estado del remoto:** Supabase aplicó la migración individualmente y la registró como versión `20261113113300`; no se utilizó `db push` ni se reparó el historial. La verificación posterior confirmó 121/121 tablas públicas y seis tablas privadas con RLS; una política SELECT en cada tabla de aprobaciones; escrituras directas denegadas; RPC de solicitud/decisión permitidas a `authenticated`, denegadas a `anon`, con `auth.uid()`, permisos y `search_path` fijado. Las funciones escritoras directas quedaron revocadas. Las tablas nuevas están vacías; `auth.users` y `public.usuarios` continúan en 10 filas cada una. No se modificaron filas de negocio.
+
+### Verificación posterior al despliegue — 13 de noviembre de 2026
+
+Esta actualización añade evidencia del corte remoto posterior al despliegue. La primera solicitud de aplicación expiró dos veces; tras la confirmación del usuario, la tercera se ejecutó correctamente. Una consulta posterior confirmó los objetos, privilegios, RLS y cuentas.
+
+- En el corte posterior a aprobaciones, el inventario contenía 103 archivos SQL y el remoto 56 versiones, última `20261113120316`. Ese snapshot precede a Tesorería/Caja y saneamiento RLS; el cruce vigente con 105 archivos y 58 versiones está documentado al inicio. La deriva histórica restante no se ejecuta ni repara en lote.
+- La prueba local confirmó que el formulario envía `proveedor_productos.id`, no `productos.id`. La solicitud manual ahora valida que cada artículo pertenezca al proveedor y esté vinculado al producto maestro antes de generar el snapshot. La línea aprobada conserva el vínculo de catálogo al crear la orden.
+- La migración y el flujo se probaron en un clon aislado PostgreSQL 17.5 con identidades sintéticas: el solicitante solo leyó sus solicitudes, la autoaprobación se rechazó, un gerente distinto creó la orden, la línea quedó enlazada y se registraron los eventos de solicitud/decisión. La escritura directa a `compras` y la ejecución directa del RPC escritor quedaron denegadas. Después del `ROLLBACK`, Auth, perfiles, proveedores, productos, órdenes y solicitudes QA permanecieron en cero en el clon.
+- La suite local y la compilación pasan con el código de esta entrega. La inspección posdespliegue de aprobaciones verificó las seis RPC, guardias/ACL y las dos tablas RLS. La prueba de interfaz con usuarios autenticados reales sigue pendiente; no se crearon usuarios QA ni documentos en el proyecto remoto.
+- La migración `20261113120316_approval_notifications_inbox_v1` se aplicó por separado. El catálogo confirma el nuevo valor `approvals`, políticas SELECT/UPDATE con `aprobaciones:ver`, la política INSERT sin permisos para ese origen, y los triggers posteriores a solicitud y decisión. El helper privado tiene `search_path` fijado y no es ejecutable desde la API. Una prueba dinámica en SQL verificó destinatarios, aprobación, rechazo, documento obsoleto e idempotencia; eliminó sus filas temporales al final. Las 10 cuentas y perfiles siguen presentes y no se alteraron filas comerciales. La prueba UI/RPC con una sesión autenticada real sigue pendiente.
+- Los asesores tras ambas migraciones no presentan hallazgos nuevos. La advertencia de funciones `SECURITY DEFINER` sigue en 73; las RPC de aprobación requieren `auth.uid()`/`tiene_permiso` y no son ejecutables por `anon`. Rendimiento conserva 118 FKs sin índice, seis grupos de políticas permisivas y un índice redundante; 92 índices sin uso (incluye los cinco índices de aprobación en tablas vacías).
+
+### Tesorería y cierre de caja multimoneda aplicados — 13 de noviembre de 2026
+
+La migración `20261113132238_tesoreria_moneda_y_cierre_multimoneda_v1.sql` se aplicó individualmente después de verificar que las cuentas Auth/perfiles continuaban en 10/10, que los movimientos históricos eran conciliables y que seis filas existentes tenían una moneda común, suma exacta y tipo compatible. Durante el despliegue entraron movimientos nuevos; la lectura posterior registró 8 movimientos en total, 7 PEN, 1 USD y 0 sin moneda. No se eliminaron cuentas ni movimientos.
+
+La migración agrega la moneda del movimiento, montos iniciales y conteo USD, esperado/descuadre por moneda y dos RPC públicas con envoltura `SECURITY INVOKER`. Los helpers privados tienen `search_path` vacío y verifican sesión/permisos. El cierre bloquea el turno al contar, rechaza efectivo sin moneda y guarda el arqueo en una transacción; las escrituras directas autenticadas sobre `caja_turnos` se revocaron. RLS continúa activo (121/121 tablas públicas y 6/6 privadas), SELECT se conserva y el asesor no reporta hallazgos nuevos. Supabase confirmó ejecución pública de las RPC solo para `authenticated`, y no para `anon`; `registrar_pago_parcial` continúa sin ejecución directa desde roles API. Se solicitó recarga del esquema PostgREST.
+
+**Verificación local:** `npm run typecheck`, `npm test` (94 pruebas), `npm run build` y `git diff --check` pasaron. Falta QA desde una sesión real para abrir/cerrar un turno y recorrer el flujo de Caja en interfaz; no se modificó el turno abierto actual para no alterar datos operativos.
+
+### Limpieza comprobada de avisos RLS e índice — 13 de noviembre de 2026
+
+Antes de la migración se compararon las seis políticas reportadas por el asesor y ambos índices de `contratos_compra.codigo`. El índice `contratos_compra_codigo_key` pertenece a la restricción única; `contratos_compra_codigo_unico_idx` era una copia exacta y no respaldaba otra restricción. Se eliminó únicamente el duplicado. En `clientes` y `productos`, los predicados SELECT se unificaron como la misma disyunción de permisos. En cuatro tablas de comisiones, la política `ALL` permitía también SELECT con `ventas:editar`; se conservó ese acceso de lectura y se dividieron sus operaciones de escritura en INSERT/UPDATE/DELETE con el mismo permiso `ventas:editar`.
+
+La migración `20261113144509_seguridad_rls_y_indice_duplicado_v1.sql` quedó aplicada. Después, el asesor dejó de reportar los seis grupos permisivos y el índice duplicado; la lectura confirmó 121/121 tablas públicas con RLS, el índice duplicado ausente, 270 políticas y `auth.users=10`/`public.usuarios=10`. `git diff --check` pasó. No se cambiaron filas ni permisos efectivos.
+
+### Disposición segura para continuar
+
+La copia restaurada del esquema remoto, sin filas comerciales ni cuentas, es la base local para desarrollar y verificar migraciones nuevas. El historial local antiguo se conserva sin reescribir; los candidatos se marcan equivalentes solo después de comparar objetos/definiciones y permisos. Cada cambio nuevo debe ser monotónico, crearse con la CLI, probarse contra esta base aislada, compararse contra sus dependencias reales en el remoto y aplicarse de una en una después de verificar nuevamente la cantidad de cuentas Auth. La migración de valoración PEPS siguió este camino. Esto no vuelve segura la reproducción del historial divergente. La restauración del esquema no implica una copia de Auth, Storage, Edge Functions, configuración ni secretos.
+
+### Cambio de reporte verificado en el corte
+
+En el código, el filtro de fechas se aplicaba a los registros de inventario y finanzas cargados. Eso mezclaba un rango de actividad con cifras de saldo actual y podía ocultar stock o cuentas abiertas creadas fuera del período. `ReportsPage` ahora filtra por fecha únicamente ventas y compras; el inventario valorizado y las cuentas abiertas usan todos los saldos actuales. `ModuloPage` y `MasterDirectory` aceptan una opción local para mantener la misma definición en el detalle, sin cambiar el comportamiento de otras rutas. La valoración PEPS real ahora proviene del RPC remoto y oculta el total si faltan saldos conciliables. La suite local actual pasa 68 pruebas, la compilación de producción termina y `git diff --check` no encuentra errores de contenido.

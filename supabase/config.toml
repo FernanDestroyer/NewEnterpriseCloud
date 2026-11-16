@@ -4,6 +4,12 @@
 # working directory name when running `supabase init`.
 project_id = "NewEnterpriseCloud"
 
+[functions.peru-document-lookup]
+verify_jwt = true
+
+[functions.project-analyzer]
+verify_jwt = true
+
 [api]
 enabled = true
 # Port to use for the API URL.

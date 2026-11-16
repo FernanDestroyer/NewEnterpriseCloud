@@ -44,7 +44,8 @@ function metaRow(analysis: AnalyzerReport) {
   const label = Number.isNaN(when.getTime())
     ? analysis.generatedAt
     : when.toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric' })
-  return `Fuente: ${esc(analysis.source.kind === 'zip' ? 'Paquete ZIP' : 'Repositorio enlace')} · ${esc(analysis.source.origin)} · Archivos: ${analysis.stats.files} · Generado: ${esc(label)}`
+  const analyzed = analysis.coverage ? ` · Rutas recibidas: ${analysis.coverage.filesSent} · Texto leído: ${analysis.coverage.textFilesSent}/${analysis.coverage.textFilesAvailable}` : ''
+  return `Fuente: ${esc(analysis.source.kind === 'zip' ? 'Paquete ZIP' : 'Repositorio enlace')} · ${esc(analysis.source.origin)} · Archivos: ${analysis.stats.files} · Motor v${analysis.analysisVersion}${esc(analyzed)} · Generado: ${esc(label)}`
 }
 
 export function renderAnalyzerReport(analysis: AnalyzerReport, logoUrl?: string | null): string {
@@ -94,6 +95,7 @@ ol.findings .reco { color: #1f2c3d; }
 <div class="rings">${scoreRing('Puntuación general', analysis.scores.total)}${scoreRing('Seguridad', analysis.scores.security)}${scoreRing('Escalabilidad', analysis.scores.scalability)}${scoreRing('Preparación cloud', analysis.scores.cloudReadiness)}</div>
 <p class="headline" style="margin-top:14px"><b>Proyecto:</b> ${esc(analysis.name)}</p>
 <p class="headline">${esc(summary)}</p>
+${analysis.coverage ? `<p class="meta" style="margin-top:8px">Cobertura: se enviaron ${analysis.coverage.filesSent} rutas y el contenido de ${analysis.coverage.textFilesSent} de ${analysis.coverage.textFilesAvailable} archivos de texto. ${analysis.coverage.bytesTotalKnown === false ? 'El proveedor no informa el tamaño total del repositorio. ' : ''}${analysis.coverage.inventoryComplete === false ? 'El inventario remoto quedó incompleto por el límite del proveedor. ' : ''}Las reglas son heurísticas y este informe no sustituye una revisión integral.</p>` : ''}
 ${analysis.stack.length ? `<p class="meta" style="margin-top:2px">Stack detectado:</p><div class="stack">${analysis.stack.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}
 <p class="meta" style="margin:10px 0 0">Carpeta de referencia: ${esc(metaRow(analysis))} · Idiomas principales: ${esc(analysis.stats.languages.join(', ') || 'no identificados')}</p>
 <h2>Seguridad · hallazgos y recomendaciones</h2>${findingRows(sortingFindings(analysis.findings, 'Seguridad'))}

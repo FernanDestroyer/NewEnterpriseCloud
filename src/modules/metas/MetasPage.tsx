@@ -12,6 +12,7 @@ import { ALCANCES, calcularAvance, fechaLima, ESTADOS_META, formatearValor, mens
 import { crearMetasService, type MetasService } from './service'
 import { obtenerAlmacenVerificado } from './db'
 import AvanceGrafico from './AvanceGrafico'
+import { PageHeader } from '../../components/ui/PageHeader'
 import type { Asignacion, AvanceFila, Corte, Meta } from './types'
 
 type Pestana = 'definicion' | 'avance' | 'ranking'
@@ -165,15 +166,18 @@ export default function MetasPage() {
       : []
 
   return <div className="ws-metas-page">
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">GESTIÓN COMERCIAL</span>
-      <h1>{pestana === 'definicion' ? 'Definición y asignación de metas' : pestana === 'avance' ? 'Avance por vendedor, sucursal o producto' : 'Ranking y alertas de cumplimiento'}</h1>
-      <p>{pestana === 'definicion' ? 'Crea la meta general y repártela en cuotas para cada vendedor, sucursal o producto.'
+    <PageHeader
+      icon={Target}
+      section="Gestión comercial"
+      title={pestana === 'definicion' ? 'Definición y asignación de metas' : pestana === 'avance' ? 'Avance por vendedor, sucursal o producto' : 'Ranking y alertas de cumplimiento'}
+      description={pestana === 'definicion' ? 'Crea la meta general y repártela en cuotas para cada vendedor, sucursal o producto.'
         : pestana === 'avance' ? 'Mira cuánto lleva logrado cada responsable frente a su cuota y a lo que debería llevar a hoy.'
-        : 'Quién va primero entre los vendedores y qué asignaciones van atrasadas y necesitan atención.'}</p></div>
-      <div className="ws-heading-actions">
+        : 'Quién va primero entre los vendedores y qué asignaciones van atrasadas y necesitan atención.'}
+      actions={<>
         <button className="ws-button ws-button-secondary" type="button" disabled={cargando} onClick={recargar}><RefreshCw size={16} className={cargando ? 'ws-spin' : ''} />Actualizar</button>
         {permisos.crear && servicio && botones.map(boton => <button key={boton.label} className="ws-button" type="button" onClick={boton.abrir}><Plus size={16} />{boton.label}</button>)}
-      </div></section>
+      </>}
+    />
     {permisos.ver && servicio?.origen === 'navegador' && <div className="ws-notice" role="status"><AlertTriangle size={18} /><span><b>Las tablas de Metas aún no están disponibles en tu base de datos.</b> Ejecuta la migración <code>20261103000000_metas_objetivos.sql</code> en el SQL Editor de Supabase para compartirlas con el equipo; mientras tanto se guardan en este navegador.</span></div>}
     {error && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={18} /><span>{error}</span><button className="ws-text-button" type="button" onClick={recargar}>Reintentar</button></div>}
     {pestana === 'ranking' && alertas.length > 0 && <div className="ws-notice ws-notice-warning" role="status"><AlertTriangle size={18} /><span><b>{alertas.length} {alertas.length === 1 ? 'asignación requiere atención' : 'asignaciones requieren atención'}:</b> avanzan por debajo del ritmo esperado del periodo.</span></div>}

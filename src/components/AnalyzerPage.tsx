@@ -6,6 +6,7 @@ import { formatBytes, scoreTone, severityTone, type AnalyzerArea, type AnalyzerR
 import { fetchAnalysisHistory, analyzerCsvRows, ANALYSIS_CSV_HEADER, analyzeRepositoryLink, analyzeZipArchive, deleteAnalysisById, exportAnalyzerReport, saveAnalysisReport, type AnalysisRow } from '../services/analyzer'
 import { displayDate } from '../data/workspace'
 import { csvContent, downloadCsv } from '../data/exports'
+import { PageHeader } from './ui/PageHeader'
 
 type AnalysisTab = 'todo' | AnalyzerArea
 type AnalyzerView = 'analizar' | 'historial'
@@ -15,7 +16,9 @@ type HistoryDetail = {
   stack?: string[]
   idiomas?: string[]
   tamano?: number
+  versionMotor?: number
   versionAnalisis?: number
+  cobertura?: AnalyzerReport['coverage']
 }
 
 function sourceLabel(kind: AnalysisRow['fuente']) {
@@ -25,6 +28,7 @@ function sourceLabel(kind: AnalysisRow['fuente']) {
 function rebuildReport(row: AnalysisRow): AnalyzerReport {
   const detail = (row.detalle ?? {}) as HistoryDetail
   return {
+    analysisVersion: detail.versionMotor ?? 1,
     name: row.nombre,
     source: { kind: row.fuente, origin: row.origen },
     generatedAt: row.created_at,
@@ -33,6 +37,7 @@ function rebuildReport(row: AnalysisRow): AnalyzerReport {
     findings: (row.hallazgos ?? []) as AnalyzerReport['findings'],
     awsRecommendations: detail.versionAnalisis === 2 ? (row.servicios ?? []) as AwsRecommendation[] : [],
     recommendationsVersion: detail.versionAnalisis ?? 1,
+    coverage: detail.cobertura,
     scores: {
       security: row.puntuacion_seguridad,
       scalability: row.puntuacion_escalabilidad,
@@ -55,6 +60,7 @@ export default function AnalyzerPage() {
   const [tab, setTab] = useState<AnalysisTab>('todo')
   const [source, setSource] = useState<'zip' | 'enlace'>('zip')
   const [link, setLink] = useState('')
+  const [consent, setConsent] = useState(false)
   const [running, setRunning] = useState(false)
   const [step, setStep] = useState('')
   const [error, setError] = useState('')
@@ -96,6 +102,10 @@ export default function AnalyzerPage() {
 
   const runZip = async (file: File) => {
     if (running) return
+    if (!consent) {
+      setError('Confirma primero que autorizas el envío de los archivos seleccionados al endpoint de análisis de tu proyecto Supabase.')
+      return
+    }
     setRunning(true)
     setError('')
     setStep('Validando archivo…')
@@ -109,6 +119,7 @@ export default function AnalyzerPage() {
   }
 
   const chooseZip = (files: FileList | null) => {
+    if (!consent) return
     const file = files?.[0]
     if (!file) return
     if (!/\.zip$/i.test(file.name) && file.type !== 'application/zip') {
@@ -121,6 +132,10 @@ export default function AnalyzerPage() {
   const submitLink = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (running || !link.trim()) return
+    if (!consent) {
+      setError('Confirma primero el envío de los archivos seleccionados a la API de análisis de Supabase.')
+      return
+    }
     setError('')
     setRunning(true)
     void analyzeRepositoryLink(link, { onStep: setStep })
@@ -206,26 +221,34 @@ export default function AnalyzerPage() {
   const criticalCount = report?.findings.filter(finding => finding.severity === 'Critica').length ?? 0
 
   return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">DESARROLLO / TECNOLOGÍA</span><h1>Analizador de proyectos</h1><p>Comparte un ZIP o el enlace de un repositorio y evalúa seguridad, escalabilidad y servicios AWS con recomendaciones accionables.</p></div><div className="ws-heading-actions">{mainTab === 'analizar' && report && <button className="ws-button ws-button-secondary" disabled={running} onClick={exportCsv}><Boxes size={16} />Descargar CSV</button>}{mainTab === 'analizar' && report && <button className="ws-button ws-button-secondary" disabled={running || busyRow === 'print'} onClick={printReport}><Printer size={16} />{busyRow === 'print' ? 'Preparando…' : 'Imprimir informe'}</button>}{mainTab === 'analizar' && report && can('analizador', 'crear') && <button className="ws-button" disabled={running || busyRow === 'save'} onClick={() => void saveToSupabase()}><Save size={16} />{busyRow === 'save' ? 'Guardando…' : 'Guardar análisis'}</button>}</div></section>
+    <PageHeader
+      icon={ScanSearch}
+      section="Desarrollo / Tecnología"
+      title="Analizador de proyectos"
+      description="Comparte un ZIP o el enlace de un repositorio y evalúa seguridad, escalabilidad y servicios AWS con recomendaciones accionables."
+      actions={<>{mainTab === 'analizar' && report && <button className="ws-button ws-button-secondary" disabled={running} onClick={exportCsv}><Boxes size={16} />Descargar CSV</button>}{mainTab === 'analizar' && report && <button className="ws-button ws-button-secondary" disabled={running || busyRow === 'print'} onClick={printReport}><Printer size={16} />{busyRow === 'print' ? 'Preparando…' : 'Imprimir informe'}</button>}{mainTab === 'analizar' && report && can('analizador', 'crear') && <button className="ws-button" disabled={running || busyRow === 'save'} onClick={() => void saveToSupabase()}><Save size={16} />{busyRow === 'save' ? 'Guardando…' : 'Guardar análisis'}</button>}</>}
+    />
     <div className="ws-tabs an-main-tabs" role="tablist" aria-label="Secciones del analizador">
       <button id="an-tab-analizar" role="tab" aria-selected={mainTab === 'analizar'} aria-controls="an-panel-analizar" onClick={() => setMainTab('analizar')}><ScanSearch size={14} />Analizar</button>
       <button id="an-tab-historial" role="tab" aria-selected={mainTab === 'historial'} aria-controls="an-panel-historial" onClick={() => setMainTab('historial')}><History size={14} />Historial de análisis{history.length > 0 && <b>{history.length}</b>}</button>
     </div>
     {mainTab === 'analizar' ? <div className="an-layout" id="an-panel-analizar" role="tabpanel" aria-labelledby="an-tab-analizar">
     {error && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={18} /><span>{error}</span></div>}
-    <section className="ws-card"><div className="ws-card-heading"><div><h2>Origen del análisis</h2><p>Los archivos no salen de tu navegador, salvo la lectura del repositorio público indicado.</p></div><ScanSearch size={19} /></div>
+    <section className="ws-card"><div className="ws-card-heading"><div><h2>Origen del análisis</h2><p>La evaluación se ejecuta mediante una API autenticada de tu proyecto Supabase.</p></div><ScanSearch size={19} /></div>
       <div className="ws-form">
+      <label className="an-consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} disabled={running} /><span>Autorizo enviar a Supabase las rutas y el contenido de texto seleccionado para generar el informe. El código no se almacena; solo se guarda el informe si después elijo «Guardar análisis».</span></label>
+      <p className="relation-hint"><Info size={15} />No se envía a un proveedor externo de IA. Se priorizan archivos de configuración y código; por solicitud se procesan como máximo 2.000 rutas y 700 KB de texto. Los archivos fuente permanecen en el navegador hasta aceptar.</p>
       <div className="ws-tabs" role="tablist" aria-label="Origen del análisis">
         <button role="tab" aria-selected={source === 'zip'} onClick={() => setSource('zip')}>Subir ZIP</button>
         <button role="tab" aria-selected={source === 'enlace'} onClick={() => setSource('enlace')}>Analizar enlace</button>
       </div>
       {source === 'zip' ? (
         <div className={`an-uploader${dragging ? ' is-dragging' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onDragLeave={() => setDragging(false)}>
-          <input ref={inputRef} type="file" accept=".zip,application/zip" onChange={onFileChange} disabled={running} hidden />
+          <input ref={inputRef} type="file" accept=".zip,application/zip" onChange={onFileChange} disabled={running || !consent} hidden />
           <span className="an-uploader-icon"><Upload size={26} /></span>
           <strong>Arrastra tu ZIP o elige el archivo</strong>
-          <small>Hasta 60 MB · se ignoran dependencias (node_modules, .venv) y contenido binario en profundidad</small>
-          <button className="ws-button" type="button" disabled={running} onClick={() => inputRef.current?.click()}>Elegir archivo</button>
+          <small>Hasta 60 MB · se ignoran dependencias (node_modules, .venv) y contenido binario. Para proyectos grandes se priorizan los archivos relevantes.</small>
+          <button className="ws-button" type="button" disabled={running || !consent} onClick={() => inputRef.current?.click()}>Elegir archivo</button>
         </div>
       ) : (
         <form className="an-link-form" onSubmit={submitLink}>
@@ -233,7 +256,7 @@ export default function AnalyzerPage() {
             <label>Enlace del repositorio público
               <input value={link} onChange={event => setLink(event.target.value)} placeholder="https://github.com/usuario/repo" inputMode="url" disabled={running} />
             </label>
-            <button className="ws-button" type="submit" disabled={running || !link.trim()}><Link2 size={16} />{running ? 'Analizando…' : 'Analizar repositorio'}</button>
+            <button className="ws-button" type="submit" disabled={running || !link.trim() || !consent}><Link2 size={16} />{running ? 'Analizando…' : 'Analizar repositorio'}</button>
           </div>
           <p className="relation-hint"><Info size={15} />Compatible con GitHub y GitLab públicos (rama por defecto). Para otros orígenes, descarga el ZIP y súbelo.</p>
         </form>
@@ -252,7 +275,7 @@ export default function AnalyzerPage() {
             <ScoreCard title="Escalabilidad" score={report.scores.scalability} detail={`${report.findings.filter(finding => finding.area === 'Escalabilidad').length} hallazgos`} icon={Boxes} />
             <ScoreCard title="Preparación cloud" score={report.scores.cloudReadiness} detail="Despliegue, infraestructura, CI y pruebas" icon={Cloud} />
           </div>
-          <div className="an-summary-foot"><span><strong>{report.stats.files}</strong> archivos · {formatBytes(report.stats.bytes)}</span>{report.stack.length > 0 && <span className="an-stack">{report.stack.map(item => <code key={item}>{item}</code>)}</span>}{report.stats.languages.length > 0 && <span className="an-languages"><Info size={13} />{report.stats.languages.join(' · ')}</span>}</div>
+          <div className="an-summary-foot"><span><strong>{report.stats.files}</strong> archivos · {formatBytes(report.stats.bytes)}{report.coverage?.bytesTotalKnown === false ? ' representados en la API' : ' en el inventario'} · motor v{report.analysisVersion}</span>{report.coverage && <span className="an-coverage"><Info size={13} />API: {report.coverage.filesSent} rutas recibidas; texto de {report.coverage.textFilesSent} de {report.coverage.textFilesAvailable} archivos.{report.coverage.bytesTotalKnown === false ? ' El proveedor no informa el tamaño total del repositorio.' : ''}{report.coverage.inventoryComplete === false ? ' El inventario remoto quedó incompleto por el límite del proveedor.' : ''}</span>}{report.stack.length > 0 && <span className="an-stack">{report.stack.map(item => <code key={item}>{item}</code>)}</span>}{report.stats.languages.length > 0 && <span className="an-languages"><Info size={13} />{report.stats.languages.join(' · ')}</span>}</div>
         </section>
         <section className="ws-card"><div className="ws-card-heading"><div><h2>Servicios AWS recomendados</h2><p>Opciones sugeridas según el stack y las señales encontradas; cada recomendación explica su motivo.</p></div><Cloud size={19} /></div>
           <div className="ws-form">{report.awsRecommendations.length ? <div className="an-aws-list">{report.awsRecommendations.map(recommendation => <article className="an-aws" key={recommendation.service}><span className="ws-soft-icon blue"><Cloud size={17} /></span><span className="an-aws-copy"><span className="an-aws-title"><strong>{recommendation.service}</strong><em className={`an-priority ${recommendation.priority.toLocaleLowerCase('es')}`}>{recommendation.priority}</em></span><small>{recommendation.category}</small><p>{recommendation.reason}</p>{recommendation.signals.length > 0 && <span className="an-aws-signals">Señales: {recommendation.signals.join(' · ')}</span>}</span></article>)}</div> : report.recommendationsVersion !== 2 ? <p className="relation-hint"><Info size={15} />Este análisis histórico se generó antes de incluir recomendaciones AWS. Vuelve a analizar el proyecto para obtener sugerencias basadas en su stack.</p> : <p className="relation-hint"><Info size={15} />No hay suficientes señales para sugerir un servicio concreto. Confirma el tipo de aplicación, dónde necesita ejecutarse y qué servicios de datos o archivos requiere.</p>}</div>

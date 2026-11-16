@@ -1,4 +1,5 @@
 import { requireSupabase } from '../lib/supabase'
+import { buildPepsValuationSnapshot, type PepsLedgerSnapshot, type PepsValuationSnapshot } from '../data/inventoryPeps'
 
 export type InventoryStock = {
   producto_id: string
@@ -72,6 +73,37 @@ export async function loadInventoryKardex(filters: {
     .range(from, from + filters.pageSize - 1)
   if (error) throw error
   return { rows: (data ?? []) as InventoryMovement[], total: count ?? 0 }
+}
+
+/** Snapshot PEPS actual comparado con el stock físico de cada almacén. */
+export async function loadInventoryPepsValuation(): Promise<PepsValuationSnapshot> {
+  const client = requireSupabase()
+  const [warehouses, firstPage] = await Promise.all([
+    loadInventoryWarehouses(),
+    client.rpc('ec_consultar_valorizacion_peps_actual_v1', {}, { count: 'exact' })
+      .order('almacen_id').order('producto_id').range(0, PAGE_SIZE - 1),
+  ])
+  if (firstPage.error) throw firstPage.error
+  const rows = [...(firstPage.data ?? []) as Array<{
+    producto_id: string
+    almacen_id: string
+    stock_fisico: number
+    saldo_unidades: number | null
+    saldo_peps: number | null
+    problema: PepsLedgerSnapshot['problema']
+  }>]
+  const pages = Math.ceil((firstPage.count ?? rows.length) / PAGE_SIZE)
+  for (let page = 1; page < pages; page += 1) {
+    const result = await client.rpc('ec_consultar_valorizacion_peps_actual_v1', {}, { count: 'exact' })
+      .order('almacen_id').order('producto_id').range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    if (result.error) throw result.error
+    rows.push(...(result.data ?? []) as typeof rows)
+  }
+  const names = new Map(warehouses.map(warehouse => [warehouse.id, warehouse.nombre]))
+  return buildPepsValuationSnapshot(
+    rows.map(row => ({ producto_id: row.producto_id, almacen_id: row.almacen_id, stock_fisico: Number(row.stock_fisico), almacen_nombre: names.get(row.almacen_id) ?? 'Almacén sin nombre' })),
+    rows.map(row => ({ producto_id: row.producto_id, almacen_id: row.almacen_id, saldo_unidades: row.saldo_unidades === null ? null : Number(row.saldo_unidades), saldo_peps: row.saldo_peps === null ? null : Number(row.saldo_peps), problema: row.problema })),
+  )
 }
 
 export function inventoryQueryError(error: unknown): string {

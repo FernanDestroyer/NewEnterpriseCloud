@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, ClipboardCheck, Search, Star } from 'lucide-react'
+import { Award, ChevronLeft, ChevronRight, ClipboardCheck, Search, Star } from 'lucide-react'
+import '../purchases-ui.css'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import SupplierOrderEvaluationPanel from './SupplierOrderEvaluationPanel'
 import SupplierEvaluationRating from './SupplierEvaluationRating'
+import { PageHeader } from './ui/PageHeader'
 
 const PAGE_SIZE = 12
 
@@ -26,8 +28,13 @@ export default function SupplierEvaluationsPage() {
 
   if (!can('purchases','ver')) return <section className="ws-card"><div className="ws-empty-compact"><ClipboardCheck size={24}/><strong>No tienes permiso para consultar evaluaciones de proveedores.</strong></div></section>
 
-  return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">COMPRAS · CALIDAD DE PROVEEDORES</span><h1>Evaluación de proveedores</h1><p>Selecciona una orden con recepción parcial o completa para consultar o registrar su evaluación.</p></div></section>
+  return <div className="ec-purchases">
+    <PageHeader
+      icon={Award}
+      section="Compras · Calidad de proveedores"
+      title="Evaluación de proveedores"
+      description="Selecciona una orden con recepción parcial o completa para consultar o registrar su evaluación."
+    />
     <section className="ws-card ws-supplier-evaluation-filter"><label className="ws-table-search"><Search size={15}/><input value={query} onChange={event=>{setQuery(event.target.value);setPage(0);setSelectedId(null)}} placeholder="Buscar orden, proveedor o código…" aria-label="Buscar orden o proveedor"/></label><span>{eligibleOrders.length} órdenes elegibles</span></section>
     <section className="ws-card ws-supplier-evaluation-list"><div className="table-scroll"><table className="record-table"><thead><tr><th>Orden de compra</th><th>Proveedor</th><th>Recepción</th><th>Importe</th><th>Promedio histórico</th><th></th></tr></thead><tbody>
       {visibleOrders.map(order => <tr key={order.rowId} className={selectedId===order.rowId?'is-selected':''}>
@@ -43,5 +50,5 @@ export default function SupplierEvaluationsPage() {
       {selectedId&&visibleOrders.some(order=>order.rowId===selectedId)&&(()=>{const order=visibleOrders.find(item=>item.rowId===selectedId)!;return <SupplierOrderEvaluationPanel compraId={order.rowId!} proveedorId={order.proveedor_id??null} estadoRecepcion={order.estadoRecepcion} requiereRecepcion={order.requiereRecepcion!==false}/>})()}
       {eligibleOrders.length>PAGE_SIZE&&<div className="ws-pagination"><span>Mostrando {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,eligibleOrders.length)} de {eligibleOrders.length}</span><div><button className="ws-icon-button" type="button" aria-label="Página anterior" disabled={page===0} onClick={()=>{setPage(value=>Math.max(0,value-1));setSelectedId(null)}}><ChevronLeft size={15}/></button><span>{page+1} / {pageCount}</span><button className="ws-icon-button" type="button" aria-label="Página siguiente" disabled={page+1>=pageCount} onClick={()=>{setPage(value=>Math.min(pageCount-1,value+1));setSelectedId(null)}}><ChevronRight size={15}/></button></div></div>}
     </section>
-  </>
+  </div>
 }

@@ -47,7 +47,7 @@ export type RecordItem = {
   updatedAt?: string
   dueAt?: string | null
   amount?: number
-  /** Compras: moneda de la orden y tipo de cambio persistido. */
+  /** Moneda y tipo de cambio persistidos en ventas, compras y obligaciones. */
   moneda?: 'PEN' | 'USD'
   exchangeRate?: number | null
   /** Obligación original para cuentas con abonos; amount representa el saldo abierto. */

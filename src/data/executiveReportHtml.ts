@@ -16,7 +16,7 @@ export type ExecutiveReportBrand = {
 // Deja espacio para razones sociales y conceptos de varias líneas sin cortar filas.
 const SALES_PER_PAGE = 8
 const colors = ['#087f86', '#b27c28', '#6772b8', '#348b67', '#708195']
-const money = (value: number) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', maximumFractionDigits: 2 }).format(value)
+const money = (value: number, currency: 'PEN' | 'USD') => new Intl.NumberFormat('es-PE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
 const number = (value: number) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 }).format(value)
 const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)
 
@@ -145,24 +145,24 @@ function trendChart(report: ExecutiveReport) {
   const ticks = buckets.map((bucket, index) => index === 0 || index === buckets.length - 1 || index % Math.max(1, Math.ceil(buckets.length / 5)) === 0
     ? `<text x="${x(index)}" y="128" text-anchor="middle" font-size="10" fill="#697c8e">${escape(tickLabel(bucket.date))}</text>` : '').join('')
   const dots = buckets.map((bucket, index) => `<circle cx="${x(index)}" cy="${y(bucket.sales)}" r="${buckets.length > 25 ? 1.8 : 3}" fill="#087f86" stroke="#fff" stroke-width="1"/>`).join('')
-  return `<svg class="trend-svg" viewBox="0 0 615 140" role="img" aria-label="Evolución de ventas y compras"><defs><linearGradient id="sales-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#087f86" stop-opacity=".18"/><stop offset="100%" stop-color="#087f86" stop-opacity=".01"/></linearGradient></defs>${grid}<path d="${points('sales')} L${x(buckets.length - 1)},106 L${x(0)},106 Z" fill="url(#sales-fill)"/>${report.purchasesTotal === null ? '' : `<path d="${points('purchases')}" fill="none" stroke="#b27c28" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`}<path d="${points('sales')}" fill="none" stroke="#087f86" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots}${ticks}</svg><div class="chart-note"><span>Importes en soles (PEN) · ${interval === 1 ? 'Agrupación diaria' : `Bloques de ${interval} días`}</span><span>${report.undatedCount ? `${report.undatedCount} ventas sin fecha fuera del gráfico` : 'Fechas originales de registro'}</span></div>`
+  return `<svg class="trend-svg" viewBox="0 0 615 140" role="img" aria-label="Evolución de ventas y compras"><defs><linearGradient id="sales-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#087f86" stop-opacity=".18"/><stop offset="100%" stop-color="#087f86" stop-opacity=".01"/></linearGradient></defs>${grid}<path d="${points('sales')} L${x(buckets.length - 1)},106 L${x(0)},106 Z" fill="url(#sales-fill)"/>${report.purchasesTotal === null ? '' : `<path d="${points('purchases')}" fill="none" stroke="#b27c28" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`}<path d="${points('sales')}" fill="none" stroke="#087f86" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots}${ticks}</svg><div class="chart-note"><span>Importes en ${report.currency} · ${interval === 1 ? 'Agrupación diaria' : `Bloques de ${interval} días`}</span><span>${report.undatedCount ? `${report.undatedCount} ventas sin fecha fuera del gráfico` : 'Fechas originales de registro'}</span></div>`
 }
 
 function salesStatus(report: ExecutiveReport) {
   const complete = report.statuses[0]
   const circumference = 2 * Math.PI * 50
   const filled = circumference * Math.min(100, complete.share) / 100
-  return `<div class="status-layout"><svg class="donut" viewBox="0 0 144 144" role="img" aria-label="${complete.share}% del importe de ventas completado"><circle cx="72" cy="72" r="50" fill="none" stroke="#edf2f5" stroke-width="13"/><circle cx="72" cy="72" r="50" fill="none" stroke="#087f86" stroke-width="13" stroke-dasharray="${filled} ${circumference}" transform="rotate(-90 72 72)"/><text x="72" y="72" text-anchor="middle" font-size="25" font-weight="750" fill="#182b40">${report.salesTotal > 0 ? `${number(complete.share)}%` : '—'}</text><text x="72" y="89" text-anchor="middle" font-size="8" fill="#697c8e">importe completado</text></svg><div class="status-list">${report.statuses.map((status, index) => `<div class="status-entry"><span><i class="dot" style="--dot:${index ? '#b27c28' : '#087f86'}"></i>${status.label}</span><strong>${money(status.amount)}</strong><small>${status.count} ${status.count === 1 ? 'venta' : 'ventas'} · ${number(status.share)}%</small></div>`).join('')}</div></div>`
+  return `<div class="status-layout"><svg class="donut" viewBox="0 0 144 144" role="img" aria-label="${complete.share}% del importe de ventas completado"><circle cx="72" cy="72" r="50" fill="none" stroke="#edf2f5" stroke-width="13"/><circle cx="72" cy="72" r="50" fill="none" stroke="#087f86" stroke-width="13" stroke-dasharray="${filled} ${circumference}" transform="rotate(-90 72 72)"/><text x="72" y="72" text-anchor="middle" font-size="25" font-weight="750" fill="#182b40">${report.salesTotal > 0 ? `${number(complete.share)}%` : '—'}</text><text x="72" y="89" text-anchor="middle" font-size="8" fill="#697c8e">importe completado</text></svg><div class="status-list">${report.statuses.map((status, index) => `<div class="status-entry"><span><i class="dot" style="--dot:${index ? '#b27c28' : '#087f86'}"></i>${status.label}</span><strong>${money(status.amount, report.currency)}</strong><small>${status.count} ${status.count === 1 ? 'venta' : 'ventas'} · ${number(status.share)}%</small></div>`).join('')}</div></div>`
 }
 
-function ranking(entries: ExecutiveReport['customers'], limit: number, palette = false) {
+function ranking(entries: ExecutiveReport['customers'], limit: number, currency: 'PEN' | 'USD', palette = false) {
   if (!entries.length) return '<div class="empty empty-rank">Sin ventas en el período.</div>'
   const shown = entries.slice(0, limit)
   if (entries.length > limit && palette) {
     const others = entries.slice(limit)
     shown.push({ label: 'Otros medios', amount: Math.round(others.reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100, count: 0, share: others.reduce((sum, entry) => sum + entry.share, 0) })
   }
-  return `<div class="rank-list">${shown.map((entry, index) => `<div class="rank"><div class="rank-line"><span class="rank-label" title="${escape(entry.label)}">${palette ? '' : `${String(index + 1).padStart(2, '0')} · `}${escape(entry.label)}</span><b>${money(entry.amount)}</b></div><div class="rank-track"><div class="rank-fill" style="width:${Math.min(100, entry.share)}%;${palette ? `background:${colors[index % colors.length]}` : ''}"></div></div></div>`).join('')}</div>`
+  return `<div class="rank-list">${shown.map((entry, index) => `<div class="rank"><div class="rank-line"><span class="rank-label" title="${escape(entry.label)}">${palette ? '' : `${String(index + 1).padStart(2, '0')} · `}${escape(entry.label)}</span><b>${money(entry.amount, currency)}</b></div><div class="rank-track"><div class="rank-fill" style="width:${Math.min(100, entry.share)}%;${palette ? `background:${colors[index % colors.length]}` : ''}"></div></div></div>`).join('')}</div>`
 }
 
 function brandMark(brand: ExecutiveReportBrand) {
@@ -203,35 +203,34 @@ export function renderExecutiveReport(report: ExecutiveReport, brand: ExecutiveR
   const pageCount = 1 + chunks.length
   const issued = new Date(report.generatedAt).toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   const completed = report.statuses[0]
-  const balance = report.operationBalance
-  const pulse = `<div class="pulse-grid"><div><small>Cuentas por cobrar</small><strong>${report.finance ? money(report.finance.receivable) : 'No disponible'}</strong></div><div><small>Cuentas por pagar</small><strong>${report.finance ? money(report.finance.payable) : 'No disponible'}</strong></div><div><small>Unidades en inventario</small><strong>${report.inventory ? number(report.inventory.units) : 'No disponible'}</strong></div><div class="${report.inventory?.alerts.length ? 'attention' : ''}"><small>Alertas de stock</small><strong>${report.inventory ? `${report.inventory.alerts.length} / ${report.inventory.count} productos` : 'No disponible'}</strong></div></div>`
+  const pulse = `<div class="pulse-grid"><div><small>Cuentas por cobrar · ${report.currency}</small><strong>${report.finance ? money(report.finance.receivable, report.currency) : 'No disponible'}</strong></div><div><small>Cuentas por pagar · ${report.currency}</small><strong>${report.finance ? money(report.finance.payable, report.currency) : 'No disponible'}</strong></div><div><small>Unidades en inventario</small><strong>${report.inventory ? number(report.inventory.units) : 'No disponible'}</strong></div><div class="${report.inventory?.alerts.length ? 'attention' : ''}"><small>Alertas de stock</small><strong>${report.inventory ? `${report.inventory.alerts.length} / ${report.inventory.count} productos` : 'No disponible'}</strong></div></div>`
   const insights = report.sales.length
-    ? [`${report.sales.length} ventas registradas por ${money(report.salesTotal)}; ticket promedio de ${money(report.averageTicket)}.`,
+    ? [`${report.sales.length} ventas registradas por ${money(report.salesTotal, report.currency)}; ticket promedio de ${money(report.averageTicket, report.currency)}.`,
       ...(report.customers[0] ? [`El principal cliente representa el ${number(report.customers[0].share)}% del importe vendido.`] : []),
-      ...(report.overdueCount ? [`${report.overdueCount} cuentas vencidas por ${money(report.overdueAmount)} al corte actual.`] : []),
+      ...(report.overdueCount ? [`${report.overdueCount} cuentas vencidas por ${money(report.overdueAmount, report.currency)} al corte actual.`] : []),
     ]
     : ['No hay ventas registradas para el período seleccionado.']
   const sourceNotes = brand.dataNotes?.length ? ` Fuentes no disponibles: ${brand.dataNotes.join('; ')}.` : ''
 
   const dashboard = `<section class="report-sheet dashboard-sheet" aria-label="Dashboard ejecutivo">
-    <header class="masthead"><div class="brand-row">${brandMark(brand)}<div class="edition">Inteligencia de negocio<strong>Reporte de gestión</strong></div></div><div class="title-row"><div><h1>Dashboard ejecutivo</h1><p>Visión integrada · Actividad comercial y pulso operativo</p></div><div class="period"><small>Período de análisis</small>${escape(brand.periodLabel)}</div></div></header>
+    <header class="masthead"><div class="brand-row">${brandMark(brand)}<div class="edition">Inteligencia de negocio<strong>Reporte de gestión · ${report.currency}</strong></div></div><div class="title-row"><div><h1>Dashboard ejecutivo</h1><p>Visión integrada · Actividad comercial y pulso operativo · Importes en ${report.currency}</p></div><div class="period"><small>Período de análisis</small>${escape(brand.periodLabel)}</div></div></header>
     <div class="kpi-grid">
-      <article class="kpi"><div class="kpi-label">Ventas registradas</div><strong class="kpi-value">${money(report.salesTotal)}</strong><div class="kpi-detail">${report.sales.length} operaciones${report.salesChange === null ? '' : ` · <span class="${report.salesChange < 0 ? 'negative' : 'positive'}">${report.salesChange > 0 ? '+' : ''}${number(report.salesChange)}% vs período anterior</span>`}</div></article>
-      <article class="kpi gold"><div class="kpi-label">Compras registradas</div><strong class="kpi-value">${report.purchasesTotal === null ? '—' : money(report.purchasesTotal)}</strong><div class="kpi-detail">${report.purchasesCount === null ? 'Fuente no disponible' : `${report.purchasesCount} órdenes · subtotal sin IGV`}</div></article>
-      <article class="kpi navy"><div class="kpi-label">Balance de operaciones</div><strong class="kpi-value ${balance !== null && balance < 0 ? 'negative' : ''}">${balance === null ? '—' : money(balance)}</strong><div class="kpi-detail">Ventas menos compras registradas</div></article>
-      <article class="kpi violet"><div class="kpi-label">Ticket promedio</div><strong class="kpi-value">${money(report.averageTicket)}</strong><div class="kpi-detail">Importe por venta en el período</div></article>
+      <article class="kpi"><div class="kpi-label">Ventas registradas</div><strong class="kpi-value">${money(report.salesTotal, report.currency)}</strong><div class="kpi-detail">${report.sales.length} operaciones${report.salesChange === null ? '' : ` · <span class="${report.salesChange < 0 ? 'negative' : 'positive'}">${report.salesChange > 0 ? '+' : ''}${number(report.salesChange)}% vs período anterior</span>`}</div></article>
+      <article class="kpi gold"><div class="kpi-label">Compras registradas</div><strong class="kpi-value">${report.purchasesTotal === null ? '—' : money(report.purchasesTotal, report.currency)}</strong><div class="kpi-detail">${report.purchasesCount === null ? 'Fuente no disponible' : `${report.purchasesCount} órdenes · subtotal sin IGV`}</div></article>
+      <article class="kpi navy"><div class="kpi-label">Ventas completadas</div><strong class="kpi-value">${completed.count}</strong><div class="kpi-detail">Operaciones pagadas o completadas en el período</div></article>
+      <article class="kpi violet"><div class="kpi-label">Ticket promedio</div><strong class="kpi-value">${money(report.averageTicket, report.currency)}</strong><div class="kpi-detail">Importe por venta en el período</div></article>
     </div>
     <div class="analytics-grid">
       <article class="panel"><div class="panel-heading"><div><h2>Evolución comercial</h2><p class="caption">Actividad del período · ventas y abastecimiento</p></div><div class="legend"><span><i class="dot"></i>Ventas</span>${report.purchasesTotal === null ? '' : '<span><i class="dot" style="--dot:#b27c28"></i>Compras</span>'}</div></div>${trendChart(report)}</article>
       <article class="panel"><div class="panel-heading"><div><h2>Estado de ventas</h2><p class="caption">Distribución del importe registrado</p></div><span class="section-no">01</span></div>${salesStatus(report)}</article>
     </div>
     <div class="detail-grid">
-      <article class="panel"><div class="panel-heading"><div><h2>Principales clientes</h2><p class="caption">Top 4 · contribución al importe vendido</p></div><span class="section-no">02</span></div>${ranking(report.customers, 4)}<p class="rank-note">${report.customers.length} clientes / contrapartes en el período.</p></article>
-      <article class="panel"><div class="panel-heading"><div><h2>Medios de pago</h2><p class="caption">Distribución por importe de venta</p></div><span class="section-no">03</span></div>${ranking(report.paymentMethods, 4, true)}<p class="rank-note">Medio registrado en cada venta; sin datos = Sin registrar.</p></article>
+      <article class="panel"><div class="panel-heading"><div><h2>Principales clientes</h2><p class="caption">Top 4 · contribución al importe vendido</p></div><span class="section-no">02</span></div>${ranking(report.customers, 4, report.currency)}<p class="rank-note">${report.customers.length} clientes / contrapartes en el período.</p></article>
+      <article class="panel"><div class="panel-heading"><div><h2>Medios de pago</h2><p class="caption">Distribución por importe de venta</p></div><span class="section-no">03</span></div>${ranking(report.paymentMethods, 4, report.currency, true)}<p class="rank-note">Medio registrado en cada venta; sin datos = Sin registrar.</p></article>
       <article class="panel"><div class="panel-heading"><div><h2>Pulso operativo</h2><p class="caption">Inventario y finanzas · saldos actuales</p></div><span class="section-no">04</span></div>${pulse}<p class="rank-note">Corte ${escape(issued)} · America/Lima.</p></article>
     </div>
     <aside class="executive-insight"><strong>Lectura ejecutiva</strong><p>${escape(insights.join(' '))}</p></aside>
-    <p class="caption" style="margin-top:7px;font-size:7px">Balance de operaciones = ventas menos compras; no representa utilidad neta. Ventas: total registrado. Compras: subtotal sin IGV.${escape(sourceNotes)}</p>
+    <p class="caption" style="margin-top:7px;font-size:7px">Ventas: total registrado. Compras: subtotal sin IGV. Las fuentes financieras muestran saldos actuales en ${report.currency}.${escape(sourceNotes)}</p>
     ${footer(brand, report, 1, pageCount)}
   </section>`
 
@@ -242,13 +241,13 @@ export function renderExecutiveReport(report: ExecutiveReport, brand: ExecutiveR
     const pageTotal = Math.round(sales.reduce((sum, sale) => sum + recordAmount(sale), 0) * 100) / 100
     const rows = sales.map(sale => {
       const badge = sale.status === 'Completada' || sale.status === 'Pagada' ? 'done' : sale.status === 'En curso' ? 'progress' : ''
-      return `<tr><td><span class="ref">${escape(sale.id)}</span></td><td>${displayDate(sale.createdAt)}</td><td><strong>${escape(sale.relatedName || sale.name)}</strong></td><td class="sale-detail">${escape(sale.detail || '—')}</td><td>${escape(sale.medio || 'Sin registrar')}</td><td><span class="badge ${badge}">${escape(sale.status)}</span></td><td class="right"><strong>${money(recordAmount(sale))}</strong></td></tr>`
+      return `<tr><td><span class="ref">${escape(sale.id)}</span></td><td>${displayDate(sale.createdAt)}</td><td><strong>${escape(sale.relatedName || sale.name)}</strong></td><td class="sale-detail">${escape(sale.detail || '—')}</td><td>${escape(sale.medio || 'Sin registrar')}</td><td><span class="badge ${badge}">${escape(sale.status)}</span></td><td class="right"><strong>${money(recordAmount(sale), report.currency)}</strong></td></tr>`
     }).join('')
     return `<section class="report-sheet annex-sheet" aria-label="Detalle de ventas, página ${index + 2}">
-      <header class="annex-header">${brandMark(brand)}<div class="annex-total"><small>Ventas del período</small><strong>${money(report.salesTotal)}</strong></div></header>
+      <header class="annex-header">${brandMark(brand)}<div class="annex-total"><small>Ventas del período · ${report.currency}</small><strong>${money(report.salesTotal, report.currency)}</strong></div></header>
       <div class="annex-title"><div><h2>Detalle de ventas</h2><p>${escape(brand.periodLabel)} · Fecha descendente y referencia · Registros ${start}–${exportedCount} de ${report.sales.length}</p></div><span class="badge done">${completed.count} completadas / ${report.sales.length} ventas</span></div>
-      <table class="sales-table"><colgroup><col style="width:8%"/><col style="width:10%"/><col style="width:25%"/><col style="width:21%"/><col style="width:12%"/><col style="width:11%"/><col style="width:13%"/></colgroup><thead><tr><th>Referencia</th><th>Fecha</th><th>Cliente / contraparte</th><th>Comprobante / concepto</th><th>Medio de pago</th><th>Estado</th><th class="right">Importe (S/)</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="annex-subtotal"><span>Subtotal de esta página</span><strong>${money(pageTotal)}</strong></div>
+      <table class="sales-table"><colgroup><col style="width:8%"/><col style="width:10%"/><col style="width:25%"/><col style="width:21%"/><col style="width:12%"/><col style="width:11%"/><col style="width:13%"/></colgroup><thead><tr><th>Referencia</th><th>Fecha</th><th>Cliente / contraparte</th><th>Comprobante / concepto</th><th>Medio de pago</th><th>Estado</th><th class="right">Importe (${report.currency})</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="annex-subtotal"><span>Subtotal de esta página</span><strong>${money(pageTotal, report.currency)}</strong></div>
       <aside class="annex-notes"><strong>Contexto del informe.</strong> Emitido ${escape(issued)}. Los importes de las ventas conservan los descuentos registrados y el IGV incluido. Los saldos de finanzas y las existencias corresponden al momento de emisión; el período seleccionado filtra ventas y compras.</aside>
       ${footer(brand, report, index + 2, pageCount)}
     </section>`

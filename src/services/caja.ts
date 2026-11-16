@@ -16,9 +16,15 @@ export type CashShift = {
   abiertoPor: string | null
   abiertoEn: string
   montoInicial: number
+  montoInicialUsd: number
   estado: 'Abierto' | 'Cerrado'
   cerradoEn: string | null
   conteo: Record<string, number>
+  conteoUsd: number | null
+  saldoEsperadoPen: number | null
+  saldoEsperadoUsd: number | null
+  descuadrePen: number | null
+  descuadreUsd: number | null
   notas: string
 }
 export type CashMovement = {
@@ -26,6 +32,7 @@ export type CashMovement = {
   cajaTurnoId: string
   tipo: 'cobro' | 'pago'
   monto: number
+  moneda: 'PEN' | 'USD' | null
   medioPago: string
   referencia: string | null
   createdAt: string
@@ -38,10 +45,25 @@ type CashRow = {
   abierto_por_email: string | null
   abierto_en: string
   monto_inicial: number
+  monto_inicial_usd: number
   estado: string
   cerrado_en: string | null
   conteo: Record<string, number> | null
+  conteo_usd: number | null
+  saldo_esperado_pen: number | null
+  saldo_esperado_usd: number | null
+  descuadre_pen: number | null
+  descuadre_usd: number | null
   notas: string | null
+}
+
+export type CashShiftCloseResult = {
+  esperadoPen: number
+  esperadoUsd: number
+  contadoPen: number
+  contadoUsd: number
+  descuadrePen: number
+  descuadreUsd: number
 }
 
 function toShift(row: CashRow): CashShift {
@@ -51,14 +73,20 @@ function toShift(row: CashRow): CashShift {
     abiertoPor: row.abierto_por_email,
     abiertoEn: String(row.abierto_en),
     montoInicial: Number(row.monto_inicial ?? 0),
+    montoInicialUsd: Number(row.monto_inicial_usd ?? 0),
     estado: row.estado === 'Cerrado' ? 'Cerrado' : 'Abierto',
     cerradoEn: row.cerrado_en ? String(row.cerrado_en) : null,
     conteo: row.conteo && typeof row.conteo === 'object' ? row.conteo as Record<string, number> : {},
+    conteoUsd: row.conteo_usd == null ? null : Number(row.conteo_usd),
+    saldoEsperadoPen: row.saldo_esperado_pen == null ? null : Number(row.saldo_esperado_pen),
+    saldoEsperadoUsd: row.saldo_esperado_usd == null ? null : Number(row.saldo_esperado_usd),
+    descuadrePen: row.descuadre_pen == null ? null : Number(row.descuadre_pen),
+    descuadreUsd: row.descuadre_usd == null ? null : Number(row.descuadre_usd),
     notas: row.notas ?? '',
   }
 }
 
-const SHIFT_COLUMNS = 'id, caja_id, abierto_por_email, abierto_en, monto_inicial, estado, cerrado_en, conteo, notas'
+const SHIFT_COLUMNS = 'id, caja_id, abierto_por_email, abierto_en, monto_inicial, monto_inicial_usd, estado, cerrado_en, conteo, conteo_usd, saldo_esperado_pen, saldo_esperado_usd, descuadre_pen, descuadre_usd, notas'
 
 export async function fetchCashSetup(): Promise<CashSetup> {
   const client = requireSupabase()
@@ -116,44 +144,50 @@ export async function fetchCashMovements(shiftIds: string[]): Promise<CashMoveme
   const unique = [...new Set(shiftIds.filter(Boolean))]
   if (!unique.length) return []
   const { data, error } = await requireSupabase().from('movimientos_tesoreria')
-    .select('id,caja_turno_id,tipo,monto,medio_pago,referencia,created_at,anulado_en')
+    .select('id,caja_turno_id,tipo,monto,moneda,medio_pago,referencia,created_at,anulado_en')
     .in('caja_turno_id', unique).order('created_at', { ascending: true })
   if (error) throw error
-  return ((data ?? []) as Array<{ id: string; caja_turno_id: string; tipo: string; monto: number; medio_pago: string | null; referencia: string | null; created_at: string; anulado_en: string | null }>).map(row => ({
+  return ((data ?? []) as Array<{ id: string; caja_turno_id: string; tipo: string; monto: number; moneda: string | null; medio_pago: string | null; referencia: string | null; created_at: string; anulado_en: string | null }>).map(row => ({
     id: String(row.id), cajaTurnoId: String(row.caja_turno_id), tipo: row.tipo === 'pago' ? 'pago' : 'cobro',
-    monto: Number(row.monto), medioPago: row.medio_pago ?? 'Efectivo', referencia: row.referencia,
+    monto: Number(row.monto), moneda: row.moneda === 'PEN' || row.moneda === 'USD' ? row.moneda : null,
+    medioPago: row.medio_pago ?? 'Efectivo', referencia: row.referencia,
     createdAt: String(row.created_at), anuladoEn: row.anulado_en ? String(row.anulado_en) : null,
   }))
 }
 
-export async function openCashShift(cajaId: string, montoInicial: number, email: string | null): Promise<CashShift> {
-  const inicial = Math.round(Number(montoInicial) * 100) / 100
+export async function openCashShift(cajaId: string, montoInicialPen: number, montoInicialUsd: number): Promise<string> {
+  const inicialPen = Math.round(Number(montoInicialPen) * 100) / 100
+  const inicialUsd = Math.round(Number(montoInicialUsd) * 100) / 100
   if (!cajaId) throw new Error('Selecciona una caja registrada antes de abrir el turno.')
-  if (!Number.isFinite(inicial) || inicial < 0) throw new Error('El monto inicial debe ser cero o mayor.')
-  const client = requireSupabase()
-  const { data: open, error: openError } = await client.from('caja_turnos').select('id').eq('estado', 'Abierto').eq('caja_id', cajaId).limit(1)
-  if (openError) throw openError
-  if ((open as Array<{ id: string }> | null)?.length) throw new Error('Esta caja ya tiene un turno abierto. Ciérralo antes de abrir otro.')
-  const { data, error } = await client.from('caja_turnos')
-    .insert({ caja_id: cajaId, abierto_por_email: email, monto_inicial: inicial, estado: 'Abierto', conteo: {}, notas: '' })
-    .select(SHIFT_COLUMNS).single()
+  if (!Number.isFinite(inicialPen) || inicialPen < 0 || !Number.isFinite(inicialUsd) || inicialUsd < 0) throw new Error('Los montos iniciales deben ser cero o mayores.')
+  const { data, error } = await requireSupabase().rpc('abrir_turno_caja_v1', {
+    p_caja_id: cajaId,
+    p_monto_inicial_pen: inicialPen,
+    p_monto_inicial_usd: inicialUsd,
+  })
   if (error?.code === '23505') throw new Error('Esta caja ya tiene un turno abierto. Actualiza la página para ver quién lo abrió.')
   if (error) throw error
-  return toShift(data as CashRow)
+  if (typeof data !== 'string' || !data) throw new Error('No se recibió el identificador del turno creado.')
+  return data
 }
 
-export async function closeCashShift(id: string, conteo: Record<string, number>, notas: string): Promise<CashShift> {
-  const clean: Record<string, number> = {}
-  for (const [medio, monto] of Object.entries(conteo)) {
-    const value = Math.round(Number(monto) * 100) / 100
-    if (!Number.isFinite(value) || value < 0) throw new Error(`El conteo de ${medio} debe ser cero o mayor.`)
-    if (value > 0) clean[medio.trim() || 'Efectivo'] = value
-  }
-  const { data, error } = await requireSupabase().from('caja_turnos')
-    .update({ estado: 'Cerrado', cerrado_en: new Date().toISOString(), conteo: clean, notas: notas.trim() })
-    .eq('id', id).eq('estado', 'Abierto').select(SHIFT_COLUMNS).single()
-  if (error?.code === 'PGRST116') throw new Error('El turno ya fue cerrado o dejó de estar disponible. Actualiza la página.')
+export async function closeCashShift(id: string, conteoPen: number, conteoUsd: number, notas: string): Promise<CashShiftCloseResult> {
+  const pen = Math.round(Number(conteoPen) * 100) / 100
+  const usd = Math.round(Number(conteoUsd) * 100) / 100
+  if (!id || !Number.isFinite(pen) || pen < 0 || !Number.isFinite(usd) || usd < 0) throw new Error('El turno y los conteos de ambas monedas deben ser válidos.')
+  const { data, error } = await requireSupabase().rpc('cerrar_turno_caja_v1', {
+    p_caja_turno_id: id,
+    p_conteo_pen: pen,
+    p_conteo_usd: usd,
+    p_notas: notas.trim(),
+  })
   if (error) throw error
-  if (!data) throw new Error('El turno ya está cerrado o no existe.')
-  return toShift(data as CashRow)
+  if (!data || typeof data !== 'object') throw new Error('No se recibió el resultado del cierre. Actualiza la pantalla para confirmar el estado.')
+  const row = data as Record<string, unknown>
+  const values = [row.esperado_pen, row.esperado_usd, row.contado_pen, row.contado_usd, row.descuadre_pen, row.descuadre_usd].map(Number)
+  if (values.some(value => !Number.isFinite(value))) throw new Error('El servidor cerró el turno, pero no devolvió un resultado de arqueo válido. Actualiza la pantalla.')
+  return {
+    esperadoPen: values[0]!, esperadoUsd: values[1]!, contadoPen: values[2]!,
+    contadoUsd: values[3]!, descuadrePen: values[4]!, descuadreUsd: values[5]!,
+  }
 }

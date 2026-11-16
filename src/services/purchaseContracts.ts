@@ -166,38 +166,3 @@ export async function closePurchaseContract(contractId: string, reason: string, 
   })
   if (error) throw error
 }
-
-export async function createPurchaseOrderFromContract(input: {
-  contractId: string
-  versionId: string
-  detail: string
-  dueDate: string | null
-  lines: Array<{
-    proveedor_producto_id: string
-    cantidad: number
-    precio: number
-    tratamiento_tributario: 'Gravado' | 'Exonerado' | 'Inafecto'
-    tasa_tributaria: number
-  }>
-  idempotencyKey: string
-  exchangeRate: number | null
-  currency: PurchaseContractCurrency
-}): Promise<string> {
-  const { data, error } = await requireSupabase().rpc('crear_orden_compra_desde_contrato_v1', {
-    p_contrato_id: input.contractId,
-    p_version_id: input.versionId,
-    p_detalle: input.detail,
-    p_fecha_limite: input.dueDate,
-    p_lineas: input.lines.map(line => ({
-      producto_id: line.proveedor_producto_id,
-      cantidad: line.cantidad,
-      precio: line.precio,
-      tratamiento_tributario: line.tratamiento_tributario,
-      tasa_tributaria: line.tasa_tributaria,
-    })),
-    p_idempotency_key: input.idempotencyKey,
-    p_exchange_rate: input.currency === 'PEN' ? 1 : input.exchangeRate,
-  })
-  if (error) throw error
-  return String(data)
-}

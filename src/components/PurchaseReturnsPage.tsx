@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { ArrowLeft, ArrowLeftRight, ChevronLeft, ChevronRight, FileText, RefreshCw, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import '../purchases-ui.css'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { fetchActiveWarehouses, registerPurchaseReceipt, type ActiveWarehouse } from '../services/records'
@@ -9,6 +10,7 @@ import {
   fetchPurchaseReturnHistory, fetchPurchaseReturnLines, registerPurchaseReturn, updatePurchaseCreditTracking,
   type PendingPurchaseReplenishment, type PurchaseReturnCompensation, type PurchaseReturnEvent, type PurchaseReturnLine,
 } from '../services/purchaseReceipts'
+import { PageHeader } from './ui/PageHeader'
 
 const HISTORY_PAGE_SIZE = 5
 function errorText(error: unknown) {
@@ -174,8 +176,14 @@ export default function PurchaseReturnsPage() {
   if (!can('purchases', 'ver')) return <section className="ws-card"><div className="ws-empty-compact"><strong>No tienes permiso para consultar devoluciones.</strong></div></section>
   if (errors.purchases) return <section className="ws-card"><div className="ws-notice ws-notice-warning" role="alert">No se pudieron cargar las órdenes para devoluciones: {errors.purchases}</div></section>
 
-  return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">COMPRAS · DEVOLUCIONES</span><h1>Devoluciones a proveedor</h1><p>Consulta cantidades brutas y netas, stock físico y notas de crédito con trazabilidad a Kardex.</p></div><div className="ws-heading-actions"><button className="ws-button ws-button-secondary" onClick={() => void reload()}><RefreshCw size={16}/>Actualizar</button></div></section>
+  return <div className="ec-purchases">
+    <PageHeader
+      icon={RotateCcw}
+      section="Compras · Devoluciones"
+      title="Devoluciones a proveedor"
+      description="Consulta cantidades brutas y netas, stock físico y notas de crédito con trazabilidad a Kardex."
+      actions={<button className="ws-button ws-button-secondary" onClick={() => void reload()}><RefreshCw size={16}/>Actualizar</button>}
+    />
     <div className="ws-notice" role="note"><ArrowLeftRight size={17}/><span>La devolución descuenta stock físico y crea Kardex. <strong>No reduce la CxP:</strong> Compras conserva el seguimiento documental y Tesorería aplica manualmente la nota de crédito. Las reposiciones son nuevas recepciones contra la misma orden.</span></div>
     {!can('purchases','editar') || !(can('inventory','crear') || can('inventory','editar')) ? <div className="ws-notice ws-notice-warning">Para confirmar devoluciones se requieren permisos de edición de Compras y creación o edición de Inventario.</div> : null}
     {purchases.length ? <div className="sourcing-list">{purchases.map(purchase => <section className="ws-card sourcing-card" key={purchase.rowId}>
@@ -206,5 +214,5 @@ export default function PurchaseReturnsPage() {
       </div>}
     </section>)}</div> : <section className="ws-card"><div className="ws-empty-compact"><strong>No hay órdenes de compra.</strong></div></section>}
     <div className="sourcing-back"><button className="ws-text-button" onClick={() => navigate('/purchases')}><ArrowLeft size={15}/>Volver a Órdenes nacionales</button></div>
-  </>
+  </div>
 }

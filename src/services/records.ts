@@ -3,6 +3,7 @@ import { salePayableTotal } from '../data/payments'
 import { consumesCreditLine } from '../data/workspace'
 import { DATA_PAGES } from '../data/catalog'
 import { formatWhen } from '../data/helpers'
+import { approvalFailure, notifyApprovalQueueChanged } from './approvals'
 import type { CustomerImportRow, PurchaseImportRow, SalesImportRow, SupplierImportReport, SupplierImportRow } from './import'
 import type { DataPage, DocumentLine, RecordItem, RecordStatus } from '../types'
 
@@ -122,6 +123,10 @@ function toRecord(page: DataPage, row: Row): RecordItem {
     item.medio = typeof row.medio_pago === 'string' && row.medio_pago ? row.medio_pago : null
     item.moneda = row.moneda === 'USD' ? 'USD' : 'PEN'
     item.exchangeRate = row.exchange_rate == null ? null : Number(row.exchange_rate)
+  }
+  if (page === 'sales') {
+    item.moneda = row.moneda === 'USD' ? 'USD' : 'PEN'
+    item.exchangeRate = row.tipo_cambio == null ? null : Number(row.tipo_cambio)
   }
   if (page === 'purchases') {
     item.moneda = row.moneda === 'USD' ? 'USD' : 'PEN'
@@ -1355,40 +1360,33 @@ export async function insertSaleWithLines(input: RecordInput, lines: LineInput[]
   return toRecord('sales', header as Row)
 }
 
-export async function insertPurchaseWithLines(input: RecordInput, lines: LineInput[]): Promise<RecordItem> {
+export async function requestPurchaseApproval(input: RecordInput, lines: LineInput[]): Promise<string> {
   assertValidLines(lines)
   const client = requireSupabase()
-  const total = lines.length ? lineTotal(lines) : (input.amount ?? 0)
-  const headerInput: RecordInput = { ...input, amount: total }
-
-  // Las órdenes operativas se escriben únicamente mediante RPC.
-  if (input.source !== 'import' && !input.reference) {
-    if (!input.proveedor_id) throw new Error('Selecciona un proveedor registrado para crear la orden.')
-    if (!input.idempotencyKey) throw new Error('No se pudo identificar esta solicitud. Cierra y vuelve a abrir el formulario.')
-    const currency = input.moneda ?? 'PEN'
-    const linePayload = lines.map(line => ({
-      producto_id: line.producto_id,
-      cantidad: line.cantidad,
-      precio: line.precio,
-      tratamiento_tributario: line.tratamiento_tributario ?? 'Gravado',
-      tasa_tributaria: line.tasa_tributaria ?? null,
-    }))
-    const { data: purchaseId, error } = await client.rpc('crear_orden_compra_operativa_v4', {
-        p_proveedor_id: input.proveedor_id,
-        p_detalle: input.detail,
-        p_fecha_limite: input.fecha_limite || null,
-        p_monto_manual: input.amount ?? 0,
-        p_lineas: linePayload,
-        p_idempotency_key: input.idempotencyKey,
-        p_moneda: currency,
-        p_exchange_rate: currency === 'PEN' ? 1 : input.exchange_rate ?? null,
-      })
-    if (error) throw error
-    const { data: header, error: readError } = await client.from('compras').select('*').eq('id', String(purchaseId)).single()
-    if (readError) throw readError
-    return toRecord('purchases', header as Row)
-  }
-  throw new Error('Las compras históricas deben importarse mediante el proceso CSV transaccional. No se permiten escrituras directas de órdenes.')
+  if (!input.proveedor_id) throw new Error('Selecciona un proveedor registrado para solicitar la orden.')
+  if (!input.idempotencyKey) throw new Error('No se pudo identificar esta solicitud. Cierra y vuelve a abrir el formulario.')
+  if (input.source === 'import' || input.reference) throw new Error('Las compras históricas deben importarse mediante el proceso CSV transaccional.')
+  const currency = input.moneda ?? 'PEN'
+  const linePayload = lines.map(line => ({
+    producto_id: line.producto_id,
+    cantidad: line.cantidad,
+    precio: line.precio,
+    tratamiento_tributario: line.tratamiento_tributario ?? 'Gravado',
+    tasa_tributaria: line.tasa_tributaria ?? null,
+  }))
+  const { data, error } = await client.rpc('ec_solicitar_aprobacion_orden_manual_v1', {
+    p_proveedor_id: input.proveedor_id,
+    p_detalle: input.detail,
+    p_fecha_limite: input.fecha_limite || null,
+    p_monto_manual: input.amount ?? 0,
+    p_lineas: linePayload,
+    p_idempotency_key: input.idempotencyKey,
+    p_moneda: currency,
+    p_exchange_rate: currency === 'PEN' ? 1 : input.exchange_rate ?? null,
+  })
+  if (error) throw approvalFailure(error)
+  notifyApprovalQueueChanged()
+  return String(data)
 }
 
 export async function updateSaleWithLines(code: string, input: RecordInput, lines: LineInput[]): Promise<RecordItem> {

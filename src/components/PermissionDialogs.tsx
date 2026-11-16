@@ -6,15 +6,16 @@ import { fetchUserPermissionOverrides, saveUserPermissionOverrides, type AppRole
 import { friendlyError } from '../services/records'
 import { useDialog } from './useDialog'
 
-const ACTIONS: PermissionCatalogEntry['accion'][] = ['ver', 'crear', 'editar', 'eliminar', 'importar']
+const ACTIONS: PermissionCatalogEntry['accion'][] = ['ver', 'crear', 'editar', 'eliminar', 'importar', 'aprobar']
 const ACTION_LABEL: Record<PermissionCatalogEntry['accion'], string> = {
-  ver: 'Consultar', crear: 'Crear', editar: 'Editar', eliminar: 'Eliminar', importar: 'Importar CSV',
+  ver: 'Consultar', crear: 'Crear', editar: 'Editar', eliminar: 'Eliminar', importar: 'Importar CSV', aprobar: 'Aprobar',
 }
 const MODULE_LABEL = Object.fromEntries(DATA_PAGES.map(page => [permissionModule[page], pageMeta[page].title])) as Record<string, string>
 MODULE_LABEL.usuarios = 'Usuarios'
 MODULE_LABEL.auditoria = 'Seguridad y Auditoría'
 MODULE_LABEL.metas = 'Metas y Objetivos'
 MODULE_LABEL.logistica = 'Logística y Transporte'
+MODULE_LABEL.aprobaciones = 'Notificaciones y Aprobaciones'
 
 function groupPermissions(permissions: PermissionCatalogEntry[]) {
   return permissions.reduce<Record<string, PermissionCatalogEntry[]>>((groups, permission) => {

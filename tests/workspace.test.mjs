@@ -3,6 +3,13 @@ import test from 'node:test'
 import { businessDate, customerCredit, dailyOperations, inDateRange, matchesSearch, periodRange, submoduleMatchesLocation, workspaceEntries, workspaceModules } from '../src/data/workspace.ts'
 import { financialSnapshot, totalAmount } from '../src/data/dashboard.ts'
 import { csvContent } from '../src/data/exports.ts'
+import {
+  ESTACIONAMIENTO_BASE_DEFAULT,
+  calcularMetricasRuta,
+  construirAnaliticaRepertorio,
+  optimizarParadasPorCercania,
+  resolverUbicacionParada,
+} from '../src/modules/logistica/rutasGeo.ts'
 
 const record = (id, amount, createdAt, extra = {}) => ({ id, name: id, detail: '', date: 'Texto de presentación', status: 'Pendiente', amount, createdAt, ...extra })
 
@@ -132,4 +139,88 @@ test('el crédito de Tarjeta se libera cuando se completa la cuenta por cobrar',
   const credit = customerCredit(customer, sales, finance)
   assert.equal(credit.consumidoTarjeta, 0)
   assert.equal(credit.disponible, 500)
+})
+
+test('logística expone el submódulo de mapa y repertorio de rutas en /logistica/rutas', () => {
+  const logistica = workspaceModules.find(module => module.id === 'logistica')
+  assert.ok(logistica)
+  const rutaChild = logistica.children.find(child => child.path === '/logistica/rutas')
+  assert.ok(rutaChild)
+  assert.equal(rutaChild.permission, 'logistica')
+  assert.equal(rutaChild.implemented, true)
+  assert.ok(workspaceEntries.some(entry => entry.path === '/logistica/rutas' && entry.permission === 'logistica'))
+})
+
+test('rutasGeo resuelve distritos de Lima, optimiza por cercanía y consolida destinos repetidos sin duplicar despachos', () => {
+  const geoOlivos = resolverUbicacionParada({ direccion: 'Av. Antunez de Mayolo 1147', clienteNombre: 'Cliente Norte', semilla: 'V-1' })
+  assert.equal(geoOlivos.distrito, 'Los Olivos')
+  assert.equal(geoOlivos.zonaNombre, 'Lima Norte')
+
+  const geoSurco = resolverUbicacionParada({ direccion: 'Av. Primavera 1200, Surco', clienteNombre: 'Cliente Surco', semilla: 'V-2' })
+  assert.equal(geoSurco.distrito, 'Santiago de Surco')
+
+  const paradasDesordenadas = [
+    {
+      id: 'p-surco', orden: 1, origen: 'venta', ventaId: 'v-2', ventaCodigo: 'V-002',
+      clienteId: 'c-2', clienteNombre: 'Cliente Surco', direccion: 'Av. Primavera 1200, Surco',
+      distrito: geoSurco.distrito, zonaNombre: geoSurco.zonaNombre, telefono: '', lat: geoSurco.lat, lng: geoSurco.lng, monto: 200, unidades: 2,
+    },
+    {
+      id: 'p-olivos', orden: 2, origen: 'venta', ventaId: 'v-1', ventaCodigo: 'V-001',
+      clienteId: 'c-1', clienteNombre: 'Cliente Norte', direccion: 'Av. Antunez de Mayolo 1147',
+      distrito: geoOlivos.distrito, zonaNombre: geoOlivos.zonaNombre, telefono: '', lat: geoOlivos.lat, lng: geoOlivos.lng, monto: 150, unidades: 1,
+    },
+  ]
+
+  const optimizadas = optimizarParadasPorCercania(ESTACIONAMIENTO_BASE_DEFAULT, paradasDesordenadas)
+  assert.equal(optimizadas[0].distrito, 'Los Olivos')
+  assert.equal(optimizadas[0].orden, 1)
+  assert.equal(optimizadas[1].distrito, 'Santiago de Surco')
+  assert.equal(optimizadas[1].orden, 2)
+
+  const metricas = calcularMetricasRuta(ESTACIONAMIENTO_BASE_DEFAULT, optimizadas, true)
+  assert.equal(metricas.tramos.length, 3)
+  assert.equal(metricas.tramos[2].esRetorno, true)
+  assert.ok(metricas.distanciaTotalKm > 0)
+  assert.ok(metricas.tiempoEstimadoMin > 0)
+
+  const analitica = construirAnaliticaRepertorio(
+    [
+      {
+        id: 'r-1', nombre: 'Ruta A', fecha: '2026-11-10', almacenId: null, almacenNombre: '',
+        estacionamientoId: null, estacionamientoNombre: ESTACIONAMIENTO_BASE_DEFAULT.nombre,
+        estacionamientoLat: ESTACIONAMIENTO_BASE_DEFAULT.lat, estacionamientoLng: ESTACIONAMIENTO_BASE_DEFAULT.lng,
+        conductorId: null, conductorNombre: 'Carlos', vehiculoId: null, vehiculoPlaca: 'ABC-123',
+        despachoId: 'dsp-vinculado', paradas: [optimizadas[0]], retornarBase: false,
+        distanciaTotalKm: 3.5, tiempoEstimadoMin: 20, observaciones: '', createdAt: '2026-11-10T10:00:00Z',
+      },
+      {
+        id: 'r-2', nombre: 'Ruta B', fecha: '2026-11-12', almacenId: null, almacenNombre: '',
+        estacionamientoId: null, estacionamientoNombre: ESTACIONAMIENTO_BASE_DEFAULT.nombre,
+        estacionamientoLat: ESTACIONAMIENTO_BASE_DEFAULT.lat, estacionamientoLng: ESTACIONAMIENTO_BASE_DEFAULT.lng,
+        conductorId: null, conductorNombre: 'Carlos', vehiculoId: null, vehiculoPlaca: 'ABC-123',
+        despachoId: null, paradas: [optimizadas[0], optimizadas[1]], retornarBase: false,
+        distanciaTotalKm: 24, tiempoEstimadoMin: 75, observaciones: '', createdAt: '2026-11-12T10:00:00Z',
+      },
+    ],
+    [
+      {
+        id: 'dsp-vinculado', numero: 'DSP-20261110-01', fecha: '2026-11-10', prioridad: 'normal',
+        almacenId: null, almacenNombre: '', pesoEstimadoKg: null, observaciones: '',
+        paradas: [{
+          id: 'dp-1', orden: 1, ventaId: 'v-1', ventaCodigo: 'V-001', clienteId: 'c-1',
+          clienteNombre: 'Cliente Norte', direccion: 'Av. Antunez de Mayolo 1147',
+          telefono: '', zonaId: null, zonaNombre: 'Lima Norte', lineas: [],
+        }],
+        vehiculoId: null, conductorId: null, desde: '', hasta: '', asignacionId: null,
+        estado: 'completado', motivoCancelacion: '', createdAt: '2026-11-10T10:00:00Z', updatedAt: '2026-11-10T10:00:00Z',
+      },
+    ],
+  )
+
+  assert.equal(analitica.totalRutasAnalizadas, 2)
+  assert.equal(analitica.totalParadasAnalizadas, 3)
+  assert.equal(analitica.destinoTop?.clienteNombre, 'Cliente Norte')
+  assert.equal(analitica.destinoTop?.repeticiones, 2)
+  assert.equal(analitica.distritoTop?.distrito, 'Los Olivos')
 })

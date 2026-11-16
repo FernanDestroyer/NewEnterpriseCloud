@@ -15,7 +15,7 @@ export type AppUser = {
 
 export type AppRole = { id: string; nombre: string }
 export type PermissionCatalogEntry = { id: string; modulo: string; accion: PermissionAction }
-export type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar' | 'importar'
+export type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar' | 'importar' | 'aprobar'
 export type UserPermissionOverride = { permiso_id: string; permitido: boolean }
 export type RolePermissionLink = { rol_id: string; permiso_id: string }
 

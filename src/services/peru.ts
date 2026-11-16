@@ -1,164 +1,95 @@
-// -----------------------------------------------------------------------------
-// Consulta de documentos peruanos: DNI (RENIEC) y RUC (SUNAT).
-// Autocompleta clientes y proveedores para no digitar razón social ni dirección.
-//
-// Soporta dos formatos de proveedor (se detecta por la URL base):
-//   dniruc.apisperu.com: GET {base}/dni/{dni} y GET {base}/ruc/{ruc}
-//   apis.net.pe:         GET {base}/dni?numero={dni} y GET {base}/ruc?numero={ruc}
-// El token se configura en VITE_PERU_API_TOKEN.
-// Sin token, las funciones avisan cómo configurarlo en lugar de fallar raro.
-// -----------------------------------------------------------------------------
+import {
+  isValidDni,
+  isValidRuc,
+  normalizeDni,
+  normalizeRuc,
+  type PeruDocumentKind,
+  type PeruLookupResult,
+} from '../../supabase/functions/_shared/peruLookup.ts'
 
-export type DocType = 'DNI' | 'RUC'
+export type DocType = PeruDocumentKind
+export type { PeruLookupResult }
+export { isValidDni, isValidRuc, normalizeDni, normalizeRuc }
 
-export type PeruLookupResult = {
-  tipoDoc: DocType
-  documento: string
-  /** Razón social o nombres completos, listos para el campo nombre. */
-  nombre: string
-  /** Dirección / estado / condición, listos para el campo detalle. */
-  detalle: string
-  /** Dirección fiscal sola (solo RUC), lista para el campo dirección. */
-  direccion?: string
+export type PeruLookupModule = 'clientes' | 'proveedores'
+type LookupRequest = { tipo_documento: DocType; numero: string; modulo: PeruLookupModule }
+type LookupResponse = { data: unknown; error?: unknown | null }
+export type LookupInvoker = (body: LookupRequest) => Promise<LookupResponse>
+
+const invokeLookup: LookupInvoker = async (body) => {
+  const { requireSupabase } = await import('../lib/supabase')
+  return requireSupabase().functions.invoke('peru-document-lookup', { body })
 }
 
-type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
-
-const DEFAULT_API_URL = 'https://api.apis.net.pe/v1'
-const TIMEOUT_MS = 12000
-
-/** Lee variables tanto en el navegador (Vite) como en Node (tests). */
-function envValue(name: 'VITE_PERU_API_URL' | 'VITE_PERU_API_TOKEN'): string {
-  const fromProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[name]?.trim()
-  if (fromProcess) return fromProcess
-  return import.meta.env?.[name]?.trim() ?? ''
+function errorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('context' in error)) return undefined
+  const context = (error as { context?: unknown }).context
+  if (!context || typeof context !== 'object' || !('status' in context)) return undefined
+  const status = (context as { status?: unknown }).status
+  return typeof status === 'number' ? status : undefined
 }
 
-function apiUrl(): string {
-  const base = envValue('VITE_PERU_API_URL') || DEFAULT_API_URL
-  return base.replace(/\/+$/, '')
+function translateFunctionError(error: unknown, kind: DocType): Error {
+  switch (errorStatus(error)) {
+    case 401:
+      return new Error('Tu sesión no está autorizada para consultar documentos. Inicia sesión nuevamente.')
+    case 403:
+      return new Error('No tienes permiso para consultar documentos de este módulo.')
+    case 400:
+      return new Error('El proveedor rechazó el formato del documento. Revisa el número o complétalo manualmente.')
+    case 422:
+      return new Error(`El ${kind} no existe en ${kind === 'DNI' ? 'RENIEC' : 'SUNAT'}. Revisa el número.`)
+    case 429:
+      return new Error('Límite de consultas alcanzado. Espera unos minutos e inténtalo otra vez.')
+    case 502:
+      return new Error('El servicio de consulta no responde. Inténtalo nuevamente en unos minutos.')
+    case 503:
+      return new Error('La consulta RENIEC/SUNAT aún no está configurada. Puedes completar los datos manualmente.')
+    default:
+      return new Error('No se pudo conectar con la consulta segura de documentos. Revisa que Supabase esté disponible e inténtalo otra vez.')
+  }
 }
 
-function apiToken(): string {
-  return envValue('VITE_PERU_API_TOKEN')
-}
-
-/** true si hay token configurado para consultar RENIEC/SUNAT. */
-export function isPeruLookupConfigured(): boolean {
-  return apiToken().length > 0
-}
-
-/** DNI: exactamente 8 dígitos. */
-export function isValidDni(value: string): boolean {
-  return /^\d{8}$/.test(value.trim())
-}
-
-/** RUC: 11 dígitos con dígito verificador válido (módulo 11 de SUNAT). */
-export function isValidRuc(value: string): boolean {
-  const digits = value.trim()
-  if (!/^\d{11}$/.test(digits)) return false
-  const weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-  const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0)
-  const check = 11 - (sum % 11)
-  const expected = check === 11 ? 1 : check === 10 ? 0 : check
-  return expected === Number(digits[10])
-}
-
-function joinParts(...parts: Array<string | null | undefined>): string {
-  return parts.map((part) => String(part ?? '').trim()).filter(Boolean).join(' ')
-}
-
-/** Normaliza respuestas con distintos nombres de campo a un resultado único. */
-export function normalizeDni(documento: string, data: Record<string, unknown>): PeruLookupResult {
-  const nombre = joinParts(
-    data.nombres as string | undefined,
-    data.apellidoPaterno as string | undefined,
-    data.apellidoMaterno as string | undefined,
-  ) || String(data.nombre_completo ?? data.nombreCompleto ?? data.nombre ?? '').trim()
-  if (!nombre) throw new Error('La respuesta de RENIEC no trae el nombre. Inténtalo nuevamente.')
-  return { tipoDoc: 'DNI', documento, nombre, detalle: 'Persona natural · DNI verificado' }
-}
-
-/** Normaliza respuestas con distintos nombres de campo a un resultado único. */
-export function normalizeRuc(documento: string, data: Record<string, unknown>): PeruLookupResult {
-  const nombre = String(data.razonSocial ?? data.razon_social ?? data.nombre ?? '').trim()
-  if (!nombre) throw new Error('La respuesta de SUNAT no trae la razón social. Inténtalo nuevamente.')
-  const direccion = String(data.direccion ?? '').trim()
-  const extra = joinParts(
-    direccion,
-    data.estado ? `Estado: ${data.estado}` : '',
-    data.condicion ? `Condición: ${data.condicion}` : '',
-  )
-  const result: PeruLookupResult = { tipoDoc: 'RUC', documento, nombre, detalle: extra || 'Empresa · RUC verificado' }
-  if (direccion) result.direccion = direccion
+function parseResult(data: unknown, kind: DocType, numero: string): PeruLookupResult {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('El servicio de consulta devolvió una respuesta inválida. Inténtalo nuevamente.')
+  }
+  const value = data as Record<string, unknown>
+  if (value.tipoDoc !== kind || value.documento !== numero || typeof value.nombre !== 'string' || !value.nombre.trim() || typeof value.detalle !== 'string') {
+    throw new Error('El servicio de consulta devolvió una respuesta inválida. Inténtalo nuevamente.')
+  }
+  const result: PeruLookupResult = {
+    tipoDoc: kind,
+    documento: numero,
+    nombre: value.nombre.trim(),
+    detalle: value.detalle.trim(),
+  }
+  if (typeof value.direccion === 'string' && value.direccion.trim()) result.direccion = value.direccion.trim()
   return result
 }
 
-function translateLookupError(status: number, kind: string): Error {
-  if (status === 401 || status === 403) {
-    return new Error('El token de consulta es inválido. Revisa VITE_PERU_API_TOKEN en tu .env y reinicia el servidor.')
+async function request(kind: DocType, numero: string, modulo: PeruLookupModule, invoke: LookupInvoker): Promise<PeruLookupResult> {
+  let response: LookupResponse
+  try {
+    response = await invoke({ tipo_documento: kind, numero, modulo })
+  } catch (error) {
+    throw translateFunctionError(error, kind)
   }
-  if (status === 404) {
-    return new Error(`El ${kind} no existe en ${kind === 'DNI' ? 'RENIEC' : 'SUNAT'}. Revisa el número.`)
-  }
-  if (status === 429) {
-    return new Error('Límite de consultas alcanzado. Espera unos minutos e inténtalo otra vez.')
-  }
-  if (status >= 500) {
-    return new Error('El servicio de consulta no responde. Inténtalo nuevamente en unos minutos.')
-  }
-  return new Error(`No se pudo consultar el ${kind} (error ${status}). Inténtalo nuevamente.`)
+  if (response.error) throw translateFunctionError(response.error, kind)
+  return parseResult(response.data, kind, numero)
 }
 
-async function request(kind: 'dni' | 'ruc', numero: string, fetchFn: FetchLike): Promise<Record<string, unknown>> {
-  const token = apiToken()
-  if (!token) {
-    throw new Error('Falta configurar la consulta de documentos. Crea tu token gratuito en apis.net.pe, guárdalo en VITE_PERU_API_TOKEN y reinicia el servidor.')
-  }
-  const label = kind === 'dni' ? 'DNI' : 'RUC'
-  const source = kind === 'dni' ? 'RENIEC' : 'SUNAT'
-  const base = apiUrl()
-  const usePathToken = /apisperu\.com/i.test(base)
-  // dniruc.apisperu.com recibe número y token en la URL: su CORS no autoriza
-  // la cabecera Authorization y el navegador bloquearía la petición (preflight).
-  // Otros proveedores usan query (?numero=) con Bearer.
-  const url = usePathToken
-    ? `${base}/${kind}/${encodeURIComponent(numero)}?token=${encodeURIComponent(token)}`
-    : `${base}/${kind}?numero=${encodeURIComponent(numero)}`
-  let response: Response
-  try {
-    response = await fetchFn(url, {
-      headers: { Accept: 'application/json', ...(usePathToken ? {} : { Authorization: `Bearer ${token}` }) },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
-  } catch {
-    throw new Error('No se pudo conectar con el servicio de consulta. Revisa tu conexión e inténtalo otra vez.')
-  }
-  if (!response.ok) throw translateLookupError(response.status, label)
-  let body: Record<string, unknown>
-  try {
-    body = (await response.json()) as Record<string, unknown>
-  } catch {
-    throw new Error('El servicio de consulta devolvió una respuesta inválida. Inténtalo nuevamente.')
-  }
-  // Algunos proveedores responden 200 con success:false cuando no hay resultados.
-  if (body.success === false) {
-    throw new Error(`El ${label} no existe en ${source}. Revisa el número.`)
-  }
-  return body
-}
-
-/** Consulta un DNI en RENIEC y devuelve nombre listo para el formulario. */
-export async function lookupDni(dni: string, fetchFn: FetchLike = fetch): Promise<PeruLookupResult> {
+/** Consulta un DNI por la Edge Function autenticada y lo deja listo para el formulario. */
+export async function lookupDni(dni: string, invoke: LookupInvoker = invokeLookup): Promise<PeruLookupResult> {
   const numero = dni.trim()
   if (!isValidDni(numero)) throw new Error('El DNI debe tener 8 dígitos.')
-  return normalizeDni(numero, await request('dni', numero, fetchFn))
+  return request('DNI', numero, 'clientes', invoke)
 }
 
-/** Consulta un RUC en SUNAT y devuelve razón social + dirección listas. */
-export async function lookupRuc(ruc: string, fetchFn: FetchLike = fetch): Promise<PeruLookupResult> {
+/** Consulta un RUC por la Edge Function autenticada y devuelve razón social/dirección. */
+export async function lookupRuc(ruc: string, modulo: PeruLookupModule = 'clientes', invoke: LookupInvoker = invokeLookup): Promise<PeruLookupResult> {
   const numero = ruc.trim()
   if (!/^\d{11}$/.test(numero)) throw new Error('El RUC debe tener 11 dígitos.')
   if (!isValidRuc(numero)) throw new Error('El RUC no pasa la validación del dígito verificador. Revisa el número.')
-  return normalizeRuc(numero, await request('ruc', numero, fetchFn))
+  return request('RUC', numero, modulo, invoke)
 }

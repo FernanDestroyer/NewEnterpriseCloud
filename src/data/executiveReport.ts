@@ -9,6 +9,7 @@ export type ExecutiveReportInput = {
   inventory?: RecordItem[]
   finance?: RecordItem[]
   range: DateRange
+  currency?: 'PEN' | 'USD'
   now?: Date
 }
 
@@ -44,10 +45,13 @@ function periodComparison(source: RecordItem[], range: DateRange, current: numbe
 export function buildExecutiveReport(input: ExecutiveReportInput) {
   const now = input.now ?? new Date()
   const range = { ...input.range }
-  const sales = input.sales.filter(item => inDateRange(item, range))
+  const currency = input.currency ?? 'PEN'
+  const hasCurrency = (item: RecordItem) => (item.moneda ?? 'PEN') === currency
+  const salesSource = input.sales.filter(hasCurrency)
+  const sales = salesSource.filter(item => inDateRange(item, range))
     .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))
       || b.id.localeCompare(a.id, 'es', { numeric: true }))
-  const purchases = input.purchases?.filter(item => inDateRange(item, range))
+  const purchases = input.purchases?.filter(hasCurrency).filter(item => inDateRange(item, range))
   const salesTotal = totalAmount(sales)
   const purchasesTotal = purchases === undefined ? null : totalAmount(purchases)
   const completed = sales.filter(item => item.status === 'Completada' || item.status === 'Pagada')
@@ -79,15 +83,14 @@ export function buildExecutiveReport(input: ExecutiveReportInput) {
     alerts: input.inventory.filter(item => item.status === 'Bajo stock' || item.status === 'Crítico')
       .sort((a, b) => (a.quantity ?? 0) - (b.quantity ?? 0) || a.name.localeCompare(b.name, 'es')),
   }
-  const finance = input.finance === undefined ? null : financialSnapshot(input.finance)
+  const finance = input.finance === undefined ? null : financialSnapshot(input.finance.filter(hasCurrency))
   const overdue = finance?.open.filter(item => item.dueAt && item.dueAt < businessDate(now)) ?? []
 
   return {
-    generatedAt: now.toISOString(), range, sales, salesTotal,
+    generatedAt: now.toISOString(), range, currency, sales, salesTotal,
     purchasesTotal, purchasesCount: purchases?.length ?? null,
-    operationBalance: purchasesTotal === null ? null : round(salesTotal - purchasesTotal),
     averageTicket: sales.length ? round(salesTotal / sales.length) : 0,
-    salesChange: periodComparison(input.sales, range, salesTotal),
+    salesChange: periodComparison(salesSource, range, salesTotal),
     statuses, customers, paymentMethods, trend, inventory, finance,
     overdueCount: overdue.length, overdueAmount: totalAmount(overdue),
     undatedCount: sales.filter(item => !item.createdAt || !businessDate(item.createdAt)).length,

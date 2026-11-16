@@ -22,6 +22,8 @@ const PermisosPage = lazy(() => import('../components/PermisosPage'))
 const AuditPage = lazy(() => import('../components/AuditPage'))
 const ModuloPage = lazy(() => import('../pages/ModuloPage'))
 const ReportsPage = lazy(() => import('../components/ReportsPage'))
+const NotificationsPage = lazy(() => import('../components/NotificationsPage'))
+const ApprovalsPage = lazy(() => import('../components/ApprovalsPage'))
 const ProfilePage = lazy(() => import('../components/ProfilePage'))
 const AnalyzerPage = lazy(() => import('../components/AnalyzerPage'))
 const PurchaseSourcingPage = lazy(() => import('../components/PurchaseSourcingPage'))
@@ -41,6 +43,7 @@ const MetasPage = lazy(() => import('../modules/metas/MetasPage'))
 const FlotaPage = lazy(() => import('../modules/logistica/FlotaPage'))
 const DespachosPage = lazy(() => import('../modules/logistica/DespachosPage'))
 const SeguimientoPage = lazy(() => import('../modules/logistica/SeguimientoPage'))
+const RutasPage = lazy(() => import('../modules/logistica/RutasPage'))
 
 // Solo deja pasar a quien tenga una sesión de Supabase activa.
 // Tras iniciar sesión se muestra "Preparando tu panel" un tiempo mínimo
@@ -114,10 +117,13 @@ export default function AppRouter() {
         <Route path="/logistica/flota" element={<FlotaPage />} />
         <Route path="/logistica/despachos" element={<DespachosPage />} />
         <Route path="/logistica/seguimiento" element={<SeguimientoPage />} />
+        <Route path="/logistica/rutas" element={<RutasPage />} />
         <Route path="/settings" element={<Navigate to="/mantenimientos" replace />} />
         <Route path="/documents" element={<Navigate to="/dashboard" replace />} />
         <Route path="/perfil" element={<ProfilePage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/notificaciones" element={<NotificationsPage />} />
+        <Route path="/aprobaciones" element={<ApprovalsPage />} />
         <Route path="/orden-compra" element={<Navigate to="/purchases" replace />} />
         <Route path="/orden-venta" element={<Navigate to="/sales" replace />} />
         <Route path="/cotizacion" element={<Navigate to="/quotes" replace />} />

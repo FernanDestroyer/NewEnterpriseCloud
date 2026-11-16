@@ -6,7 +6,7 @@ import { useRecords } from '../context/RecordsContext'
 import { useAuth } from '../context/AuthContext'
 import { fetchActiveWarehouses, fetchDocumentLines, fetchMeasurementUnits, fetchPaymentMethods, fetchProductCategories, fetchWarehouseStocks, friendlyError, type ActiveWarehouse, type MeasurementUnit, type ProductCategory } from '../services/records'
 import { consumesCreditLine, customerCredit } from '../data/workspace'
-import { isPeruLookupConfigured, lookupDni, lookupRuc, type DocType } from '../services/peru'
+import { lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
 import { isYapeMethod, isPlinMethod, isBankTransferMethod, salePayableTotal, type YapeSettings, type PlinSettings, type BankTransferSettings } from '../data/payments'
 import { fetchYapeSettings } from '../services/yape'
@@ -413,7 +413,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
     const numero = numeroRaw.replace(/\D/g, '')
     setLookup({ busy: true, message: `Consultando en ${tipo === 'DNI' ? 'RENIEC' : 'SUNAT'}…`, ok: false })
     try {
-      const result = tipo === 'DNI' ? await lookupDni(numero) : await lookupRuc(numero)
+      const result = tipo === 'DNI' ? await lookupDni(numero) : await lookupRuc(numero, kind === 'supplier' ? 'proveedores' : 'clientes')
       setNameValue(result.nombre)
       setDetailValue(result.detalle)
       if (kind === 'supplier') {
@@ -1161,9 +1161,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                   <div className="ec-master-field"><span>Condición de pago</span><SearchablePicker name="forma_pago" value={formaPagoValue} onChange={setFormaPagoValue} ariaLabel="Condición de pago" options={[{id:'',label:'Sin definir'}, ...SUPPLIER_PAYMENT_TERMS.map(term => ({id:term,label:term}))]} /></div>
                   {lookup.message
                     ? <small className={`relation-hint${lookup.ok ? ' linked' : ''}`}><GoogleIcon name={lookup.ok ? 'check_circle' : 'info'} className="small" />{lookup.message}</small>
-                    : !isPeruLookupConfigured()
-                      ? <small className="relation-hint"><GoogleIcon name="info" className="small" />Autocompletado desactivado: configura VITE_PERU_API_TOKEN en tu .env para consultar SUNAT.</small>
-                      : <small className="relation-hint"><GoogleIcon name="badge" className="small" />Escribe el RUC y pulsa SUNAT para traer razón social y dirección. Identifica la empresa en cada orden de compra.</small>}
+                    : <small className="relation-hint"><GoogleIcon name="badge" className="small" />La consulta SUNAT usa un servicio seguro de Supabase. También puedes ingresar los datos manualmente.</small>}
                   </fieldset>
                   {!editing && (
                   <div className="lines-section">
@@ -1206,9 +1204,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                   </label>
                   {lookup.message
                     ? <small className={`relation-hint${lookup.ok ? ' linked' : ''}`}><GoogleIcon name={lookup.ok ? 'check_circle' : 'info'} className="small" />{lookup.message}</small>
-                    : !isPeruLookupConfigured()
-                      ? <small className="relation-hint"><GoogleIcon name="info" className="small" />Autocompletado desactivado: configura VITE_PERU_API_TOKEN en tu .env para consultar RENIEC/SUNAT.</small>
-                      : <small className="relation-hint"><GoogleIcon name="badge" className="small" />Escribe el documento y pulsa {docKind} para traer los datos oficiales. Se guardan con el cliente para reutilizarlos en ventas.</small>}
+                    : <small className="relation-hint"><GoogleIcon name="badge" className="small" />La consulta se realiza mediante un servicio seguro de Supabase. También puedes ingresar los datos manualmente.</small>}
                   </fieldset>
                 </>
               )}

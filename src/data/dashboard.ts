@@ -11,6 +11,28 @@ export function totalAmount(items: RecordItem[]) {
   return Math.round(items.reduce((total, item) => total + recordAmount(item), 0) * 100) / 100
 }
 
+export function amountByCurrency(items: RecordItem[]) {
+  const totals = { PEN: 0, USD: 0 }
+  for (const item of items) totals[item.moneda === 'USD' ? 'USD' : 'PEN'] += recordAmount(item)
+  return {
+    PEN: Math.round(totals.PEN * 100) / 100,
+    USD: Math.round(totals.USD * 100) / 100,
+  }
+}
+
+export function amountByCurrencyLabel(items: RecordItem[]) {
+  const totals = amountByCurrency(items)
+  const currencies = new Set(items.map(item => item.moneda === 'USD' ? 'USD' : 'PEN'))
+  if (!currencies.size) currencies.add('PEN')
+  return (['PEN', 'USD'] as const).filter(currency => currencies.has(currency))
+    .map(currency => new Intl.NumberFormat('es-PE', {
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      style: 'currency',
+    }).format(totals[currency])).join(' · ')
+}
+
 export function percentage(value: number, total: number) {
   return total > 0 ? Math.min(100, Math.max(0, Math.round(value / total * 100))) : 0
 }

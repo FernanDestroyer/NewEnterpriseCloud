@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Check, ChevronLeft, ChevronRight, CircleCheck, Clock3, FilePlus2, Info, PackageCheck, Plus, RefreshCw, Search, Ship, Truck, Warehouse, X } from 'lucide-react'
+import '../purchases-ui.css'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { fetchActiveWarehouses, type ActiveWarehouse } from '../services/records'
@@ -9,6 +10,8 @@ import {
   type AvailableImportOrder, type ImportFolderDetail, type ImportFolderSummary,
 } from '../services/importFolders'
 import type { ImportExpenseType, ImportFolderStatus } from '../types/imports'
+import { SearchablePicker } from './SearchablePicker'
+import { PageHeader } from './ui/PageHeader'
 
 const PAGE_SIZE = 10
 const newKey = () => globalThis.crypto?.randomUUID?.() ?? `import-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -197,8 +200,15 @@ export default function ImportFoldersPage() {
     const canAddExpense=['Abierta','En Tránsito','En Aduanas'].includes(folder.estado)&&canCreate
     const nextState=folder.estado==='Abierta'?'En Tránsito':folder.estado==='En Tránsito'?'En Aduanas':null
     const closeDetail=()=>setDetail(null)
-    return <>
-      <section className="ws-page-heading"><div><button className="ws-text-button ws-import-back" type="button" onClick={closeDetail}><ArrowLeft size={15}/>Carpetas de importación</button><span className="ws-eyebrow">IMPORTACIONES · DOSSIER USD</span><h1>{folder.codigo} · {folder.nombre}</h1><p>{folder.referencia||'Sin referencia registrada'}</p></div><div className="ws-heading-actions"><span className={`ws-contract-status ${statusTone(folder.estado)}`}>{folder.estado}</span><button className="ws-button ws-button-secondary" type="button" disabled={detailLoading} onClick={()=>void loadDetail(folder.id)}><RefreshCw size={15} className={detailLoading?'ws-spin':''}/>Actualizar</button>{nextState&&canEdit&&<button className="ws-button" type="button" onClick={()=>setStateTarget(activeSummary)}><ArrowRight size={15}/>Avanzar a {nextState}</button>}{folder.estado==='En Aduanas'&&canEdit&&canReceive&&<button className="ws-button ws-button-danger" type="button" disabled={!detail.orders.length||!detail.preview.length} onClick={()=>void startNationalize(activeSummary)}><PackageCheck size={15}/>Nacionalizar</button>}</div></section>
+    return <div className="ec-purchases">
+      <button className="ws-text-button ws-import-back" type="button" onClick={closeDetail}><ArrowLeft size={15}/>Carpetas de importación</button>
+      <PageHeader
+        icon={Ship}
+        section="Importaciones · Dossier USD"
+        title={`${folder.codigo} · ${folder.nombre}`}
+        description={folder.referencia || 'Sin referencia registrada'}
+        actions={<><span className={`ws-contract-status ${statusTone(folder.estado)}`}>{folder.estado}</span><button className="ws-button ws-button-secondary" type="button" disabled={detailLoading} onClick={()=>void loadDetail(folder.id)}><RefreshCw size={15} className={detailLoading?'ws-spin':''}/>Actualizar</button>{nextState&&canEdit&&<button className="ws-button" type="button" onClick={()=>setStateTarget(activeSummary)}><ArrowRight size={15}/>Avanzar a {nextState}</button>}{folder.estado==='En Aduanas'&&canEdit&&canReceive&&<button className="ws-button ws-button-danger" type="button" disabled={!detail.orders.length||!detail.preview.length} onClick={()=>void startNationalize(activeSummary)}><PackageCheck size={15}/>Nacionalizar</button>}</>}
+      />
       {(detailError||error)&&<div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={16}/>{detailError||error}<button className="ws-text-button" type="button" onClick={()=>void loadDetail(folder.id)}>Reintentar</button></div>}
       {detail.previewError&&<div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={16}/>El dossier se abrió, pero la API no expone el cálculo de prorrateo ({detail.previewError}). Se pueden revisar y vincular datos; la nacionalización permanecerá bloqueada hasta corregir la función/API.</div>}
       <section className="ws-import-metrics"><article className="ws-card"><span>Órdenes vinculadas</span><strong>{detail.orders.length}</strong><small>{[...new Set(detail.orders.map(order=>order.proveedor_id))].length} proveedores · USD</small></article><article className="ws-card"><span>Gastos normalizados</span><strong>{currency(activeSummary.expense_total_usd)}</strong><small>{detail.expenses.length} gastos registrados</small></article><article className="ws-card"><span>Valor de mercancía</span><strong>{currency(detail.preview.reduce((sum,line)=>sum+Number(line.valor_linea_usd),0))}</strong><small>Base bruta para prorrateo</small></article><article className="ws-card"><span>Costo Landed proyectado</span><strong>{currency(detail.preview.reduce((sum,line)=>sum+Number(line.costo_real_linea_usd),0))}</strong><small>Previsualización, aún no liquidada</small></article></section>
@@ -210,16 +220,26 @@ export default function ImportFoldersPage() {
       {showLink&&canLink&&<LinkOrdersDialog folderId={folder.id} suppliers={suppliers} onClose={()=>setShowLink(false)} onLinked={()=>void linked()}/>}
       {stateTarget&&<StateDialog folder={stateTarget} onClose={()=>setStateTarget(null)} onSubmit={advance}/>}
       {nationalizeTarget&&<NationalizeDialog folder={nationalizeTarget} warehouses={warehouses} onClose={()=>setNationalizeTarget(null)} onSubmit={nationalize}/>}
-    </>
+    </div>
   }
 
-  return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">COMPRAS · COMERCIO INTERNACIONAL</span><h1>Importaciones</h1><p>Gestiona carpetas, gastos y prorrateo Landed Cost de órdenes USD.</p></div><div className="ws-heading-actions"><button className="ws-button ws-button-secondary" type="button" disabled={loading} onClick={()=>void load()}><RefreshCw size={15} className={loading?'ws-spin':''}/>Actualizar</button>{canCreate&&<button className="ws-button" type="button" onClick={()=>setShowCreate(true)}><Plus size={15}/>Nueva carpeta</button>}</div></section>
-    <section className="ws-card ws-import-filters"><label>Estado<select className="ws-control" value={stateFilter} onChange={event=>{setStateFilter(event.target.value);setPage(0)}}><option value="">Todos los estados</option><option>Abierta</option><option>En Tránsito</option><option>En Aduanas</option><option>Nacionalizado</option><option>Cerrada</option></select></label><label>Proveedor<select className="ws-control" value={supplierFilter} onChange={event=>{setSupplierFilter(event.target.value);setPage(0)}}><option value="">Todos los proveedores</option>{suppliers.map(supplier=><option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label><span>{total} carpetas</span></section>
+  return <div className="ec-purchases">
+    <PageHeader
+      icon={Ship}
+      section="Compras · Comercio internacional"
+      title="Importaciones"
+      description="Gestiona carpetas, gastos y prorrateo Landed Cost de órdenes USD."
+      actions={<><button className="ws-button ws-button-secondary" type="button" disabled={loading} onClick={()=>void load()}><RefreshCw size={15} className={loading?'ws-spin':''}/>Actualizar</button>{canCreate&&<button className="ws-button" type="button" onClick={()=>setShowCreate(true)}><Plus size={15}/>Nueva carpeta</button>}</>}
+    />
+    <section className="ws-card ws-import-filters">
+      <div className="ws-picker-field"><span>Estado</span><SearchablePicker ariaLabel="Filtrar estado de carpeta" value={stateFilter} onChange={value=>{setStateFilter(value);setPage(0)}} placeholder="Todos los estados" searchPlaceholder="Buscar estado…" pageSize={6} options={[{id:'',label:'Todos los estados'},{id:'Abierta',label:'Abierta'},{id:'En Tránsito',label:'En Tránsito'},{id:'En Aduanas',label:'En Aduanas'},{id:'Nacionalizado',label:'Nacionalizado'},{id:'Cerrada',label:'Cerrada'}]}/></div>
+      <div className="ws-picker-field"><span>Proveedor</span><SearchablePicker ariaLabel="Filtrar por proveedor" value={supplierFilter} onChange={value=>{setSupplierFilter(value);setPage(0)}} placeholder="Todos los proveedores" searchPlaceholder="Buscar proveedor…" pageSize={6} options={[{id:'',label:'Todos los proveedores'},...suppliers.map(supplier=>({id:supplier.id,label:supplier.name}))]}/></div>
+      <span>{total} carpetas</span>
+    </section>
      {error&&<div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={16}/>{error}<button className="ws-text-button" type="button" onClick={()=>void load()}>Reintentar</button></div>}
      {!detail&&detailError&&<div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={16}/>{detailError}<button className="ws-text-button" type="button" disabled={detailLoading||!detailTargetId} onClick={()=>void loadDetail(detailTargetId)}>{detailLoading?'Cargando…':'Reintentar detalle'}</button></div>}
     <section className="ws-card ws-import-list"><div className="table-scroll"><table className="record-table"><thead><tr><th>Carpeta</th><th>Estado</th><th>Proveedores</th><th>Órdenes</th><th className="ws-num">Gastos USD</th><th>Creada</th><th></th></tr></thead><tbody>{items.map(folder=><tr key={folder.id}><td><button className="ws-import-folder-link" type="button" onClick={()=>void loadDetail(folder.id)}><strong>{folder.codigo} · {folder.nombre}</strong><small>{folder.referencia||'Sin referencia'}</small></button></td><td><span className={`ws-contract-status ${statusTone(folder.estado)}`}>{folder.estado}</span></td><td>{folder.proveedor_ids.length?folder.proveedor_ids.map(supplierName).join(', '):'—'}</td><td>{folder.order_count}</td><td className="ws-num">{currency(folder.expense_total_usd)}</td><td>{new Date(folder.creado_en).toLocaleDateString('es-PE')}</td><td><button className="ws-button ws-button-secondary ws-button-compact" type="button" onClick={()=>void loadDetail(folder.id)}>Ver detalle<ArrowRight size={13}/></button></td></tr>)}{!items.length&&<tr><td colSpan={7}><div className="ws-empty-compact">{loading?<RefreshCw size={23} className="ws-spin"/>:<Ship size={23}/>}<strong>{loading?'Cargando carpetas…':error?'No se pudieron consultar las carpetas':'No hay carpetas con estos filtros'}</strong><span>Crea una carpeta USD para vincular órdenes confirmadas.</span></div></td></tr>}</tbody></table></div>{total>PAGE_SIZE&&<div className="ws-pagination"><span>Mostrando {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,total)} de {total}</span><div><button className="ws-icon-button" type="button" aria-label="Página anterior" disabled={page===0||loading} onClick={()=>setPage(current=>Math.max(0,current-1))}><ChevronLeft size={15}/></button><span>{page+1} / {pageCount}</span><button className="ws-icon-button" type="button" aria-label="Página siguiente" disabled={page+1>=pageCount||loading} onClick={()=>setPage(current=>Math.min(pageCount-1,current+1))}><ChevronRight size={15}/></button></div></div>}</section>
     {showCreate&&<CreateFolderDialog onClose={()=>setShowCreate(false)} onCreated={id=>void created(id)}/>}
     {detailLoading&&<div className="ws-import-detail-loading" role="status"><RefreshCw size={15} className="ws-spin"/>Cargando carpeta…</div>}
-  </>
+  </div>
 }

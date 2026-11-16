@@ -1,14 +1,17 @@
 import JSZip from 'jszip'
 import { requireSupabase } from '../lib/supabase'
-import { buildAnalysisFromFiles, type AnalyzerFile, type AnalyzerReport } from '../data/analyzer'
+import type { AnalyzerFile, AnalyzerReport } from '../data/analyzer'
 import { renderAnalyzerReport } from '../data/analyzerHtml'
 import { friendlyError, isMissingTableError } from './records'
 import logoRecorte from '../assets/enterprisecloud-logo-recorte.png'
 
 const MAX_ZIP_BYTES = 60 * 1024 * 1024
-const MAX_TEXT_BYTES = 512 * 1024
-const MAX_TEXT_FILES = 600
-const MAX_REMOTE_FILES = 320
+const MAX_TEXT_BYTES = 128 * 1024
+const MAX_TEXT_FILES = 250
+const MAX_REMOTE_FILES = 240
+const MAX_REQUEST_FILES = 2_000
+const MAX_REQUEST_TEXT_BYTES = 700_000
+const MAX_REQUEST_BODY_BYTES = 1_650_000
 const SKIP_PATH = /(?:^|\/)(?:\.git|node_modules|\.venv|__pycache__|dist|build|\.next|\.cache|vendor|coverage)(?:\/|$)/i
 
 const TEXT_EXTENSIONS = new Set([
@@ -78,6 +81,129 @@ function normalizeZipName(fileName: string): string {
   return fileName.replace(/\.zip$/i, '')
 }
 
+function filePriority(path: string): number {
+  const normalized = path.replace(/\\/g, '/').toLowerCase()
+  const name = normalized.slice(normalized.lastIndexOf('/') + 1)
+  if (/^(package\.json|pyproject\.toml|requirements(?:\.txt)?|go\.mod|cargo\.toml|pom\.xml|build\.gradle(?:\.kts)?|composer\.json|gemfile|mix\.exs)$/.test(name)) return 0
+  if (/^(dockerfile|docker-compose(?:\.[\w-]+)?\.ya?ml|compose\.ya?ml|serverless\.ya?ml|template\.ya?ml|samconfig\.toml|terraform\.tf|main\.tf|wrangler\.toml|vercel\.json|netlify\.toml|supabase\.toml)$/.test(name)) return 1
+  if (/^(\.env(?:\.[\w-]+)?|\.gitignore|\.dockerignore|\.npmrc|\.nvmrc|readme(?:\.[\w-]+)?|makefile|procfile)$/.test(name)) return 2
+  if (/(^|\/)(\.github\/workflows|\.gitlab-ci|infra|infrastructure|terraform|deploy|deployment|migrations?)(\/|$)/.test(normalized)) return 3
+  if (/(^|\/)(src|app|api|functions|supabase|backend|server|tests?)(\/|$)/.test(normalized)) return 4
+  if (/\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|cs|php|sql|tf|ya?ml|toml|json|xml|sh|ps1)$/.test(name)) return 5
+  if (/\.(?:md|rst|txt)$/.test(name)) return 7
+  return 6
+}
+
+function rankFiles<T extends { path: string }>(files: T[]): T[] {
+  return files.map((file, index) => ({ file, index, priority: filePriority(file.path) }))
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .map(item => item.file)
+}
+
+type AnalysisCoverageInput = { filesAvailable: number; bytesAvailable: number; textFilesAvailable: number; inventoryComplete: boolean; bytesTotalKnown: boolean }
+
+function encodedSize(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isAnalyzerReport(value: unknown, kind: 'zip' | 'enlace'): value is AnalyzerReport {
+  if (!isRecord(value) || value.analysisVersion !== 1 || typeof value.name !== 'string' || typeof value.generatedAt !== 'string') return false
+  if (!isRecord(value.source) || value.source.kind !== kind || typeof value.source.origin !== 'string') return false
+  if (!isRecord(value.stats) || !Number.isSafeInteger(value.stats.files) || (value.stats.files as number) < 0 || !Number.isSafeInteger(value.stats.bytes) || (value.stats.bytes as number) < 0) return false
+  if (!Array.isArray(value.stats.languages) || !value.stats.languages.every(item => typeof item === 'string')) return false
+  if (!Array.isArray(value.stack) || !value.stack.every(item => typeof item === 'string')) return false
+  const scores = value.scores
+  if (!isRecord(scores) || !['security', 'scalability', 'cloudReadiness', 'total'].every(key => Number.isInteger(scores[key]) && (scores[key] as number) >= 0 && (scores[key] as number) <= 100)) return false
+  if (!Array.isArray(value.findings) || !value.findings.every(item => isRecord(item) && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.detail === 'string' && typeof item.recommendation === 'string' && Array.isArray(item.files) && item.files.every(file => typeof file === 'string'))) return false
+  if (!Array.isArray(value.awsRecommendations) || !value.awsRecommendations.every(item => isRecord(item) && typeof item.service === 'string' && typeof item.category === 'string' && typeof item.reason === 'string' && Array.isArray(item.signals) && item.signals.every(signal => typeof signal === 'string'))) return false
+  if (value.coverage !== undefined) {
+    const coverage = value.coverage
+    if (!isRecord(coverage) || !['filesAvailable', 'filesSent', 'textFilesAvailable', 'textFilesSent'].every(key => Number.isSafeInteger(coverage[key]) && (coverage[key] as number) >= 0) || typeof coverage.bytesTotalKnown !== 'boolean') return false
+  }
+  return true
+}
+
+async function submitAnalysisToApi(
+  name: string,
+  kind: 'zip' | 'enlace',
+  origin: string,
+  sourceFiles: AnalyzerFile[],
+  coverage: AnalysisCoverageInput,
+  onStep?: (message: string) => void,
+): Promise<AnalyzerReport> {
+  const ordered = rankFiles(sourceFiles).slice(0, MAX_REQUEST_FILES)
+  let remainingTextBytes = MAX_REQUEST_TEXT_BYTES
+  let files = ordered.map(file => {
+    if (typeof file.text !== 'string') return { path: file.path.slice(0, 400), bytes: file.bytes }
+    const textBytes = new TextEncoder().encode(file.text).byteLength
+    if (textBytes > MAX_TEXT_BYTES || textBytes > remainingTextBytes) return { path: file.path.slice(0, 400), bytes: file.bytes }
+    remainingTextBytes -= textBytes
+    return { path: file.path.slice(0, 400), bytes: file.bytes, text: file.text }
+  })
+  const request = () => ({
+    name: name.slice(0, 120),
+    kind,
+    origin: origin.slice(0, 1000),
+    coverage,
+    files,
+  })
+  let requestBytes = encodedSize(request())
+  while (requestBytes > MAX_REQUEST_BODY_BYTES) {
+    let lastText = -1
+    for (let index = files.length - 1; index >= 0; index -= 1) {
+      if (typeof files[index].text === 'string') {
+        lastText = index
+        break
+      }
+    }
+    if (lastText >= 0) {
+      const previous = files[lastText]
+      const { path, bytes } = previous
+      files[lastText] = { path, bytes }
+      requestBytes -= encodedSize(previous) - encodedSize(files[lastText])
+    } else if (files.length > 0) {
+      const removed = files[files.length - 1]
+      files = files.slice(0, -1)
+      requestBytes -= encodedSize(removed) + (files.length > 0 ? 1 : 0)
+    } else {
+      throw new AnalyzerSourceError('El inventario del proyecto supera el tamaño permitido. Comparte un ZIP más pequeño o un subconjunto del repositorio.')
+    }
+  }
+
+  onStep?.('Enviando los archivos seleccionados a la API segura de Supabase…')
+  const { data, error } = await requireSupabase().functions.invoke<AnalyzerReport>('project-analyzer', { body: request() })
+  if (error) {
+    const context = (error as { context?: unknown }).context
+    if (context instanceof Response) {
+      try {
+        const detail = await context.clone().json() as { error?: unknown }
+        if (typeof detail.error === 'string') throw new AnalyzerSourceError(detail.error)
+      } catch (cause) {
+        if (cause instanceof AnalyzerSourceError) throw cause
+      }
+    }
+    throw new AnalyzerSourceError('La API de análisis no respondió correctamente. Comprueba tu sesión y vuelve a intentarlo.')
+  }
+  if (!isAnalyzerReport(data, kind)) {
+    throw new AnalyzerSourceError('La API devolvió un informe incompleto. Vuelve a intentarlo; no se guardó el código fuente.')
+  }
+  return data
+}
+
+function addInventoryCounts<T extends { size?: number }>(items: T[]): number {
+  let total = 0
+  for (const item of items) {
+    const size = item.size ?? 0
+    if (Number.isSafeInteger(size) && size > 0) total += size
+    if (!Number.isSafeInteger(total)) return Number.MAX_SAFE_INTEGER
+  }
+  return total
+}
+
 async function mapWithLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = []
   let cursor = 0
@@ -91,7 +217,7 @@ async function mapWithLimit<T, R>(items: T[], limit: number, worker: (item: T) =
   return results
 }
 
-async function fetchText(url: string, timeoutMs = 15000, notFoundMessage?: string): Promise<string> {
+async function fetchText(url: string, timeoutMs = 15000, notFoundMessage?: string, maxBytes?: number): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -101,6 +227,34 @@ async function fetchText(url: string, timeoutMs = 15000, notFoundMessage?: strin
       if (response.status === 401 || response.status === 403) throw new AnalyzerSourceError('El repositorio exige autenticación o se agotó el límite de consultas; inténtalo en unos minutos.')
       if (response.status === 429) throw new AnalyzerSourceError('Se alcanzó el límite de consultas del proveedor; espera unos minutos e inténtalo otra vez.')
       throw new AnalyzerSourceError(`El repositorio respondió HTTP ${response.status}.`)
+    }
+    if (maxBytes !== undefined) {
+      const declaredSize = Number(response.headers.get('content-length') ?? 0)
+      if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
+        await response.body?.cancel()
+        throw new AnalyzerSourceError(`Se omitió un archivo de texto que supera ${Math.round(maxBytes / 1024)} KB.`)
+      }
+      if (!response.body) return ''
+      const reader = response.body.getReader()
+      const chunks: Uint8Array[] = []
+      let size = 0
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        size += value.byteLength
+        if (size > maxBytes) {
+          await reader.cancel()
+          throw new AnalyzerSourceError(`Se omitió un archivo de texto que supera ${Math.round(maxBytes / 1024)} KB.`)
+        }
+        chunks.push(value)
+      }
+      const bytes = new Uint8Array(size)
+      let offset = 0
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset)
+        offset += chunk.byteLength
+      }
+      return new TextDecoder().decode(bytes)
     }
     return await response.text()
   } catch (error) {
@@ -112,7 +266,7 @@ async function fetchText(url: string, timeoutMs = 15000, notFoundMessage?: strin
   }
 }
 
-async function readGitRepository(url: string): Promise<AnalyzerFile[]> {
+async function readGitRepository(url: string): Promise<{ files: AnalyzerFile[]; coverage: AnalysisCoverageInput }> {
   const parsed = new URL(url)
   const isGitHub = /(?:^|\.)github\.com$/i.test(parsed.hostname)
   const isGitLab = /(?:^|\.)gitlab\.com$/i.test(parsed.hostname)
@@ -122,7 +276,6 @@ async function readGitRepository(url: string): Promise<AnalyzerFile[]> {
   const segments = parsed.pathname.split('/').filter(Boolean).map(segment => decodeURIComponent(segment))
   if (segments.length < 2) throw new AnalyzerSourceError('Enlace incompleto: usa el formato github.com/usuario/repo o gitlab.com/usuario/repo.')
 
-  const files: AnalyzerFile[] = []
   let branch = ''
   if (isGitHub) {
     let [owner, repo, ...rest] = segments
@@ -138,8 +291,11 @@ async function readGitRepository(url: string): Promise<AnalyzerFile[]> {
       `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
       `GitHub no encontró la rama «${branch}» en este repositorio. Abre el enlace sin /tree/... para usar la rama predeterminada, o verifica el nombre de la rama.`,
     )
-    const entries: Array<{ path: string; size?: number }> = (Array.isArray(tree.tree) ? tree.tree : [])
-      .filter(entry => entry.type === 'blob' && !SKIP_PATH.test(entry.path) && looksTextual(entry.path) && (entry.size ?? 0) <= MAX_TEXT_BYTES)
+    const inventory = (Array.isArray(tree.tree) ? tree.tree : [])
+      .filter((entry): entry is { path: string; type: string; size?: number } => Boolean(entry && typeof entry === 'object' && typeof (entry as { path?: unknown }).path === 'string'))
+      .filter(entry => entry.type === 'blob' && !SKIP_PATH.test(entry.path))
+    const textInventory = inventory.filter(entry => looksTextual(entry.path))
+    const entries = rankFiles(textInventory.filter(entry => Number.isSafeInteger(entry.size) && (entry.size ?? 0) <= MAX_TEXT_BYTES))
       .slice(0, MAX_REMOTE_FILES)
     const contents = await mapWithLimit(entries, 8, async entry => ({
       entry,
@@ -147,9 +303,20 @@ async function readGitRepository(url: string): Promise<AnalyzerFile[]> {
         `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
         15000,
         `GitHub listó «${entry.path}» en la rama «${branch}», pero no permitió descargarlo. Intenta con el ZIP del repositorio.`,
+        MAX_TEXT_BYTES,
       ),
     }))
-    for (const { entry, text } of contents) files.push({ path: entry.path.slice(0, 400), bytes: entry.size ?? text.length, text })
+    const files = contents.map(({ entry, text }) => ({ path: entry.path.slice(0, 400), bytes: entry.size ?? text.length, text }))
+    return {
+      files,
+      coverage: {
+        filesAvailable: inventory.length,
+        bytesAvailable: Math.max(addInventoryCounts(inventory), addInventoryCounts(entries)),
+        textFilesAvailable: textInventory.length,
+        inventoryComplete: tree.truncated !== true,
+        bytesTotalKnown: inventory.every(entry => Number.isSafeInteger(entry.size)),
+      },
+    }
   } else {
     let path = segments.join('/')
     const lastSegments = path.split('/')
@@ -163,26 +330,44 @@ async function readGitRepository(url: string): Promise<AnalyzerFile[]> {
     const info = await fetchJson(`https://gitlab.com/api/v4/projects/${encodeURIComponent(path)}`)
     branch = branch || String(info.default_branch ?? 'main')
     let page = 1
-    const entries: Array<{ path: string; type: string }> = []
+    const entries: Array<{ path: string; type: string; size?: number }> = []
+    let inventoryComplete = true
     while (page <= 6) {
       const response = await fetch(`https://gitlab.com/api/v4/projects/${info.id}/repository/tree?recursive=true&per_page=100&page=${page}&ref=${encodeURIComponent(branch)}`)
       if (!response.ok) throw new AnalyzerSourceError(`GitLab respondió HTTP ${response.status} al listar el árbol.`)
-      const batch: Array<{ path: string; type: string }> = await response.json()
+      const batch: Array<{ path: string; type: string; size?: number }> = await response.json()
       entries.push(...batch)
       if (!response.headers.get('X-Next-Page')) break
+      if (page === 6) inventoryComplete = false
       page += 1
     }
-    const selected = entries
-      .filter(entry => entry.type === 'blob' && !SKIP_PATH.test(entry.path) && looksTextual(entry.path))
-      .slice(0, MAX_REMOTE_FILES)
-    const contents = await mapWithLimit(selected, 8, async entry => ({
-      entry,
-      text: await fetchText(`https://gitlab.com/${path}/-/raw/${encodeURIComponent(branch)}/${entry.path.split('/').map(encodeURIComponent).join('/')}`),
-    }))
-    for (const { entry, text } of contents) files.push({ path: entry.path.slice(0, 400), bytes: text.length, text })
-    return files
+    const inventory = entries.filter(entry => entry.type === 'blob' && !SKIP_PATH.test(entry.path))
+    const textInventory = inventory.filter(entry => looksTextual(entry.path))
+    const selected = rankFiles(textInventory).slice(0, MAX_REMOTE_FILES)
+    const contents = await mapWithLimit(selected, 8, async entry => {
+      try {
+        return {
+          entry,
+          text: await fetchText(`https://gitlab.com/${path}/-/raw/${encodeURIComponent(branch)}/${entry.path.split('/').map(encodeURIComponent).join('/')}`, 15000, undefined, MAX_TEXT_BYTES),
+        }
+      } catch (cause) {
+        if (cause instanceof AnalyzerSourceError && cause.message.includes('Se omitió un archivo')) return null
+        throw cause
+      }
+    })
+    const files = contents.filter((item): item is { entry: typeof selected[number]; text: string } => item !== null)
+      .map(({ entry, text }) => ({ path: entry.path.slice(0, 400), bytes: entry.size ?? new TextEncoder().encode(text).byteLength, text }))
+    return {
+      files,
+      coverage: {
+        filesAvailable: inventory.length,
+        bytesAvailable: Math.max(addInventoryCounts(inventory), addInventoryCounts(selected)),
+        textFilesAvailable: textInventory.length,
+        inventoryComplete,
+        bytesTotalKnown: inventory.every(entry => Number.isSafeInteger(entry.size)),
+      },
+    }
   }
-  return files
 }
 
 async function fetchJson(url: string, notFoundMessage?: string): Promise<Record<string, unknown>> {
@@ -204,30 +389,47 @@ export async function analyzeZipArchive(file: File, options: { onStep?: (message
     throw new AnalyzerSourceError('No se pudo abrir el ZIP: puede estar dañado o protegido con contraseña.')
   }
   const rawSize = (entry: unknown) => (entry as { _data?: { uncompressedSize?: number } } | null)?._data?.uncompressedSize ?? 0
-  const entries = Object.values(zip.files)
-    .filter(entry => !entry.dir && !SKIP_PATH.test(entry.name))
-    .slice(0, 8000)
-  options.onStep?.(`Leyendo ${entries.length} archivos del paquete…`)
-  const textEntries = entries
-    .filter(entry => looksTextual(entry.name) && rawSize(entry) > 0)
-    .slice(0, MAX_TEXT_FILES)
+  const inventory = Object.values(zip.files).filter(entry => !entry.dir && !SKIP_PATH.test(entry.name))
+  const entries = rankFiles(inventory.map(entry => ({ path: entry.name, entry })))
+    .slice(0, MAX_REQUEST_FILES)
+    .map(item => item.entry)
+  const textInventory = inventory.filter(entry => looksTextual(entry.name))
+  let textBudget = MAX_REQUEST_TEXT_BYTES
+  let selectedTextCount = 0
+  const textEntries = rankFiles(inventory
+    .filter(entry => looksTextual(entry.name) && rawSize(entry) > 0 && rawSize(entry) <= MAX_TEXT_BYTES)
+    .map(entry => ({ path: entry.name, entry })))
+    .filter(({ entry }) => {
+      const size = rawSize(entry)
+      if (selectedTextCount >= MAX_TEXT_FILES || size > textBudget) return false
+      textBudget -= size
+      selectedTextCount += 1
+      return true
+    })
+    .map(item => item.entry)
   const contents = await mapWithLimit(textEntries, 12, async entry => {
     let text: string | undefined
     try {
-      text = (await entry.async('string')).slice(0, MAX_TEXT_BYTES)
+      text = await entry.async('string')
     } catch {
       text = undefined
     }
-    return { path: entry.name.slice(0, 400), bytes: rawSize(entry) || text?.length || 0, text }
+    return { name: entry.name, path: entry.name.slice(0, 400), bytes: rawSize(entry) || text?.length || 0, text }
   })
-  const byPath = new Map(contents.map(item => [item.path, item]))
+  const byPath = new Map(contents.map(item => [item.name, item]))
   const files: AnalyzerFile[] = entries.map(entry => {
     const read = byPath.get(entry.name)
     if (read) return { path: read.path, bytes: read.bytes, text: read.text }
     return { path: entry.name.slice(0, 400), bytes: rawSize(entry) }
   })
-  options.onStep?.('Evaluando hallazgos…')
-  return buildAnalysisFromFiles(normalizeZipName(file.name), 'zip', file.name, files)
+  options.onStep?.(`Preparando ${files.length} de ${inventory.length} archivos para el análisis…`)
+  return submitAnalysisToApi(normalizeZipName(file.name), 'zip', file.name, files, {
+    filesAvailable: inventory.length,
+    bytesAvailable: addInventoryCounts(inventory.map(entry => ({ size: rawSize(entry) }))),
+    textFilesAvailable: textInventory.length,
+    inventoryComplete: true,
+    bytesTotalKnown: true,
+  }, options.onStep)
 }
 
 export async function analyzeRepositoryLink(url: string, options: { onStep?: (message: string) => void } = {}): Promise<AnalyzerReport> {
@@ -236,10 +438,10 @@ export async function analyzeRepositoryLink(url: string, options: { onStep?: (me
   const normalized = /^https?:\/\//i.test(trimmed) || /^[^/]+\.[^/]+\/.+/.test(trimmed) ? (trimmed.startsWith('http') ? trimmed : `https://${trimmed}`) : ''
   if (!normalized) throw new AnalyzerSourceError('Enlace no reconocido. Usa https://github.com/usuario/repo o gitlab.com/usuario/repo.')
   options.onStep?.('Consultando el repositorio…')
-  const files = await readGitRepository(normalized)
-  options.onStep?.(`Evaluando ${files.length} archivos del repositorio…`)
+  const repository = await readGitRepository(normalized)
+  options.onStep?.(`Preparando ${repository.files.length} archivos del repositorio…`)
   const last = unifiedLastSegment(normalized.split('?')[0].split('#')[0])
-  return buildAnalysisFromFiles(last, 'enlace', normalized, files)
+  return submitAnalysisToApi(last, 'enlace', normalized, repository.files, repository.coverage, options.onStep)
 }
 
 function unifiedLastSegment(url: string): string {
@@ -274,7 +476,7 @@ export async function saveAnalysisReport(analysis: AnalyzerReport, createdBy: st
       puntuacion_cloud: analysis.scores.cloudReadiness,
       hallazgos: analysis.findings,
       servicios: analysis.awsRecommendations,
-      detalle: { total: analysis.scores.total, stack: analysis.stack, idiomas: analysis.stats.languages, tamano: analysis.stats.bytes, versionAnalisis: analysis.recommendationsVersion ?? 2 },
+      detalle: { total: analysis.scores.total, stack: analysis.stack, idiomas: analysis.stats.languages, tamano: analysis.stats.bytes, versionMotor: analysis.analysisVersion, versionAnalisis: analysis.recommendationsVersion ?? 2, cobertura: analysis.coverage },
       creado_por: createdBy,
       created_at: analysis.generatedAt,
     })

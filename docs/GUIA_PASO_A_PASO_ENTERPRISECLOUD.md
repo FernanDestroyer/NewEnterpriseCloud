@@ -1,5 +1,7 @@
 # Guía paso a paso de implementación de EnterpriseCloud
 
+> **Estado vigente (13-11-2026):** el contenido operativo de esta guía es histórico y corresponde a cortes anteriores. La CLI está autenticada/enlazada; el esquema remoto actual se exportó y restauró localmente en PostgreSQL 17.5 aislado. El proyecto remoto conserva 10 cuentas Auth y 10 perfiles; no se exportaron filas comerciales ni Auth. La referencia actual es [el plan vigente](PLAN_IMPLEMENTACION_MODULOS_PENDIENTES.md), [el inventario de módulos](ESTADO_ACTUAL_MODULOS_PENDIENTES.md), [la conciliación de migraciones](RECONCILIACION_MIGRACIONES.md) y [el estado de Supabase](../supabase/README.md). No uses las cifras antiguas de 9 cuentas, 40 tablas, 23 migraciones ni 48 archivos como estado actual.
+
 **Esquema remoto verificado:** 26 de octubre de 2026. **Trabajo local documentado:** 26 de octubre de 2026. **Entrega adicional:** 29 de octubre de 2026 (solicitud de compra Modelo B, Maestros/Tesorería/Comisiones).  
 **Objetivo:** completar el ERP por flujos verificables, preservar las cuentas y mantener el costo en cero mientras el plan Free sea suficiente.  
 **Mapa y propuesta de datos:** [arquitectura objetivo](ARQUITECTURA_OBJETIVO_ENTERPRISECLOUD.md).
@@ -9,7 +11,7 @@
 - El PDF es referencia de amplitud modular, no identidad ni reglas de otra empresa.
 - V1 atiende un espacio de trabajo de una organización principal. No está preparado para aislar distintas organizaciones cliente.
 - Un módulo no está completo por tener menú: necesita datos, reglas, permisos de servidor/RLS, estados, transacciones, auditoría, errores y reportes.
-- Se conservan las 9 cuentas Auth y sus perfiles. No usar reset remoto ni borrar usuarios para limpiar datos.
+- Se preservan las cuentas Auth y sus perfiles; el conteo vigente es 10 y 10. No usar reset remoto ni borrar usuarios para limpiar datos.
 - No se inventan empresa, almacenes, stock, clientes ni transacciones.
 - Cada cambio del esquema se versiona, revisa, prueba en una base local desechable, respalda y luego se aplica de manera controlada.
 - Supabase Free, CLI gratuita y desarrollo local con Docker son suficientes para avanzar. No presupongo Pro, AWS de pago ni facturación electrónica pagada.
@@ -32,34 +34,15 @@
 
 Multi-organización SaaS, importaciones, contratos y evaluación formal de proveedores, devoluciones/notas de crédito, reservas, guías, SUNAT, transferencias entre almacenes, ajustes de inventario y conteos, logística de flota, metas, workflows, notificaciones persistentes, webhooks, lotes/series y BI avanzado. (Conciliación bancaria, comisiones y compras fraccionarias pasaron al alcance corriente el 29-10-2026.)
 
-## 3. Fase 1 — reconciliar esquema e historial
+## 3. Estado actual del esquema e historial (13 de noviembre de 2026)
 
-### Estado comprobado
+La CLI está autenticada y enlazada con `auxqjoxnsasnmtnakgmg`. El remoto registra 58 migraciones y el repositorio tiene 105 archivos SQL: 29 coincidencias exactas, 76 archivos sin versión remota exacta y 29 versiones remotas sin archivo local con la misma versión. La diferencia es deriva histórica, no una cola para ejecutar o reparar en lote.
 
-El remoto tiene 40 tablas públicas con RLS, 9 cuentas Auth y 9 perfiles. El historial remoto contiene 23 migraciones: 13 originales y diez forward-only. El repositorio tiene 48 archivos SQL: 23 coinciden exactamente con el historial; de las otras 25, 18 tienen fecha hasta el corte y requieren conciliación, y siete tienen fechas posteriores y son futuras locales. No se deben ejecutar en bloque ni usar futuras para reparar el historial. La CLI aún no está enlazada; Docker no tiene un motor local disponible. PostgreSQL 17 permitió reproducir 47 SQL cronológicamente en una base desechable con stubs mínimos de Auth; la migración más reciente se aplicó en Supabase y se verificó su ACL. Falta repetir la reproducción local con los 48 archivos y restaurar una exportación del esquema/datos remotos.
+El dump actual de `public,app_private` fue restaurado en PostgreSQL local 17.5 aislado y detenido después de la verificación: 121 tablas públicas con RLS, 270 políticas públicas y seis tablas privadas con RLS. Auth es un stub local vacío; el remoto mantiene 10 cuentas y 10 perfiles. No se exportaron filas de negocio, Auth, Storage ni secretos. La copia es una base para validar esquema/migraciones, no una recuperación integral del servicio.
 
-Las 13 versiones originales permanecen registradas: 20261024200926 enterprise_v1_operational_foundations; 20261024201951 marca_compras_legacy_recibidas; 20261024202024 funcion_saldo_tesoreria; 20261024202317 ventas_por_almacen_y_turno; 20261024202647 restringir_rpc_pago_sin_turno; 20261024203548 politicas_zonas_sin_duplicados; 20261024203558 indices_fk_advisor; 20261024203610 bloquear_cotizacion_vacia; 20261024203814 aislar_rpc_operativos; 20261024204307 inventario_apertura_distribuida; 20261024204453 indexar_apertura_inventario; 20261024210602 auditoria_operaciones_criticas; 20261024210642 auditar_cambios_permisos. Las diez migraciones forward-only son `20261026182059_privilegios_api_minimos`, `20261026182706_un_solo_turno_abierto`, `20261026182720_orden_compra_atomica`, `20261026182728_venta_credito_permisos`, `20261026195955_cajas_multisucursal`, `20261026200116_cajas_indices_fk`, `20261026200340_unificar_lectura_sucursales`, `20261026200923_almacenes_por_sucursal`, `20261026202241_registrar_auto_rls` y `20261026203451_empresas_sin_borrado_api`. La última revoca DELETE a `authenticated` en el maestro de empresas. La lista de las 25 versiones restantes está en [RECONCILIACION_MIGRACIONES.md](RECONCILIACION_MIGRACIONES.md).
+Las migraciones recientes de PEPS, notificaciones, aprobaciones, Tesorería/Caja y saneamiento de RLS/índice están aplicadas. No repetir `approval_notifications_inbox_v1`. Para el inventario completo de diferencias y límites, consultar [RECONCILIACION_MIGRACIONES.md](RECONCILIACION_MIGRACIONES.md) y [supabase/README.md](../supabase/README.md).
 
-### Secuencia segura al iniciar sesión en la CLI local
-
-1. Autenticar CLI de forma interactiva en el terminal local. No pegar tokens ni contraseñas en el chat.
-2. Enlazar el repo con el proyecto ref confirmado auxqjoxnsasnmtnakgmg.
-3. Correr la lista de migraciones y confirmar que aparecen las 23 versiones remotas registradas; guardar el resultado localmente.
-4. Crear una exportación lógica del esquema/datos relevantes y comprobar que se restaura en una base local desechable.
-5. Comparar cada una de las 25 versiones fuera del historial con tablas, columnas, funciones, triggers, grants, políticas RLS y efectos sobre datos remotos, usando la matriz como checklist; sus clasificaciones aún no son certificación final.
-6. Clasificar cada SQL: aplicado completo, aplicado parcial, no aplicado, obsoleto/redundante o destructivo. Nunca usar “parece que existe” como evidencia suficiente.
-7. **Hecho el 26 de octubre:** se reprodujeron los 47 SQL locales en orden en PostgreSQL 17 desechable. La validación terminó con 40 tablas, todas con RLS, y el event trigger activo. Falta repetir la revisión sobre una restauración real del esquema remoto.
-8. Solo registrar como aplicada una versión cuyo efecto SQL ya exista íntegramente en remoto. Para lo que no existe, crear una migración nueva forward-only; no reejecutar un archivo histórico destructivo.
-9. Comparar el historial y el esquema final, explicar cada diferencia y documentar responsable/fecha.
-10. A partir de esa línea base, crear una migración pequeña con la CLI → prueba local → respaldo comprobado → aplicación remota → revisión de logs, datos, RLS y advisors.
-
-Comandos iniciales, en el terminal local del usuario:
-- **npx supabase login**
-- **npx supabase link --project-ref auxqjoxnsasnmtnakgmg**
-- **npx supabase migration list --linked**
-
-No ejecutar db push, db reset --linked ni migration repair antes de terminar la comparación y la prueba. Supabase advierte que migration repair solo edita el registro del historial, no ejecuta el SQL: https://supabase.com/docs/guides/deployment/database-migrations
-
+Para cada cambio nuevo: generar migración pequeña con la CLI → probar sobre la restauración aislada → comparar esquema, grants y RLS → volver a comprobar las 10 cuentas/perfiles → aplicar una sola migración → verificar logs, datos y asesores. No usar `db push`, `db reset --linked` ni `migration repair` para corregir el historial histórico.
 ## 4. Fase 2 — mapa funcional y alcance
 
 Los doce módulos y responsabilidades están en la arquitectura objetivo. Reglas para evitar duplicidad:
@@ -149,7 +132,7 @@ Orden:
 3. Logística: rutas, carga, stock reservado/liberado, entrega parcial/fallida y evidencia.
 4. Comisiones: por venta/cobro/margen, escalas, ajustes y efecto de devoluciones.
 5. Metas: periodo, asignación, vendedor/sucursal/producto, fuente y efecto de anulaciones.
-6. Persistir notificaciones internas; luego agregar canales, reintentos e historial.
+6. La bandeja interna ya persiste lectura, archivo y resolución de alertas operativas. La siguiente entrega es definir eventos/destinatarios y construir outbox, canales, reintentos e historial de entrega sin confundirlo con el estado del documento.
 7. Publicar BI con definición, fórmula, corte y tabla de origen; conciliar con documentos operativos.
 
 No crear tablas genéricas antes de aprobar reglas. Las tablas candidatas y sus dependencias están en la arquitectura objetivo.
@@ -192,10 +175,10 @@ Cada migración que agregue tablas públicas debe decidir explícitamente qué r
 
 No habilitar servicios de pago ni Pro sin una decisión explícita. Supabase confirma que la protección contra contraseñas filtradas requiere Pro o superior: https://supabase.com/docs/guides/auth/password-security
 
-## 12. Situación pendiente de esta ronda
+## 12. Situación pendiente al 26 de octubre (antecedente histórico)
 
 La compilación de producción (`npm run build`) pasó y `npm test` terminó con 48 pruebas aprobadas, 0 fallidas. En Supabase se verificó que las 9 cuentas y 9 perfiles siguen intactos, las 40 tablas conservan RLS y las 23 migraciones están registradas. `authenticated` ya no tiene permiso DELETE sobre `empresas`; `authenticated` conserva DML sujeto a RLS en `cajas`, y `anon`/`service_role` no tienen grants sobre esa tabla. La caja y turnos usan permisos de Tesorería, auditoría e índices para claves foráneas; la lectura de sucursales se consolidó en una sola política. Cada almacén requiere sucursal. El asesor mantiene la advertencia de protección contra contraseñas filtradas y 51 avisos informativos de índices sin uso; no se borraron datos.
 
-Las 47 migraciones previas se ejecutaron cronológicamente en PostgreSQL 17 desechable con stubs mínimos de Auth y terminaron con 40 tablas, RLS activo en todas y el event trigger habilitado. La migración número 48 se aplicó remotamente y se verificó que `authenticated` ya no puede borrar empresas; falta reproducir la cadena de 48 localmente. Esto no sustituye restaurar el esquema remoto/datos reales ni probar RLS con los nueve usuarios. No se hicieron escrituras de negocio.
+En aquel corte, las 47 migraciones previas se ejecutaron cronológicamente en PostgreSQL 17 desechable con stubs mínimos de Auth y terminaron con 40 tablas, RLS activo en todas y el event trigger habilitado. La migración número 48 se aplicó remotamente y se verificó que `authenticated` ya no podía borrar empresas. Este antecedente quedó superado: la línea base vigente y la restauración actual están descritas al inicio de esta guía y en [RECONCILIACION_MIGRACIONES.md](RECONCILIACION_MIGRACIONES.md). No se hicieron escrituras de negocio en remoto durante aquel corte.
 
 El corte actual confirma empresa/sucursales/almacenes/cajas e inventario por almacén en cero; el stock global legado de los 8 productos suma 41 unidades. No se debe abrir inventario hasta registrar ubicaciones reales y distribuir esas cantidades con conteo físico. Las compras históricas están pagadas y marcadas recibidas, por lo que no se deben reingresar. Hay un turno de caja abierto sin sucursal/caja asociada: debe conciliarse y cerrarse antes de usar los turnos por sucursal. Después, registra la empresa y sucursal reales en Maestros, crea una caja por cada punto real y abre turnos asociados. No compartir credenciales ni tokens.

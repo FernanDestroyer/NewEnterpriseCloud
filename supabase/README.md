@@ -1,44 +1,46 @@
-# Base de datos de ERP EnterpriseCloud en Supabase
+# Supabase de EnterpriseCloud
 
-## Estado remoto verificado al 26 de octubre de 2026
+## Estado verificado — 13 de noviembre de 2026
 
-Proyecto: ERP EnterpriseCloud, ref auxqjoxnsasnmtnakgmg, organización Free. La base remota contiene 40 tablas públicas con RLS, 9 cuentas Auth y 9 perfiles.
+Proyecto confirmado: `ERP EnterpriseCloud` (`auxqjoxnsasnmtnakgmg`), PostgreSQL 17.11, plan Free.
 
-Hay 23 migraciones registradas en remoto y 48 archivos locales: 23 versiones coincidentes y 25 archivos sin versión remota correspondiente. De esos 25, 18 tienen fecha hasta el 26 de octubre y requieren conciliación; siete tienen fechas posteriores y son migraciones futuras locales, no ausencias que deban repararse en remoto. Diez migraciones forward-only se aplicaron el 26 de octubre. La última retiró el permiso DELETE sobre `empresas` para `authenticated`; la política RLS ya impedía el borrado y se comprobó que las nueve cuentas siguen intactas. La matriz detalla por qué las 18 versiones históricas no se pueden ejecutar como bloque.
+- El remoto registra 58 migraciones; la última es `20261113144509_seguridad_rls_y_indice_duplicado_v1`.
+- El repositorio contiene 105 archivos SQL: 29 coinciden por versión y nombre, 76 no tienen una versión remota exacta y 29 versiones remotas no tienen un archivo local con la misma versión. La deriva histórica está documentada en [RECONCILIACION_MIGRACIONES.md](../docs/RECONCILIACION_MIGRACIONES.md); no es una lista de migraciones pendientes.
+- Hay 121 tablas públicas con RLS, 270 políticas públicas y seis tablas privadas con RLS en `app_private`.
+- `auth.users` y `public.usuarios` conservan 10 filas cada una. No se borraron cuentas.
+- En la lectura del 13-11, `public.notificaciones`, `ec_solicitudes_aprobacion` y `ec_aprobacion_eventos` tenían 0 filas; dos triggers para solicitudes/decisiones estaban presentes. La migración de inbox ya está aplicada.
+- Las Edge Functions `peru-document-lookup` y `project-analyzer` están activas en v1 con `verify_jwt=true`.
+- La suite local pasó `npm run typecheck`, `npm test` (102 pruebas) y `npm run build` en este corte.
 
-Documentos de trabajo:
-- ../docs/DIAGNOSTICO_ACTUAL_Y_RUTA_DE_IMPLEMENTACION.md
-- ../docs/GUIA_PASO_A_PASO_ENTERPRISECLOUD.md
-- ../docs/ARQUITECTURA_OBJETIVO_ENTERPRISECLOUD.md
-- ../docs/RECONCILIACION_MIGRACIONES.md
+## Copia local de esquema
 
-Las diez migraciones aplicadas y sus versiones son: `20261026182059_privilegios_api_minimos.sql`, `20261026182706_un_solo_turno_abierto.sql`, `20261026182720_orden_compra_atomica.sql`, `20261026182728_venta_credito_permisos.sql`, `20261026195955_cajas_multisucursal.sql`, `20261026200116_cajas_indices_fk.sql`, `20261026200340_unificar_lectura_sucursales.sql`, `20261026200923_almacenes_por_sucursal.sql`, `20261026202241_registrar_auto_rls.sql` y `20261026203451_empresas_sin_borrado_api.sql`. La última retira DELETE sobre el maestro de empresas; el resto de la aplicación conserva sus permisos sujetos a RLS. Se comprobó que `authenticated` ya no puede borrar filas de `empresas`. Los `DEFAULT PRIVILEGES` de `postgres` están corregidos. El rol `supabase_admin` mantiene defaults propios, así que las migraciones de aplicación deben seguir creándose como `postgres`.
+La CLI está autenticada y enlazada al proyecto. El 13-11 se exportó y restauró el esquema `public,app_private` en PostgreSQL local 17.5, en `.local-validation-postgres/restore-current-20261113`. El archivo ignorado por Git `.local-validation-postgres/remote-schema-20261113.sql` mide 899,527 bytes.
 
-Toda tabla pública futura requiere revisar deliberadamente sus grants y RLS; no confiar en concesiones implícitas. El esquema `app_private` debe quedar fuera de los esquemas expuestos. La función pública de compras es un wrapper `SECURITY INVOKER`; la lógica privilegiada vive en `app_private` y vuelve a validar usuario/permisos.
+La restauración coincide con 121 tablas públicas, 121 con RLS, 270 políticas públicas y seis tablas privadas con RLS. `auth.users` tiene 0 filas en el entorno local simulado; el remoto mantiene 10 usuarios y 10 perfiles. No se exportaron filas de negocio, cuentas Auth, Storage, secretos ni configuración de Edge Functions. El servidor local se detuvo después de verificarlo. Esta copia es una base de validación de esquema, no una copia integral de recuperación del servicio.
 
-## CLI y protección de migraciones
+## Reconciliación y cambios remotos
 
-La CLI oficial está fijada en dependencias de desarrollo y supabase/config.toml existe. La CLI local necesita inicio de sesión interactivo del usuario. En el terminal local:
+Las diferencias entre los 105 archivos locales y 58 versiones remotas provienen de deriva histórica de nombres y versiones. No ejecutar los archivos en lote, no usar `supabase db push` para reconciliarlos y no usar `migration repair` como sustituto de aplicar SQL. Las migraciones nuevas se prueban en la copia local y se aplican una por una después de comprobar dependencias, RLS, grants, efectos y conteos de Auth.
 
-1. Ejecuta npx supabase login.
-2. Ejecuta npx supabase link --project-ref auxqjoxnsasnmtnakgmg.
-3. Ejecuta npx supabase migration list --linked y guarda la salida.
-4. Compara una por una las versiones locales con esquema, funciones, triggers y RLS remotos.
-5. Reproduce en una base local desechable antes de reparar el historial.
-6. Exporta y comprueba una restauración antes de cualquier escritura remota.
-7. Registra como aplicada solo una migración cuyo SQL ya se demostró en remoto.
+Las migraciones recientes de PEPS, notificaciones, aprobaciones, Caja/Tesorería multimoneda y saneamiento de políticas/índice ya aparecen en el historial remoto. `approval_notifications_inbox_v1` ya está aplicada; no volver a ejecutarla.
 
-No ejecutes db push, db reset --linked ni migration repair antes de completar la comparación y reproducción. migration repair cambia el historial; no aplica ni revierte SQL. Nunca reiniciar el proyecto remoto ni borrar usuarios Auth como modo de limpieza.
+## Verificaciones de seguridad pendientes o informativas
 
-No compartas tokens, contraseña de base de datos o clave service_role. Esa clave nunca debe estar en VITE ni en el navegador. Referencia: https://supabase.com/docs/guides/deployment/database-migrations
+- Asesores remotos: 73 funciones `SECURITY DEFINER` ejecutables por `authenticated` y ninguna por `anon`; 118 claves foráneas sin índice y 90 índices sin uso; extensión `btree_gist` en `public`; protección de contraseñas filtradas desactivada por las capacidades del plan actual. No eliminar índices ni cambiar extensiones en bloque.
+- 11 tablas internas con RLS no tienen políticas y no otorgan acceso a los roles de API; se mantienen cerradas deliberadamente. No añadir políticas genéricas para silenciar el asesor.
+- La prueba de interfaz con una sesión autenticada real de aprobación y notificaciones sigue pendiente. `peru-document-lookup` también necesita verificación desde una sesión autorizada y una credencial de proveedor válida; los secretos no se imprimieron ni se cambiaron.
+- El motor de `project-analyzer` se invoca mediante una Edge Function propia de Supabase; queda por confirmar si el instructor exige además una API externa de IA.
 
-## Desarrollo local
+## Uso local y protección de secretos
 
-- Variables de cliente: VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY. Mantener el .env existente privado, no mostrarlo ni subirlo.
-- npm install instala dependencias; npm run dev inicia Vite.
-- Docker Desktop no tiene motor activo. Las 47 migraciones anteriores se reprodujeron cronológicamente en PostgreSQL 17 desechable con stubs de Auth. La nueva migración de revocación se aplicó en Supabase y se confirmó `authenticated_can_delete=false`; falta repetir la reproducción local de las 48. Esto no es un dump ni una restauración del esquema/datos remotos. `migration list --linked` continúa indicando que la CLI no está enlazada al proyecto. No se ejecutaron compras/ventas de prueba en la base viva.
-- Las nuevas modificaciones se crean en una migración pequeña y revisada, incluyendo RLS, grants y restricciones.
+- Variables de cliente: `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. Mantener el `.env` existente privado, ignorado por Git y fuera de las respuestas. Nunca exponer `service_role` ni claves secretas al navegador.
+- `npm install` instala dependencias; `npm run dev` inicia Vite.
+- La copia local tiene Auth simulado y vacío; no es adecuada para probar identidad real. Las pruebas con cuenta autorizada deben hacerse mediante la aplicación y una sesión de usuario existente, sin borrar ni recrear cuentas.
 
-## Plan Free y límites
+## Documentos de trabajo
 
-Protección contra contraseñas filtradas de Auth requiere Pro o superior según Supabase; no se cambió el plan. El asesor de seguridad solo reporta esa limitación del plan Free. Rendimiento presenta 51 INFO de índices todavía no usados, 0 claves foráneas sin índice y ya no reporta políticas de lectura duplicadas. No borrar índices automáticamente. Empresa, sucursales, almacenes, cajas e inventarios por almacén estaban vacíos al verificar; no crear ubicaciones ficticias ni abrir stock sin conteo. La auditoría registra cambios en las 39 tablas de negocio/configuración; la propia bitácora no tiene trigger. `caja_turnos.caja_id` separa los turnos nuevos por caja y conserva el turno abierto previo sin asignarle una ubicación inventada.
+- [Estado actual de módulos pendientes](../docs/ESTADO_ACTUAL_MODULOS_PENDIENTES.md)
+- [Plan de implementación](../docs/PLAN_IMPLEMENTACION_MODULOS_PENDIENTES.md)
+- [Reconciliación de migraciones](../docs/RECONCILIACION_MIGRACIONES.md)
+- [Guía paso a paso (antecedentes históricos)](../docs/GUIA_PASO_A_PASO_ENTERPRISECLOUD.md)
+- [Arquitectura objetivo](../docs/ARQUITECTURA_OBJETIVO_ENTERPRISECLOUD.md)

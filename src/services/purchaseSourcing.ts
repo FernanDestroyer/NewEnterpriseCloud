@@ -1,4 +1,5 @@
 import { requireSupabase } from '../lib/supabase'
+import { approvalFailure, notifyApprovalQueueChanged } from './approvals'
 
 export type SourcingLine = { id: string; producto_id: string | null; unidad_medida_id: string | null; descripcion: string; cantidad: number; unidad: string }
 export type SourcingOfferLine = {
@@ -182,11 +183,12 @@ export async function selectPurchaseOffer(requestId: string, offerId: string, re
   if (error) throw error
 }
 
-export async function convertSelectedRequest(requestId: string, idempotencyKey: string): Promise<string> {
-  const { data, error } = await requireSupabase().rpc('convertir_solicitud_a_orden_v1', {
+export async function requestSelectedPurchaseApproval(requestId: string, idempotencyKey: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc('ec_solicitar_aprobacion_conversion_compra_v1', {
     p_solicitud_id: requestId,
     p_idempotency_key: idempotencyKey,
   })
-  if (error) throw error
+  if (error) throw approvalFailure(error)
+  notifyApprovalQueueChanged()
   return String(data)
 }

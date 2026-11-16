@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { moneyCurrency } from '../data/helpers'
+import { fetchPendingApprovalOrigins } from '../services/approvals'
 import {
-  cancelPurchaseRequest, convertSelectedRequest, fetchPurchaseSourcing, fetchPurchaseSourcingDetail,
+  cancelPurchaseRequest, requestSelectedPurchaseApproval, fetchPurchaseSourcing, fetchPurchaseSourcingDetail,
   fetchPurchaseSuppliers, fetchSourcingCurrencies, openPurchaseRequest, registerPurchaseOffer,
   selectPurchaseOffer, type SourcingCurrency, type SourcingOffer as Offer,
   type SourcingRequest as Request, type SupplierOption,
@@ -58,6 +59,7 @@ export default function PurchaseSourcingPage() {
   const navigate = useNavigate()
   const canCreatePurchase = can('purchases', 'crear')
   const [items, setItems] = useState<Request[]>([])
+  const [pendingApprovalIds, setPendingApprovalIds] = useState<string[]>([])
   const [details, setDetails] = useState<Record<string, Request>>({})
   const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({})
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
@@ -98,8 +100,11 @@ export default function PurchaseSourcingPage() {
     setError('')
     try {
       const result = await fetchPurchaseSourcing({ estado: stateFilter, desde: fromDate, hasta: toDate, referencia: debouncedReference, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+      let pendingOrigins: string[] = []
+      try { pendingOrigins = await fetchPendingApprovalOrigins('purchase_sourcing', result.requests.map(request => request.id)) } catch { /* The request list remains usable until the approval migration is applied. */ }
       if (revision !== loadRevision.current) return
       setItems(result.requests)
+      setPendingApprovalIds(pendingOrigins)
       setTotal(result.total)
       setDetails(current => Object.fromEntries(Object.entries(current).filter(([id]) => result.requests.some(request => request.id === id))))
     } catch (cause) { if (revision === loadRevision.current) setError(readableError(cause)) }
@@ -249,11 +254,12 @@ export default function PurchaseSourcingPage() {
       const keyId = `convert:${request.id}`
       const key = transitionKeys.current.get(keyId) ?? newIdempotencyKey()
       transitionKeys.current.set(keyId, key)
-      const orderId = await convertSelectedRequest(request.id, key)
+      const approvalId = await requestSelectedPurchaseApproval(request.id, key)
       transitionKeys.current.delete(keyId)
       setDetails(current => { const next = { ...current }; delete next[request.id]; return next })
+      setPendingApprovalIds(current => current.includes(request.id) ? current : [...current, request.id])
       await load(); await openDetail(request.id, true)
-      notify(`Orden ${orderId} creada con vínculos de trazabilidad a solicitud y oferta.`)
+      notify(`Oferta enviada a aprobación (${approvalId.slice(0, 8)}). La orden se creará cuando la apruebe otra persona.`)
     } catch (cause) { notify(readableError(cause)) }
     finally { setBusy(false) }
   }
@@ -284,10 +290,11 @@ export default function PurchaseSourcingPage() {
           {selected && <div className="ws-notice ws-notice-info"><Check size={16} /><span>Seleccionada: {selected.proveedores?.razon_social ?? selected.codigo}. Motivo: {request.seleccion_motivo || '—'}.</span></div>}
           {request.estado === 'Cancelada' && <div className="ws-notice ws-notice-warning"><Ban size={16} /><span>Cancelada por motivo: {request.cancelacion_motivo || '—'}</span></div>}
           {hasOrder && <div className="ws-notice ws-notice-info"><PackageCheck size={16} /><span>Orden creada: <strong>{request.orden_codigo ?? request.orden_compra_id}</strong>. <button className="ws-inline-button" onClick={() => navigate(`/purchases?q=${encodeURIComponent(request.orden_codigo ?? request.orden_compra_id ?? '')}`)}>Abrir órdenes nacionales</button></span></div>}
+          {pendingApprovalIds.includes(request.id) && !hasOrder && <div className="ws-notice ws-notice-info"><PackageCheck size={16} /><span>La oferta seleccionada está esperando aprobación. La orden no se ha creado todavía.</span></div>}
           {request.estado === 'Borrador' && can('purchases', 'editar') && <div className="ws-heading-actions"><button className="ws-button ws-button-secondary" disabled={busy || request.ofertas_compra.length > 0} onClick={() => { setEditingRequest(request); setShowForm(false) }}><Pencil size={15}/>Editar borrador · v{request.version}</button><button className="ws-button" disabled={busy || !request.solicitud_compra_lineas.length} onClick={() => void openRequest(request)}><Send size={15} />Abrir para cotizar</button><button className="ws-text-button" disabled={busy} onClick={() => { setActionReason(''); setPendingAction({ type: 'cancel', request }) }}><Ban size={15} />Cancelar solicitud</button></div>}
           {request.estado === 'Abierta' && can('purchases', 'editar') && <button className="ws-text-button" disabled={busy} onClick={() => { setActionReason(''); setPendingAction({ type: 'cancel', request }) }}><Ban size={15} />Cancelar solicitud</button>}
           {request.ofertas_compra.length > 0 && <details className="sourcing-history"><summary>Historial de ofertas y versiones ({request.ofertas_compra.length})</summary><div className="table-scroll"><table className="record-table"><thead><tr><th>Proveedor</th><th>Versión</th><th>Estado</th><th>Vigencia</th><th>Moneda / FX</th><th>Condiciones</th></tr></thead><tbody>{[...request.ofertas_compra].sort((a, b) => a.proveedor_id.localeCompare(b.proveedor_id) || a.version - b.version).map(offer => <tr key={offer.id}><td>{offer.proveedores?.razon_social ?? offer.codigo}</td><td>v{offer.version}{offer.es_version_actual ? ' · actual' : ''}</td><td>{offer.estado}</td><td>{offer.vigencia_hasta || 'Sin fecha'}</td><td>{offer.moneda}{offer.moneda !== 'PEN' ? ` · ${offer.exchange_rate}` : ''}</td><td>{offer.condiciones || '—'}</td></tr>)}</tbody></table></div></details>}
-          {request.estado === 'Cerrada' && selected && !hasOrder && can('purchases', 'crear') && <div className="sourcing-form-foot"><small>La conversión actual admite órdenes de bienes: cada línea necesita producto maestro y vínculo único al catálogo del proveedor. Cantidades fraccionarias se redondean hacia arriba.</small><button className="ws-button" disabled={busy || request.solicitud_compra_lineas.some(line => !line.producto_id)} onClick={() => void createOrder(request)}><PackageCheck size={16} />{busy ? 'Creando orden…' : 'Crear orden'}</button></div>}
+          {request.estado === 'Cerrada' && selected && !hasOrder && !pendingApprovalIds.includes(request.id) && can('purchases', 'crear') && <div className="sourcing-form-foot"><small>La oferta seleccionada se enviará a aprobación. Las cantidades fraccionarias se redondean hacia arriba y cada línea debe tener producto maestro y vínculo al catálogo del proveedor.</small><button className="ws-button" disabled={busy || request.solicitud_compra_lineas.some(line => !line.producto_id)} onClick={() => void createOrder(request)}><PackageCheck size={16} />{busy ? 'Enviando…' : 'Solicitar aprobación'}</button></div>}
           {request.estado === 'Abierta' && can('purchases', 'crear') && <form className="sourcing-offer-form" onSubmit={event => void saveOffer(event, request)}><h3>Registrar oferta o nueva versión</h3>
             <div className="sourcing-wide"><small>Proveedor activo · página autorizada</small><SearchablePicker value={supplierId} required onChange={setSupplierId} ariaLabel="Proveedor activo" disabled={supplierLoading} searchPlaceholder="Buscar razón social, código o RUC…" options={suppliers.map(supplier => ({ id: supplier.id, label: supplier.razon_social, detail: `${supplier.codigo} · ${records.suppliers.find(item => item.rowId === supplier.id)?.ruc ?? ''}${request.ofertas_compra.some(offer => offer.proveedor_id === supplier.id) ? ' · siguiente versión' : ''}` }))} /></div>
             <div className="sourcing-wide sourcing-supplier-pager"><label className="ws-table-search"><Search size={15} /><input value={supplierSearch} onChange={event => { setSupplierSearch(event.target.value); setSupplierOffset(0); setSupplierId('') }} placeholder="Buscar proveedor activo…" /></label><div className="ws-pagination"><span>{supplierTotal} proveedores autorizados</span><button className="ws-icon-button" type="button" aria-label="Página anterior de proveedores" disabled={supplierOffset===0} onClick={() => { setSupplierOffset(value => Math.max(0,value-SUPPLIER_PAGE_SIZE)); setSupplierId('') }}><ChevronLeft size={14}/></button><span>{Math.floor(supplierOffset/SUPPLIER_PAGE_SIZE)+1} / {supplierPageCount}</span><button className="ws-icon-button" type="button" aria-label="Página siguiente de proveedores" disabled={supplierOffset+SUPPLIER_PAGE_SIZE>=supplierTotal} onClick={() => { setSupplierOffset(value => value+SUPPLIER_PAGE_SIZE); setSupplierId('') }}><ChevronRight size={14}/></button></div></div>

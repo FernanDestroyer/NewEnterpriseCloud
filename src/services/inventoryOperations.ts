@@ -3,7 +3,7 @@ import { requireSupabase } from '../lib/supabase'
 export type TransferLine = { producto_id: string; cantidad: number }
 export type CountLineInput = { producto_id: string; cantidad_contada: number; costo_entrada?: number }
 export type PhysicalCount = {
-  id: string; almacen_id: string; motivo: string; estado: 'abierto' | 'cerrado'
+  id: string; almacen_id: string; motivo: string; estado: 'abierto' | 'pendiente_aprobacion' | 'cerrado' | 'rechazado'
   creado_en: string; cerrado_en: string | null
 }
 export type PhysicalCountLine = {
@@ -62,7 +62,7 @@ export async function openPhysicalCount(input: { warehouseId: string; lines: Cou
 }
 
 export async function closePhysicalCount(id: string, key: string): Promise<string> {
-  const { data, error } = await requireSupabase().rpc('ec_cerrar_inventario_fisico', { p_conteo_id: id, p_key: key })
+  const { data, error } = await requireSupabase().rpc('ec_cerrar_conteo_sin_diferencias_v1', { p_conteo_id: id, p_key: key })
   if (error) throw error
   return data as string
 }

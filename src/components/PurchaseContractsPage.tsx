@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { AlertTriangle, ArrowDownToLine, Ban, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, FilePlus2, Plus, RefreshCw, Search, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, ArrowDownToLine, Ban, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, FileCheck2, FilePlus2, Plus, RefreshCw, Search, ShieldCheck, X } from 'lucide-react'
+import '../purchases-ui.css'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
+import { fetchPendingApprovalOrigins, requestContractOrderApproval } from '../services/approvals'
 import { moneyCurrency } from '../data/helpers'
 import {
-  activatePurchaseContract, closePurchaseContract, createPurchaseContract, createPurchaseContractVersion, createPurchaseOrderFromContract,
+  activatePurchaseContract, closePurchaseContract, createPurchaseContract, createPurchaseContractVersion,
   fetchPurchaseContractCatalog, fetchPurchaseContracts, suspendPurchaseContract,
   type PurchaseContractCatalogItem, type PurchaseContractSummary,
 } from '../services/purchaseContracts'
 import type { CreatePurchaseContractInput, CreatePurchaseContractVersionInput, PurchaseContractCurrency, PurchaseContractLineInput, PurchaseContractTaxTreatment } from '../types/purchaseContracts'
+import { SearchablePicker } from './SearchablePicker'
+import { PageHeader } from './ui/PageHeader'
 
 const PAGE_SIZE = 10
 const newKey = () => globalThis.crypto?.randomUUID?.() ?? `contract-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -186,10 +190,10 @@ function OrderFromContractDialog({ contract, onClose, onCreated }: {
     if (!Number.isFinite(rate) || rate <= 0) return setError('El tipo de cambio debe ser positivo para órdenes en USD.')
     setBusy(true)
     try {
-      await createPurchaseOrderFromContract({
+      await requestContractOrderApproval({
         contractId: contract.id, versionId: contract.version!.id, detail: `Liberación del contrato ${contract.codigo}`,
         dueDate: dueDate || null,
-        lines: selected.map(({line,qty}) => ({ proveedor_producto_id: line.proveedor_producto_id, cantidad: qty,
+        lines: selected.map(({line,qty}) => ({ producto_id: line.proveedor_producto_id, cantidad: qty,
           precio: Number(line.costo_unitario), tratamiento_tributario: line.tratamiento_tributario,
           tasa_tributaria: Number(line.tasa_tributaria) })),
         idempotencyKey: key.current, exchangeRate: rate, currency: currencyCode,
@@ -199,12 +203,12 @@ function OrderFromContractDialog({ contract, onClose, onCreated }: {
     finally { setBusy(false) }
   }
   return <div className="ws-modal-backdrop" onMouseDown={event => { if (event.target===event.currentTarget && !busy) onClose() }}><form className="ws-dialog ws-contract-order-dialog" role="dialog" aria-modal="true" aria-labelledby="contract-order-title" onSubmit={event => void submit(event)}>
-    <header><div><span className="ws-eyebrow">F13 · LIBERACIÓN DE CUPO</span><h2 id="contract-order-title">Orden desde {contract.codigo}</h2><p>Versión {contract.version?.numero_version} · tope libre {currency(amountLeft,currencyCode)}</p></div><button className="ws-icon-button" type="button" disabled={busy} onClick={onClose} aria-label="Cerrar"><X size={18}/></button></header>
+    <header><div><span className="ws-eyebrow">F13 · LIBERACIÓN DE CUPO</span><h2 id="contract-order-title">Solicitud desde {contract.codigo}</h2><p>Versión {contract.version?.numero_version} · tope libre {currency(amountLeft,currencyCode)}</p></div><button className="ws-icon-button" type="button" disabled={busy} onClick={onClose} aria-label="Cerrar"><X size={18}/></button></header>
     <div className="ws-contract-editor-body"><label>Fecha límite de pago<input className="ws-control" type="date" value={dueDate} onChange={event => {setDueDate(event.target.value);key.current=newKey()}}/></label>{currencyCode==='USD' && <label>Tipo de cambio<input className="ws-control" type="number" min="0.000001" step="0.000001" value={exchangeRate} onChange={event => {setExchangeRate(event.target.value);key.current=newKey()}} required/></label>}
       <div className="table-scroll"><table className="record-table"><thead><tr><th>Artículo</th><th>Disponible</th><th>Precio</th><th>Solicitar</th></tr></thead><tbody>{contract.lineas.map(line => {const available=Math.max(0,Number(line.cantidad_tope)-Number(line.cantidad_comprometida));return <tr key={line.id}><td><strong>{line.descripcion}</strong><small>{line.unidad} · {line.tratamiento_tributario} · máximo {line.cantidad_tope}</small></td><td>{available}</td><td>{currency(Number(line.costo_unitario),currencyCode)}</td><td><input className="ws-control ws-contract-quantity" type="number" min="0" max={available} step="1" value={quantities[line.id] ?? '0'} disabled={!available || busy} onChange={event => {setQuantities(current => ({...current,[line.id]:event.target.value}));key.current=newKey()}} aria-label={`Cantidad a ordenar para ${line.descripcion}`}/></td></tr>})}</tbody></table></div>
       <div className="ws-contract-order-total"><span>Orden bruto estimado</span><strong>{currency(total,currencyCode)}</strong><small>Disponible luego de esta orden: {currency(Math.max(0,amountLeft-total),currencyCode)}</small></div>
       {error && <p className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={15}/>{error}</p>}
-    </div><footer><button className="ws-button ws-button-secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button><button className="ws-button" type="submit" disabled={busy || !selected.length}><ArrowDownToLine size={15}/>{busy?'Creando orden…':'Generar orden'}</button></footer>
+    </div><footer><button className="ws-button ws-button-secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button><button className="ws-button" type="submit" disabled={busy || !selected.length}><ArrowDownToLine size={15}/>{busy?'Enviando…':'Solicitar aprobación'}</button></footer>
   </form></div>
 }
 
@@ -212,6 +216,7 @@ export default function PurchaseContractsPage() {
   const { can, profile } = useAuth()
   const { records, notify, reload } = useRecords()
   const [items, setItems] = useState<PurchaseContractSummary[]>([])
+  const [pendingApprovalIds, setPendingApprovalIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -233,7 +238,10 @@ export default function PurchaseContractsPage() {
     setLoading(true); setError('')
     try {
       const result = await fetchPurchaseContracts({estado:stateFilter,search,limit:PAGE_SIZE,offset:page*PAGE_SIZE})
+      let pending: string[] = []
+      try { pending = await fetchPendingApprovalOrigins('purchase_contract', result.items.map(item => item.id)) } catch { /* The contract list remains available until the approval migration is applied. */ }
       setItems(result.items); setTotal(result.total)
+      setPendingApprovalIds(pending)
     } catch (cause) { setError(errorMessage(cause)) }
     finally { setLoading(false) }
   }, [stateFilter,search,page])
@@ -277,13 +285,19 @@ export default function PurchaseContractsPage() {
     finally { setBusyId(null) }
   }
   const saved = () => { setEditor(null); void refreshAfterAction('Contrato actualizado; sus snapshots se conservaron por versión.') }
-  const orderCreated = () => { setOrderContract(null); void refreshAfterAction('Orden creada y cupo contractual comprometido de forma transaccional.') }
+  const orderCreated = () => { setOrderContract(null); void refreshAfterAction('Solicitud enviada a aprobación. El cupo se comprometerá al crearse la orden aprobada.') }
   const canCreate = can('purchases','crear')
   const canEdit = can('purchases','editar')
 
-  return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">COMPRAS · CONTRATOS MARCO</span><h1>Contratos Marco</h1><p>Consulta vigencias, versiones y cupo comprometido. Los excesos se bloquean en servidor con tolerancia 0%.</p></div><div className="ws-heading-actions"><button className="ws-button ws-button-secondary" type="button" disabled={loading} onClick={() => void load()}><RefreshCw size={16}/>Actualizar</button>{canCreate && <button className="ws-button" type="button" onClick={() => setEditor({kind:'create'})}><Plus size={16}/>Nuevo contrato</button>}</div></section>
-    <section className="ws-card ws-contract-filters"><label className="ws-table-search"><Search size={16}/><input value={search} onChange={event => {setSearch(event.target.value);setPage(0)}} placeholder="Buscar código o nombre…" aria-label="Buscar contratos"/></label><label>Estado<select className="ws-control" value={stateFilter} onChange={event => {setStateFilter(event.target.value);setPage(0)}}><option value="">Todos los estados</option><option value="Borrador">Borrador</option><option value="Activo">Activo</option><option value="Suspendido">Suspendido</option><option value="Cerrado">Cerrado</option></select></label><span>{total} contratos</span></section>
+  return <div className="ec-purchases">
+    <PageHeader
+      icon={FileCheck2}
+      section="Compras · Contratos marco"
+      title="Contratos Marco"
+      description="Consulta vigencias, versiones y cupo comprometido. Los excesos se bloquean en servidor con tolerancia 0%."
+      actions={<><button className="ws-button ws-button-secondary" type="button" disabled={loading} onClick={() => void load()}><RefreshCw size={16}/>Actualizar</button>{canCreate && <button className="ws-button" type="button" onClick={() => setEditor({kind:'create'})}><Plus size={16}/>Nuevo contrato</button>}</>}
+    />
+    <section className="ws-card ws-contract-filters"><label className="ws-table-search"><Search size={16}/><input value={search} onChange={event => {setSearch(event.target.value);setPage(0)}} placeholder="Buscar código o nombre…" aria-label="Buscar contratos"/></label><div className="ws-picker-field"><span>Estado</span><SearchablePicker ariaLabel="Filtrar estado de contrato" value={stateFilter} onChange={value => { setStateFilter(value); setPage(0) }} placeholder="Todos los estados" searchPlaceholder="Buscar estado…" pageSize={6} options={[{ id: '', label: 'Todos los estados' }, { id: 'Borrador', label: 'Borrador' }, { id: 'Activo', label: 'Activo' }, { id: 'Suspendido', label: 'Suspendido' }, { id: 'Cerrado', label: 'Cerrado' }]} /></div><span>{total} contratos</span></section>
     {error && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={17}/>{error}<button className="ws-text-button" type="button" onClick={() => void load()}>Reintentar</button></div>}
     <section className="ws-card ws-contract-list"><div className="table-scroll"><table className="record-table"><thead><tr><th>Contrato / proveedor</th><th>Estado</th><th>Vigencia</th><th>Tope bruto</th><th>Consumo</th><th>Disponible</th><th>Acciones</th></tr></thead><tbody>
       {items.map(contract => {
@@ -300,7 +314,9 @@ export default function PurchaseContractsPage() {
           {(contract.estado==='Borrador'||contract.estado==='Suspendido') && version?.estado==='Borrador' && canEdit && <button className="ws-button ws-button-secondary ws-button-compact" type="button" disabled={busyId===contract.id} onClick={()=>void activate(contract)}><CircleCheck size={14}/>Activar</button>}
           {contract.estado==='Activo' && canEdit && <button className="ws-button ws-button-secondary ws-button-compact" type="button" disabled={busyId===contract.id} onClick={()=>{setSuspendTarget(contract);setSuspensionReason('')}}><Ban size={14}/>Suspender</button>}
           {(contract.estado==='Suspendido'||contract.estado==='Borrador') && canEdit && <button className="ws-button ws-button-secondary ws-button-compact" type="button" disabled={busyId===contract.id} onClick={()=>setEditor({kind:'version',contract})}><FilePlus2 size={14}/>Versionar</button>}
-          {contract.estado==='Activo' && canCreate && <button className="ws-button ws-button-compact" type="button" disabled={!version || !contract.lineas.length || busyId===contract.id} onClick={()=>setOrderContract(contract)}><ArrowDownToLine size={14}/>Generar orden</button>}
+          {contract.estado==='Activo' && canCreate && (pendingApprovalIds.includes(contract.id)
+            ? <span className="ws-contract-status is-paused">Liberación pendiente</span>
+            : <button className="ws-button ws-button-compact" type="button" disabled={!version || !contract.lineas.length || busyId===contract.id} onClick={()=>setOrderContract(contract)}><ArrowDownToLine size={14}/>Solicitar liberación</button>)}
           {contract.estado!=='Cerrado' && canEdit && <button className="ws-button ws-button-danger ws-button-compact" type="button" disabled={busyId===contract.id} onClick={()=>{setCloseTarget(contract);setClosureReason('')}}><X size={14}/>Cerrar contrato</button>}
         </div></td></tr>})}
       {!items.length && <tr><td colSpan={7}><div className="ws-empty-compact">{loading?<RefreshCw size={24} className="ws-spin"/>:<ShieldCheck size={24}/>}<strong>{loading?'Consultando contratos…':error?'No se pudieron cargar los contratos':'No hay contratos con estos filtros'}</strong></div></td></tr>}
@@ -312,5 +328,5 @@ export default function PurchaseContractsPage() {
     {orderContract&&<OrderFromContractDialog contract={orderContract} onClose={()=>setOrderContract(null)} onCreated={orderCreated}/>}
     {suspendTarget&&<div className="ws-modal-backdrop"><form className="ws-dialog ws-contract-suspend-dialog" role="dialog" aria-modal="true" aria-labelledby="contract-suspend-title" onSubmit={event=>void suspend(event)}><header><div><span className="ws-eyebrow">CONTROL DE CONTRATO</span><h2 id="contract-suspend-title">Suspender {suspendTarget.codigo}</h2><p>La suspensión bloqueará nuevas liberaciones, sin modificar órdenes existentes.</p></div><button className="ws-icon-button" type="button" disabled={busyId===suspendTarget.id} onClick={()=>setSuspendTarget(null)} aria-label="Cerrar"><X size={18}/></button></header><div className="ws-contract-editor-body"><label>Motivo obligatorio<textarea className="ws-control" rows={4} minLength={5} maxLength={500} required value={suspensionReason} onChange={event=>{setSuspensionReason(event.target.value);transitionKeys.current.delete(`suspend:${suspendTarget.id}`)}} placeholder="Describe la causa de suspensión…"/></label>{error&&<p className="ws-notice ws-notice-warning" role="alert">{error}</p>}</div><footer><button className="ws-button ws-button-secondary" type="button" disabled={busyId===suspendTarget.id} onClick={()=>setSuspendTarget(null)}>Cancelar</button><button className="ws-button" type="submit" disabled={busyId===suspendTarget.id||suspensionReason.trim().length<5}><Ban size={15}/>{busyId===suspendTarget.id?'Suspendiendo…':'Confirmar suspensión'}</button></footer></form></div>}
     {closeTarget&&<div className="ws-modal-backdrop"><form className="ws-dialog ws-contract-suspend-dialog" role="dialog" aria-modal="true" aria-labelledby="contract-close-title" onSubmit={event=>void closeContract(event)}><header><div><span className="ws-eyebrow">ACCIÓN TERMINAL · F14</span><h2 id="contract-close-title">Cerrar {closeTarget.codigo}</h2><p>El cierre es irreversible: bloquea nuevas órdenes y cualquier cambio o reactivación. Las órdenes existentes siguen su curso.</p></div><button className="ws-icon-button" type="button" disabled={busyId===closeTarget.id} onClick={()=>setCloseTarget(null)} aria-label="Cerrar diálogo"><X size={18}/></button></header><div className="ws-contract-editor-body"><div className="ws-notice ws-notice-warning" role="note"><AlertTriangle size={15}/>Confirma que el contrato debe quedar cerrado permanentemente.</div><label>Motivo obligatorio<textarea className="ws-control" rows={4} minLength={5} maxLength={500} required value={closureReason} onChange={event=>{setClosureReason(event.target.value);transitionKeys.current.delete(`close:${closeTarget.id}`)}} placeholder="Explica por qué se cierra el contrato…"/></label>{error&&<p className="ws-notice ws-notice-warning" role="alert">{error}</p>}</div><footer><button className="ws-button ws-button-secondary" type="button" disabled={busyId===closeTarget.id} onClick={()=>setCloseTarget(null)}>Cancelar</button><button className="ws-button ws-button-danger" type="submit" disabled={busyId===closeTarget.id||closureReason.trim().length<5}><X size={15}/>{busyId===closeTarget.id?'Cerrando…':'Cerrar permanentemente'}</button></footer></form></div>}
-  </>
+  </div>
 }

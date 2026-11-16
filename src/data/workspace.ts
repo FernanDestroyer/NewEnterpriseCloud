@@ -1,8 +1,10 @@
-import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, ScanSearch, Settings, ShieldCheck, Ship, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
+import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, Route, ScanSearch, Settings, ShieldCheck, Ship, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
+import { businessDate } from './businessCalendar.ts'
+export { businessDate } from './businessCalendar.ts'
 
-export type PermissionModuleKey = DataPage | 'analizador' | 'audit' | 'metas' | 'logistica'
+export type PermissionModuleKey = DataPage | 'analizador' | 'audit' | 'metas' | 'logistica' | 'approvals'
 
 export type WorkspaceEntry = { label: string; path: string; page?: DataPage; permission?: PermissionModuleKey; icon: LucideIcon; group: string }
 export const workspaceEntries: WorkspaceEntry[] = [
@@ -32,12 +34,15 @@ export const workspaceEntries: WorkspaceEntry[] = [
   { label: 'Bancos y conciliación', path: '/tesoreria', permission: 'finance', icon: Landmark, group: 'TESORERÍA' },
   { label: 'Comisiones de vendedores', path: '/comisiones', permission: 'sales', icon: Percent, group: 'VENTAS' },
   { label: 'Planificación de despachos', path: '/logistica/despachos', permission: 'logistica', icon: MapPinned, group: 'LOGÍSTICA Y TRANSPORTE' },
+  { label: 'Mapa y repertorio de rutas', path: '/logistica/rutas', permission: 'logistica', icon: Route, group: 'LOGÍSTICA Y TRANSPORTE' },
   { label: 'Vehículos y conductores', path: '/logistica/flota', permission: 'logistica', icon: Truck, group: 'LOGÍSTICA Y TRANSPORTE' },
   { label: 'Seguimiento de despachos', path: '/logistica/seguimiento', permission: 'logistica', icon: PackageCheck, group: 'LOGÍSTICA Y TRANSPORTE' },
   { label: 'Metas y objetivos', path: '/metas', permission: 'metas', icon: Target, group: 'METAS Y OBJETIVOS' },
   { label: 'Maestros', path: '/maestros', permission: 'settings', icon: Building2, group: 'MAESTROS' },
   { label: 'Caja', path: '/caja', page: 'finance', icon: Banknote, group: 'TESORERÍA' },
   { label: 'Reportes', path: '/reports', page: 'reports', icon: TrendingUp, group: 'REPORTES E INTELIGENCIA' },
+  { label: 'Centro de alertas', path: '/notificaciones', icon: Bell, group: 'NOTIFICACIONES Y APROBACIONES' },
+  { label: 'Bandeja de aprobaciones', path: '/aprobaciones', permission: 'approvals', icon: ClipboardCheck, group: 'NOTIFICACIONES Y APROBACIONES' },
   { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'CONFIGURACIÓN' },
   { label: 'Permisos', path: '/permisos', page: 'settings', icon: KeyRound, group: 'SEGURIDAD' },
   { label: 'Bitácora de auditoría', path: '/auditoria', permission: 'audit', icon: FileCheck2, group: 'SEGURIDAD' },
@@ -80,7 +85,7 @@ export const workspaceModules: WorkspaceModule[] = [
   {
     id: 'compras', label: 'Compras', icon: ShoppingCart,
     children: [
-      { label: 'Órdenes nacionales', path: '/purchases', permission: 'purchases', icon: ShoppingCart, availability: 'partial', implemented: true },
+      { label: 'Órdenes nacionales', path: '/purchases', permission: 'purchases', icon: ShoppingCart, implemented: true },
       { label: 'Solicitud interna y comparativo de ofertas', path: '/solicitudes-compra', permission: 'purchases', icon: ClipboardList, implemented: true },
       { label: 'Recepción de mercadería', path: '/ingreso-kardex', permission: 'purchases', icon: PackageCheck, implemented: true },
       { label: 'Devoluciones a proveedor', path: '/devoluciones-proveedor', permission: 'purchases', icon: ArrowLeftRight, implemented: true },
@@ -114,7 +119,7 @@ export const workspaceModules: WorkspaceModule[] = [
   {
     id: 'tesoreria', label: 'Tesorería', icon: Wallet,
     children: [
-      { label: 'Cuentas por cobrar y pagar', path: '/finance', permission: 'finance', icon: Wallet, availability: 'partial', implemented: true },
+      { label: 'Cuentas por cobrar y pagar', path: '/finance', permission: 'finance', icon: Wallet, implemented: true },
       { label: 'Cajas y turnos', path: '/caja', permission: 'finance', icon: Banknote, implemented: true },
       { label: 'Bancos, flujo y conciliación', path: '/tesoreria', permission: 'finance', icon: Landmark, implemented: true },
     ],
@@ -123,6 +128,7 @@ export const workspaceModules: WorkspaceModule[] = [
     id: 'logistica', label: 'Logística y Transporte', icon: Truck,
     children: [
       { label: 'Planificación de despachos y rutas', path: '/logistica/despachos', permission: 'logistica', icon: MapPinned, implemented: true },
+      { label: 'Mapa y repertorio de rutas', path: '/logistica/rutas', permission: 'logistica', icon: Route, implemented: true },
       { label: 'Vehículos y asignación de conductores', path: '/logistica/flota', permission: 'logistica', icon: Truck, implemented: true },
       { label: 'Seguimiento, entrega y devoluciones', path: '/logistica/seguimiento', permission: 'logistica', icon: PackageCheck, implemented: true },
     ],
@@ -155,56 +161,59 @@ export const workspaceModules: WorkspaceModule[] = [
     id: 'seguridad', label: 'Seguridad y Auditoría', icon: ShieldCheck,
     children: [
       { label: 'Usuarios, roles y permisos', path: '/permisos', permission: 'settings', icon: KeyRound, implemented: true },
-      { label: 'Bitácora y auditoría de operaciones', path: '/auditoria', permission: 'audit', icon: FileCheck2, availability: 'partial', implemented: true },
+      { label: 'Bitácora y auditoría de operaciones', path: '/auditoria', permission: 'audit', icon: FileCheck2, implemented: true },
     ],
   },
   {
     id: 'configuracion', label: 'Configuración e Integraciones', icon: Settings,
     children: [
-      { label: 'Parámetros, series y plantillas', permission: 'settings', icon: Settings, implemented: false },
-      { label: 'Integraciones de cobro', path: '/mantenimientos#integraciones', permission: 'settings', icon: Workflow, availability: 'partial', implemented: true },
-      { label: 'Descarga de respaldos', path: '/mantenimientos#respaldos', permission: 'settings', icon: FileText, availability: 'partial', implemented: true },
-      { label: 'API y webhooks', permission: 'settings', icon: Landmark, implemented: false },
+      { label: 'Parámetros, series y plantillas', path: '/mantenimientos#catalogos', permission: 'settings', icon: Settings, implemented: true },
+      { label: 'Datos de cobro', path: '/mantenimientos#integraciones', permission: 'settings', icon: Workflow, implemented: true },
+      { label: 'Exportación de datos operativos', path: '/mantenimientos#respaldos', permission: 'settings', icon: FileText, implemented: true },
+      { label: 'API y webhooks', path: '/mantenimientos#api-webhooks', permission: 'settings', icon: Landmark, implemented: true },
     ],
   },
   {
     id: 'notificaciones', label: 'Notificaciones y Aprobaciones', icon: Bell,
     children: [
-      { label: 'Centro de alertas', action: 'notifications', icon: Bell, implemented: true },
-      { label: 'Workflows y reglas de aprobación', icon: Workflow, implemented: false },
-      { label: 'Bandeja de aprobaciones', icon: ClipboardCheck, implemented: false },
-      { label: 'Canales e historial de notificaciones', icon: FileText, implemented: false },
+      { label: 'Centro de alertas', path: '/notificaciones', icon: Bell, implemented: true },
+      { label: 'Workflows y reglas de aprobación', path: '/aprobaciones#reglas', permission: 'approvals', icon: Workflow, implemented: true },
+      { label: 'Bandeja de aprobaciones', path: '/aprobaciones', permission: 'approvals', icon: ClipboardCheck, implemented: true },
+      { label: 'Canales e historial de notificaciones', path: '/notificaciones#historial', icon: FileText, implemented: true },
     ],
   },
 ]
+
+const DEFAULT_ROUTE_HASHES: Record<string, string> = {
+  '/comisiones': '#reglas',
+  '/metas': '#definicion',
+}
 
 export function submoduleMatchesLocation(path: string | undefined, pathname: string, hash: string) {
   if (!path) return false
   const separator = path.indexOf('#')
   const route = separator < 0 ? path : path.slice(0, separator)
+  if (route !== pathname) return false
   const targetHash = separator < 0 ? '' : path.slice(separator)
-  return route === pathname && (!targetHash || targetHash === hash)
+  if (targetHash) {
+    if (hash) return targetHash === hash
+    return DEFAULT_ROUTE_HASHES[route] === targetHash
+  }
+  if (!hash) return true
+  return !workspaceModules.some(module =>
+    module.children.some(child => child.path === `${route}${hash}`),
+  )
 }
 
 export const permissionModule: Record<PermissionModuleKey, string> = {
   sales: 'ventas', quotes: 'cotizaciones', purchases: 'compras', inventory: 'inventario',
   customers: 'clientes', suppliers: 'proveedores', finance: 'finanzas', documents: 'documentos',
   reports: 'reportes', settings: 'configuracion', analizador: 'analizador', audit: 'auditoria',
-  metas: 'metas', logistica: 'logistica',
+  metas: 'metas', logistica: 'logistica', approvals: 'aprobaciones',
 }
 
 export type Period = 'all' | 'month' | '30' | '7' | 'today'
 export type DateRange = { from: string; to: string }
-const businessCalendar = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' })
-
-// La aplicación utiliza el calendario de negocio peruano, independientemente del dispositivo.
-export function businessDate(value: string | Date) {
-  const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const parts = businessCalendar.formatToParts(date)
-  const get = (type: string) => parts.find(part => part.type === type)?.value ?? ''
-  return `${get('year')}-${get('month')}-${get('day')}`
-}
 
 export function shiftDate(value: string, days: number) {
   const date = new Date(`${value}T12:00:00Z`)

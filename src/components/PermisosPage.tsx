@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BookOpen, KeyRound, Lock, RefreshCw, ShieldCheck } from 'lucide-react'
+import { BookOpen, KeyRound, Lock, RefreshCw, Shield, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { displayDate } from '../data/workspace'
 import { friendlyError } from '../services/records'
 import { fetchPermissionCatalog, fetchRolePermissionLinks, fetchRoles, fetchUsers, PROTECTED_ADMIN_EMAIL, setUserActive, updateUserRole, type AppRole, type AppUser, type PermissionCatalogEntry, type RolePermissionLink } from '../services/usuarios'
 import { RoleGuideDialog, UserPermissionsDialog } from './PermissionDialogs'
+import { PageHeader } from './ui/PageHeader'
 
 export default function PermisosPage() {
   const { can, profile, session } = useAuth()
@@ -64,7 +65,13 @@ export default function PermisosPage() {
   }
 
   return <>
-    <section className="ws-page-heading"><div><span className="ws-eyebrow">ADMINISTRACIÓN DEL SISTEMA</span><h1>Permisos</h1><p>Los roles definen los permisos iniciales. Un administrador puede ajustar permisos para una cuenta específica.</p></div><div className="ws-heading-actions">{isAdmin && <button className="ws-button ws-button-secondary" onClick={() => setGuideOpen(true)}><BookOpen size={16} />Guía de roles</button>}<button className="ws-button ws-button-secondary" disabled={loading} onClick={() => void load()}><RefreshCw size={16} />Actualizar</button></div></section>
+    <PageHeader
+      icon={Shield}
+      section="Seguridad y auditoría"
+      title="Usuarios, roles y matriz de permisos"
+      description="Los roles definen los permisos iniciales. Un administrador puede ajustar permisos para una cuenta específica."
+      actions={<>{isAdmin && <button className="ws-button ws-button-secondary" onClick={() => setGuideOpen(true)}><BookOpen size={16} />Guía de roles</button>}<button className="ws-button ws-button-secondary" disabled={loading} onClick={() => void load()}><RefreshCw size={16} />Actualizar</button></>}
+    />
     {error && <div className="ws-notice ws-notice-warning" role="alert">{error}<button className="ws-text-button" onClick={() => void load()}>Reintentar</button></div>}
     {notice && <div className="ws-notice" role="status">{notice}</div>}
     <section className="ws-card"><div className="table-scroll"><table className="record-table"><thead><tr><th>Cuenta</th><th>Rol</th><th>Estado</th><th>Registro</th><th><span className="sr-only">Acciones</span></th></tr></thead><tbody>

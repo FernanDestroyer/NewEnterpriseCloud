@@ -17,7 +17,7 @@ export type BankStatementLine = {
   monto_firmado: number; movimiento_bancario_id: string | null
 }
 export type AppliedMoneyMovement = {
-  id: string; tipo: 'cobro' | 'pago'; monto: number; medio_pago: string | null
+  id: string; tipo: 'cobro' | 'pago'; monto: number; moneda: 'PEN' | 'USD' | null; medio_pago: string | null
   referencia: string | null; nota: string | null; created_at: string
 }
 async function fetchAllPages<T>(query: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
@@ -36,7 +36,7 @@ export async function fetchTreasuryData() {
     client.from('cuentas_bancarias').select('*').order('nombre'),
     fetchAllPages<BankReconciliation>((from, to) => client.from('conciliaciones_bancarias').select('*').order('created_at', { ascending: false }).order('id').range(from, to)),
     fetchAllPages<BankStatementLine>((from, to) => client.from('lineas_extracto_bancario').select('*').order('fecha', { ascending: false }).order('id').range(from, to)),
-    fetchAllPages<AppliedMoneyMovement>((from, to) => client.from('movimientos_tesoreria').select('id,tipo,monto,medio_pago,referencia,nota,created_at').is('anulado_en', null).order('created_at', { ascending: false }).order('id').range(from, to)),
+    fetchAllPages<AppliedMoneyMovement>((from, to) => client.from('movimientos_tesoreria').select('id,tipo,monto,moneda,medio_pago,referencia,nota,created_at').is('anulado_en', null).order('created_at', { ascending: false }).order('id').range(from, to)),
   ])
   if (accounts.error) throw accounts.error
   const movements = await fetchAllPages<BankMovement>((from, to) => client.from('movimientos_bancarios').select('*').order('fecha', { ascending: false }).order('created_at', { ascending: false }).order('id').range(from, to))

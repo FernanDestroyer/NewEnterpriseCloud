@@ -1,5 +1,7 @@
 # Diagnóstico y ruta de implementación de EnterpriseCloud
 
+> **Documento histórico:** su diagnóstico y conteos corresponden a octubre de 2026 y fueron supersedidos por la verificación del 12 de noviembre. Para el estado actual, usa [el inventario de módulos](ESTADO_ACTUAL_MODULOS_PENDIENTES.md), [el plan vigente](PLAN_IMPLEMENTACION_MODULOS_PENDIENTES.md) y [la conciliación del historial](RECONCILIACION_MIGRACIONES.md).
+
 **Corte de verificación remota:** 26 de octubre de 2026. **Avances:** 26 de octubre de 2026; nueva entrega: 29 de octubre de 2026.  
 **Proyecto Supabase:** ERP EnterpriseCloud (ref: auxqjoxnsasnmtnakgmg), organización Free.  
 **Protección de datos:** se verificaron 9 usuarios de Auth y sus 9 perfiles; no se eliminaron cuentas ni datos.
