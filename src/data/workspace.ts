@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, Route, ScanSearch, Settings, ShieldCheck, Ship, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
+import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, BrainCircuit, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, Route, ScanSearch, Settings, ShieldCheck, Ship, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
 import { businessDate } from './businessCalendar.ts'
@@ -155,6 +155,7 @@ export const workspaceModules: WorkspaceModule[] = [
     children: [
       { label: 'Panel ejecutivo', path: '/dashboard', icon: LayoutDashboard, implemented: true },
       { label: 'Reportes operativos', path: '/reports', permission: 'reports', icon: BarChart3, implemented: true },
+      { label: 'Red neuronal y recomendaciones IA', path: '/inteligencia/red-neuronal', permission: 'reports', icon: BrainCircuit, implemented: true },
     ],
   },
   {

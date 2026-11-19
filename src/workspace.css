@@ -2204,3 +2204,4 @@ label.ws-control > :is(select, input):focus-visible { outline: none !important; 
 .approval-events article strong, .approval-events article small { display: block; }
 .approval-events article small, .approval-events article p { margin: 2px 0 0; color: var(--ws-muted); font-size: 10px; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .approval-layout { grid-template-columns: minmax(0, 1fr); } }
+.ws-neural-status{display:flex;align-items:center;gap:6px;color:var(--ws-green);font-size:10px}.ws-neural-status i{width:6px;height:6px;background:var(--ws-green);border-radius:50%;box-shadow:0 0 0 3px var(--ws-green-soft)}
