@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { useLocation } from 'react-router-dom'
-import { AlertTriangle, Building2, CheckCircle2, Coins, Download, Landmark, PlugZap, QrCode, RefreshCw, Wallet, Wrench } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { AlertTriangle, BrainCircuit, Building2, CheckCircle2, Coins, Download, Landmark, PlugZap, QrCode, RefreshCw, Wallet, Wrench } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import {
@@ -56,6 +56,7 @@ function CatalogModal({ title, description, onClose, children }: { title: string
 
 export default function MaintenancePage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { can } = useAuth()
   const { records, company, catalog, loading, reload, notify } = useRecords()
   const [exportBusy, setExportBusy] = useState(false)
@@ -73,6 +74,8 @@ export default function MaintenancePage() {
   const [peruStatusLoading, setPeruStatusLoading] = useState(false)
   const [peruStatusBusy, setPeruStatusBusy] = useState(false)
   const [peruStatusMessage, setPeruStatusMessage] = useState('')
+  const [neuralTriggering, setNeuralTriggering] = useState(false)
+  const [neuralMessage, setNeuralMessage] = useState('')
   useEffect(() => {
     const anchor = location.hash.slice(1)
     if (!anchor) return
@@ -238,6 +241,16 @@ export default function MaintenancePage() {
     }
   }
 
+  const triggerNeuralTraining = () => {
+    if (neuralTriggering) return
+    setNeuralTriggering(true)
+    setNeuralMessage('Entrenamiento solicitado. Abriendo el monitor neuronal…')
+    window.setTimeout(() => {
+      setNeuralTriggering(false)
+      navigate('/inteligencia/red-neuronal')
+    }, 850)
+  }
+
   return <>
     <PageHeader
       icon={Wrench}
@@ -273,6 +286,15 @@ export default function MaintenancePage() {
           {peruStatus?.provider && <small>Proveedor configurado: apis.net.pe</small>}
           {peruStatus?.checked_at && <small>Última comprobación: {new Date(peruStatus.checked_at).toLocaleString('es-PE')}</small>}
           {can('settings', 'editar') && <span><button className="ws-button ws-button-secondary" type="button" disabled={peruStatusBusy || peruStatusLoading} onClick={() => void verifyPeruIntegration()}><RefreshCw size={15} className={peruStatusBusy ? 'ws-spin' : ''} />{peruStatusBusy ? 'Comprobando…' : 'Comprobar configuración'}</button></span>}
+        </article>
+        <article className="ws-card ws-report-card">
+          <span className="ws-soft-icon violet"><BrainCircuit size={21} /></span>
+          <h2>Motor neuronal multitarea</h2>
+          <p>Estado DEMO · modelo v0.8.4 · 4 cabezas de salida listas para inferencia.</p>
+          <strong className="ws-neural-status"><i /> Inferencia activa</strong>
+          <small>Entrena con señales de Ventas, Inventario, Tesorería, Compras, Logística y Metas.</small>
+          <span><button className="ws-button ws-button-secondary" type="button" disabled={neuralTriggering} onClick={triggerNeuralTraining}><BrainCircuit size={15} />{neuralTriggering ? 'Solicitando…' : 'Disparar entrenamiento'}</button></span>
+          {neuralMessage && <small role="status">{neuralMessage}</small>}
         </article>
       </div>
       <div className="ws-notice ws-notice-warning" role="note"><AlertTriangle size={17} /><div><strong>La credencial se administra en Supabase</strong><span>Usa el secreto PERU_API_TOKEN en el entorno de Edge Functions. El estado guardado aquí nunca incluye el token ni la URL completa.</span></div></div>

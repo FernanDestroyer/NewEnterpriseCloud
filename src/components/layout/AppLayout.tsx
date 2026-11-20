@@ -25,6 +25,7 @@ function storedCollapsed() {
 
 function notificationPath(source: NotificationSource, reference: string) {
   if (source === 'approvals') return '/aprobaciones'
+  if (source === 'predictive') return `/inventario/existencias?q=${encodeURIComponent(reference)}`
   const path = source === 'inventory' ? '/inventario/existencias' : source === 'finance' ? '/finance' : '/purchases'
   return `${path}?q=${encodeURIComponent(reference)}`
 }
@@ -81,7 +82,9 @@ export default function AppLayout() {
   const usePersistedNotifications = currentNotificationSync.state === 'ok' && !notificationListError
   const persistedUnread = persistedNotifications.filter(item => !item.read_at && (item.fuente === 'approvals'
     ? can('approvals', 'ver')
-    : notificationSnapshot.sources.includes(item.fuente)))
+    : item.fuente === 'predictive'
+      ? can('inventory')
+      : notificationSnapshot.sources.includes(item.fuente)))
   const overflowAlerts = notificationSnapshot.overflowSources.flatMap(source => notificationSnapshot.alertsBySource[source])
   const alertCount = usePersistedNotifications ? persistedUnread.length + overflowAlerts.length : fallbackAlertCount
   const notificationPreview = useMemo(() => {

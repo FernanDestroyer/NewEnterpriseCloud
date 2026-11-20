@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Archive, AlertTriangle, Bell, Boxes, Check, ChevronRight, ClipboardCheck, Clock3, RefreshCw, ShoppingCart, Wallet } from 'lucide-react'
+import { Archive, AlertTriangle, Bell, Boxes, Check, ChevronRight, ClipboardCheck, Clock3, RefreshCw, ShoppingCart, TrendingDown, Wallet } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useOperationalNotifications } from '../context/OperationalNotificationsContext'
@@ -9,6 +9,8 @@ import { isStockAlert, money } from '../data/helpers'
 import { buildOperationalAlertSnapshot, MAX_ALERTS_PER_SOURCE, type NotificationSource, type OperationalAlertInput, type OperationalNotificationSource } from '../data/operationalAlerts'
 import { friendlyError } from '../services/records'
 import { listOperationalNotifications, updateOperationalNotification, type NotificationView, type OperationalNotification } from '../services/notifications'
+import { PREDICTIVE_DEFAULTS } from '../data/predictiveAlerts'
+import { fetchRecentOutflows, runPredictiveProviders, syncPredictiveAlerts, type PredictiveProduct } from '../services/predictiveAlerts'
 import { PageHeader } from './ui/PageHeader'
 
 const sourceLabels: Record<NotificationSource, string> = {
@@ -16,6 +18,7 @@ const sourceLabels: Record<NotificationSource, string> = {
   finance: 'Tesorería',
   purchases: 'Compras',
   approvals: 'Aprobaciones',
+  predictive: 'Alertas predictivas',
 }
 
 const sourceIcons = {
@@ -23,6 +26,7 @@ const sourceIcons = {
   finance: Wallet,
   purchases: ShoppingCart,
   approvals: ClipboardCheck,
+  predictive: TrendingDown,
 } satisfies Record<NotificationSource, typeof Bell>
 
 const sourcePages: Record<NotificationSource, PermissionModuleKey> = {
@@ -30,11 +34,12 @@ const sourcePages: Record<NotificationSource, PermissionModuleKey> = {
   finance: 'finance',
   purchases: 'purchases',
   approvals: 'approvals',
+  predictive: 'inventory',
 }
 
 function notificationPath(notification: OperationalNotification) {
   if (notification.fuente === 'approvals') return '/aprobaciones'
-  const path = notification.fuente === 'inventory' ? '/inventario/existencias' : `/${sourcePages[notification.fuente]}`
+  const path = notification.fuente === 'inventory' || notification.fuente === 'predictive' ? '/inventario/existencias' : `/${sourcePages[notification.fuente]}`
   return `${path}?q=${encodeURIComponent(notification.referencia)}`
 }
 
@@ -90,7 +95,7 @@ function NotificationGroup({
   const Icon = sourceIcons[source]
   return <section className="ws-card ws-notification-group">
     <header className="ws-card-heading">
-      <div><h2><Icon size={16} />{sourceLabels[source]}</h2><p>{source === 'inventory' ? 'Existencias por revisar.' : source === 'finance' ? 'Cuentas abiertas y vencimientos.' : source === 'purchases' ? 'Solicitudes y órdenes por seguir.' : 'Solicitudes que requieren una decisión o ya se resolvieron.'}</p></div>
+      <div><h2><Icon size={16} />{sourceLabels[source]}</h2><p>{source === 'inventory' ? 'Existencias por revisar.' : source === 'finance' ? 'Cuentas abiertas y vencimientos.' : source === 'purchases' ? 'Solicitudes y órdenes por seguir.' : source === 'predictive' ? 'Productos que podrían agotarse según su consumo reciente.' : 'Solicitudes que requieren una decisión o ya se resolvieron.'}</p></div>
       <span className="ws-badge">{items.length}</span>
     </header>
     {error ? <div className="ws-notice ws-notice-warning" role="alert">{error}</div> : loading ? <div className="ws-empty-compact" role="status">Consultando alertas…</div> : items.length ? <div className="ws-notification-list">
@@ -153,7 +158,61 @@ export default function NotificationsPage() {
     ...(can('finance') ? ['finance' as const] : []),
     ...(can('purchases') ? ['purchases' as const] : []),
     ...(can('approvals', 'ver') ? ['approvals' as const] : []),
+    ...(can('inventory') ? ['predictive' as const] : []),
   ], [can])
+
+  // Alertas predictivas: se calculan con las salidas recientes y se guardan en la misma bandeja.
+  const canPredict = can('inventory')
+  const [predictive, setPredictive] = useState<{ running: boolean; error: string; note: string; lastRunAt: Date | null }>({ running: false, error: '', note: '', lastRunAt: null })
+  const [localPredictiveRows, setLocalPredictiveRows] = useState<OperationalNotification[]>([])
+  const [predictiveVersion, setPredictiveVersion] = useState(0)
+  const stockProducts = useMemo<PredictiveProduct[]>(
+    () => records.inventory.filter(item => item.rowId).map(item => ({ productId: item.rowId as string, code: item.id, name: item.name, stock: Number(item.quantity ?? 0) })),
+    [records.inventory],
+  )
+  useEffect(() => {
+    if (!accountId || !canPredict || loading || errors.inventory) return
+    let active = true
+    setPredictive(current => ({ ...current, running: true, error: '' }))
+    void (async () => {
+      try {
+        const { rows, truncated } = await fetchRecentOutflows()
+        const run = await runPredictiveProviders({ products: stockProducts, movements: rows, today }, truncated)
+        // Si un proveedor falla no se sincroniza: hacerlo marcaría como resueltas sus alertas vigentes.
+        if (run.failures.length) throw new Error(`No se pudo calcular la predicción (${run.failures.map(item => item.provider).join(', ')}): ${run.failures[0].message}`)
+        if (!active) return
+        const nowIso = new Date().toISOString()
+        setLocalPredictiveRows(run.alerts.map((alert, index) => ({
+          ...alert,
+          id: `local:predictive:${index}:${alert.clave_fuente}`,
+          estado: 'active',
+          created_at: nowIso,
+          updated_at: nowIso,
+          last_seen_at: nowIso,
+          read_at: null,
+          archived_at: null,
+          resolved_at: null,
+        })))
+        try {
+          await syncPredictiveAlerts(run.alerts)
+          if (!active) return
+          setPredictive({ running: false, error: '', lastRunAt: new Date(), note: run.truncated ? 'Había más movimientos de los que se pueden leer de una vez; la estimación usa los más recientes.' : '' })
+          setRefreshVersion(version => version + 1)
+          notificationsContext?.refresh()
+        } catch (syncError) {
+          if (active) setPredictive({ running: false, error: friendlyError(syncError), lastRunAt: new Date(), note: 'Vista temporal local: aplica la migración de alertas predictivas para persistir lecturas y archivo.' })
+        }
+      } catch (error) {
+        if (active) {
+          setLocalPredictiveRows([])
+          setPredictive(current => ({ ...current, running: false, error: friendlyError(error) }))
+        }
+      }
+    })()
+    return () => { active = false }
+    // notificationsContext se omite a propósito: su refresco no debe relanzar el cálculo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, canPredict, loading, errors.inventory, stockProducts, today, predictiveVersion])
 
   useEffect(() => {
     if (!accountId) {
@@ -186,14 +245,19 @@ export default function NotificationsPage() {
       && permissionSources.includes('approvals')
       && item.estado === 'active'
       && !item.archived_at)
+    const predictivePersisted = notifications.filter(item => item.fuente === 'predictive'
+      && permissionSources.includes('predictive')
+      && item.estado === 'active'
+      && !item.archived_at)
+    const predictiveRows = predictivePersisted.length || !predictive.error ? predictivePersisted : localPredictiveRows
     if (view === 'active') {
-      if (!persistenceReady || listError) return [...localRows, ...approvalRows]
-      const persisted = notifications.filter(item => item.fuente !== 'approvals' && syncSources.includes(item.fuente) && item.estado === 'active' && !item.archived_at)
+      if (!persistenceReady || listError) return [...localRows, ...approvalRows, ...predictiveRows]
+      const persisted = notifications.filter(item => item.fuente !== 'approvals' && item.fuente !== 'predictive' && syncSources.includes(item.fuente) && item.estado === 'active' && !item.archived_at)
       const localOverflow = localRows.filter(item => overflowSources.includes(item.fuente))
-      return [...persisted, ...approvalRows, ...localOverflow]
+      return [...persisted, ...approvalRows, ...predictiveRows, ...localOverflow]
     }
     return notifications.filter(item => permissionSources.includes(item.fuente) && (item.estado === 'resolved' || item.archived_at !== null))
-  }, [listError, localRows, notifications, overflowSources, permissionSources, persistenceReady, syncSources, view])
+  }, [listError, localPredictiveRows, localRows, notifications, overflowSources, permissionSources, persistenceReady, predictive.error, syncSources, view])
 
   const onAction = async (notification: OperationalNotification, action: 'read' | 'archive') => {
     if (listError || notification.id.startsWith('local:')) return
@@ -234,18 +298,19 @@ export default function NotificationsPage() {
       <span>{viewTitle}{pageBusy ? ' · actualizando' : ''}</span>
     </div>
     {view === 'history' && <div className="ws-notice" role="status"><Clock3 size={17} /><div><strong>Canales e historial de notificaciones</strong><span>Canales activos: bandeja interna persistente y alertas operativas automáticas para Inventario, Tesorería, Compras y Aprobaciones.</span></div></div>}
+    {canPredict && view === 'active' && <div className="ws-notice" role="note"><TrendingDown size={17} /><div><strong>Alertas predictivas · modelo estadístico</strong><span>Estiman cuántos días de existencias quedan según el consumo diario de los últimos {PREDICTIVE_DEFAULTS.windowDays} días (suavizado exponencial); avisan con menos de {PREDICTIVE_DEFAULTS.warningDays} días de cobertura. No es una red neuronal: esta fuente queda lista para conectar una.{predictive.note ? ` ${predictive.note}` : ''}{predictive.lastRunAt ? ` Calculado ${new Intl.DateTimeFormat('es-PE', { timeStyle: 'short' }).format(predictive.lastRunAt)}.` : ''}</span></div><button type="button" className="ws-button ws-button-secondary" disabled={predictive.running} onClick={() => setPredictiveVersion(version => version + 1)}><RefreshCw size={15} />{predictive.running ? 'Calculando…' : 'Recalcular'}</button></div>}
     <section className="ws-notification-grid" aria-label={viewTitle}>
-      {(['inventory', 'finance', 'purchases', 'approvals'] as NotificationSource[]).map(source => {
-        const sourceError = source === 'inventory' ? errors.inventory : source === 'finance' ? errors.finance : source === 'purchases' ? errors.purchases : undefined
+      {(['inventory', 'finance', 'purchases', 'approvals', 'predictive'] as NotificationSource[]).map(source => {
+        const sourceError = source === 'inventory' ? errors.inventory : source === 'finance' ? errors.finance : source === 'purchases' ? errors.purchases : source === 'predictive' ? (!localPredictiveRows.length ? (predictive.error || undefined) : undefined) : undefined
         const sourceItems = visibleRows.filter(item => item.fuente === source)
         return <NotificationGroup
           key={source}
           source={source}
           items={sourceItems}
           error={can(sourcePages[source]) ? sourceError : undefined}
-          loading={loading || listLoading}
+          loading={loading || listLoading || (source === 'predictive' && predictive.running && !sourceItems.length)}
           view={view}
-          readOnly={(source !== 'approvals' && !persistenceReady) || Boolean(listError) || sourceItems.some(item => item.id.startsWith('local:'))}
+          readOnly={(source !== 'approvals' && source !== 'predictive' && !persistenceReady) || Boolean(listError) || sourceItems.some(item => item.id.startsWith('local:'))}
           pendingId={pendingId}
           onOpen={path => navigate(path)}
           onRead={item => void onAction(item, 'read')}

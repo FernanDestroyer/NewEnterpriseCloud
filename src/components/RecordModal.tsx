@@ -4,7 +4,7 @@ import { pageMeta } from '../data/catalog'
 import { defaultStatus, LOW_STOCK_THRESHOLD, money, moneyCurrency, statusesForPage, totalWithIgv } from '../data/helpers'
 import { useRecords } from '../context/RecordsContext'
 import { useAuth } from '../context/AuthContext'
-import { fetchActiveWarehouses, fetchDocumentLines, fetchMeasurementUnits, fetchPaymentMethods, fetchProductCategories, fetchWarehouseStocks, friendlyError, type ActiveWarehouse, type MeasurementUnit, type ProductCategory } from '../services/records'
+import { fetchActiveWarehouses, fetchDocumentLines, fetchMeasurementUnits, fetchPaymentMethods, fetchProductCategories, fetchWarehouseStocks, friendlyError, insertRecord, linkCatalogItemToProduct, type ActiveWarehouse, type MeasurementUnit, type ProductCategory } from '../services/records'
 import { consumesCreditLine, customerCredit } from '../data/workspace'
 import { lookupDni, lookupRuc, type DocType } from '../services/peru'
 import { SUPPLIER_PAYMENT_TERMS } from '../services/import'
@@ -73,7 +73,45 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
   const meta = pageMeta[page]
   const isMaster = page === 'customers' || page === 'suppliers' || page === 'inventory'
   const editing = Boolean(record)
-  const { records, catalog, lastSyncedAt } = useRecords()
+  const { records, catalog, lastSyncedAt, reload, notify } = useRecords()
+  const [linkingCatalogId, setLinkingCatalogId] = useState<string | null>(null)
+  const linkMasterProduct = async (catalogRowId: string, productoId: string) => {
+    if (!productoId || linkingCatalogId) return
+    setLinkingCatalogId(catalogRowId)
+    try {
+      await linkCatalogItemToProduct(catalogRowId, productoId)
+      await reload()
+      setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
+      notify('Artículo vinculado al producto maestro de Inventario.')
+    } catch (error) {
+      notify(friendlyError(error))
+    } finally {
+      setLinkingCatalogId(null)
+    }
+  }
+  const createAndLinkMasterProduct = async (catalogProduct: RecordItem) => {
+    const catalogRowId = catalogProduct.rowId
+    if (!catalogRowId || linkingCatalogId) return
+    setLinkingCatalogId(catalogRowId)
+    try {
+      const created = await insertRecord('inventory', {
+        name: catalogProduct.name,
+        detail: catalogProduct.detail?.trim() || 'Ficha SKU creada desde catálogo de proveedor',
+        status: 'Activo',
+        quantity: 0,
+        precio: Math.max(0, Number(catalogProduct.amount ?? 0) || 0),
+      })
+      if (!created.rowId) throw new Error('No se recibió el identificador del nuevo producto maestro.')
+      await linkCatalogItemToProduct(catalogRowId, created.rowId)
+      await reload()
+      setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
+      notify(`Ficha "${created.name}" (${created.id}) creada con stock 0 y vinculada. Su ingreso al Kardex se confirma al recibir la compra.`)
+    } catch (error) {
+      notify(friendlyError(error))
+    } finally {
+      setLinkingCatalogId(null)
+    }
+  }
   const { can } = useAuth()
   // Descuento % en ventas (solo roles con finanzas; se aplica al subtotal).
   const [discountPct, setDiscountPct] = useState(record?.descuento ?? 0)
@@ -251,8 +289,10 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
     record?.detail ?? (page === 'sales' ? `Factura ${nextSaleDocNumber(records.sales, 'Factura')} · Lima` : ''),
   )
   const [lines, setLines] = useState<Record<string, LineDraft>>({})
-  // Documento para consulta RENIEC/SUNAT: clientes eligen DNI o RUC, proveedores usan RUC.
-  const [docKind, setDocKind] = useState<DocType>(record?.tipoDoc ?? 'RUC')
+  // Documento para consulta RENIEC/SUNAT: clientes eligen Persona natural (DNI) o Empresa (RUC); proveedores usan RUC.
+  const [docKind, setDocKind] = useState<DocType>(record?.tipoDoc ?? (page === 'customers' ? 'DNI' : 'RUC'))
+  const customerNameLabel = docKind === 'DNI' ? 'Nombres y apellidos' : 'Razón social'
+  const customerNamePlaceholder = docKind === 'DNI' ? 'Ej. Juan Pérez Gómez' : 'Ej. Comercial Andina S.A.C.'
   const [docNumber, setDocNumber] = useState<string>(record?.documento ?? '')
   const [rucValue, setRucValue] = useState<string>(record?.ruc ?? '')
   // Contacto del proveedor (nuevo registro o edición).
@@ -416,9 +456,9 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
       const result = tipo === 'DNI' ? await lookupDni(numero) : await lookupRuc(numero, kind === 'supplier' ? 'proveedores' : 'clientes')
       setNameValue(result.nombre)
       setDetailValue(result.detalle)
+      if (result.direccion) setDireccionValue(result.direccion)
       if (kind === 'supplier') {
         setRucValue(result.documento)
-        if (result.direccion) setDireccionValue(result.direccion)
       }
       else {
         setDocNumber(result.documento)
@@ -762,7 +802,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                       id="customer_search"
                       value={customerQuery}
                       onChange={(event) => setCustomerQuery(event.target.value)}
-                      placeholder="Buscar por razón social, documento o código…"
+                      placeholder="Buscar por nombre, razón social, documento o código…"
                       aria-label="Buscar cliente"
                     />
                   </span>
@@ -811,7 +851,70 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
           ) : null)}
           <fieldset className={isMaster ? 'ec-form-group' : 'ec-form-passthrough'}>
           {isMaster && <legend>01 · Datos principales</legend>}
-          <label>{meta.entityLabel}<input data-autofocus name="name" required minLength={2} value={nameValue} onChange={(event) => setNameValue(event.target.value)} placeholder={meta.entityLabel} /></label>
+          {page === 'customers' && (
+            <>
+              <div className="ec-master-field">
+                <span>Tipo de cliente</span>
+                <SegmentedControl
+                  name="tipo_doc"
+                  value={docKind}
+                  onChange={setDocKind}
+                  ariaLabel="Tipo de documento del cliente"
+                  options={[
+                    { value: 'DNI', label: 'Persona natural · DNI' },
+                    { value: 'RUC', label: 'Empresa · RUC' },
+                  ]}
+                />
+              </div>
+              <label>
+                {docKind} del cliente (opcional)
+                <div className="ws-doc-row">
+                  <input
+                    name="documento"
+                    inputMode="numeric"
+                    maxLength={docKind === 'DNI' ? 8 : 11}
+                    value={docNumber}
+                    onChange={(event) => setDocNumber(event.target.value.replace(/\D/g, ''))}
+                    placeholder={docKind === 'DNI' ? '12345678' : '20123456789'}
+                  />
+                  <button
+                    ref={lookupButtonRef}
+                    className="ws-button ws-button-secondary"
+                    type="button"
+                    disabled={lookup.busy}
+                    onClick={(event) => void runLookup('customer', readDocNumber(event.currentTarget, 'customer'))}
+                    title={`Autocompletar datos desde ${docKind === 'DNI' ? 'RENIEC' : 'SUNAT'}`}
+                  >
+                    <GoogleIcon name="search" className="small" />
+                    {lookup.busy ? 'Buscando…' : docKind === 'DNI' ? 'RENIEC' : 'SUNAT'}
+                  </button>
+                </div>
+              </label>
+              {lookup.message ? (
+                <small className={`relation-hint${lookup.ok ? ' linked' : ''}`}>
+                  <GoogleIcon name={lookup.ok ? 'check_circle' : 'info'} className="small" />
+                  {lookup.message}
+                </small>
+              ) : (
+                <small className="relation-hint">
+                  <GoogleIcon name="badge" className="small" />
+                  Elige Persona natural (DNI) o Empresa (RUC), consulta RENIEC/SUNAT o ingresa los datos manualmente.
+                </small>
+              )}
+            </>
+          )}
+          <label>
+            {page === 'customers' ? customerNameLabel : meta.entityLabel}
+            <input
+              data-autofocus
+              name="name"
+              required
+              minLength={2}
+              value={nameValue}
+              onChange={(event) => setNameValue(event.target.value)}
+              placeholder={page === 'customers' ? customerNamePlaceholder : meta.entityLabel}
+            />
+          </label>
           {page === 'purchases' && <div className="ws-form-grid">
             <label>Moneda de la orden
               <SegmentedControl name="moneda" value={purchaseCurrency} onChange={value => { setPurchaseCurrency(value); if (value === 'PEN') setPurchaseExchangeRate('1') }} ariaLabel="Moneda de compra" options={[{ value: 'PEN', label: 'PEN · Sol' }, { value: 'USD', label: 'USD · Dólar' }]} />
@@ -910,7 +1013,7 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
               )}
             </div>
           ) : (
-            <label>{meta.detailLabel}<input name="detail" required={page !== 'suppliers'} value={detailValue} onChange={(event) => setDetailValue(event.target.value)} placeholder={page === 'suppliers' ? '(opcional)' : meta.detailLabel} /></label>
+            <label>{meta.detailLabel}<input name="detail" required={page !== 'suppliers' && page !== 'customers'} value={detailValue} onChange={(event) => setDetailValue(event.target.value)} placeholder={page === 'suppliers' ? '(opcional)' : page === 'customers' ? 'Referencia, cargo o segmento (opcional)' : meta.detailLabel} /></label>
           )}
 
           </fieldset>
@@ -1003,8 +1106,21 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                           />
                           <span className="line-copy">
                             <strong>{product.name}</strong>
-                            {isCatalogLine && checked && <SegmentedControl name={`tax_${uuid}`} ariaLabel={`Tratamiento tributario de ${product.name}`} value={draft?.taxTreatment ?? ''} onChange={value => changeLine(uuid, { taxTreatment: (value || null) as TaxTreatment | null })} options={[{ value: '', label: 'Histórico' }, { value: 'Gravado', label: 'IGV 18%' }, { value: 'Exonerado', label: 'Exonerado 0%' }, { value: 'Inafecto', label: 'Inafecto 0%' }]} />}
-                            {isCatalogLine && checked && !draft?.taxTreatment && <small>Importe histórico: no se recalcula impuesto.</small>}
+                            {isCatalogLine && product.productoId && (
+                              <small className="relation-hint linked">
+                                <GoogleIcon name="link" className="small" />
+                                Vinculado a maestro: {product.relatedCode ?? product.relatedName ?? 'Inventario'}
+                              </small>
+                            )}
+                            {isNewArrival && (
+                              <small className={checked ? 'line-warn' : 'relation-hint'}>
+                                <GoogleIcon name={checked ? 'warning' : 'link_off'} className="small" />
+                                {checked
+                                  ? 'Sin producto maestro vinculado (Por ingresar): vincúlalo abajo o desmárcalo si es un servicio sin stock.'
+                                  : 'Por ingresar: sin producto maestro vinculado'}
+                              </small>
+                            )}
+
                             {!isCatalogLine && (
                               <small>
                                 {product.id} · {`${stock} und. · P. fijo ${money(suggested)}`}
@@ -1054,6 +1170,42 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                           <strong>{moneyCurrency(checked ? draft?.taxTreatment ? Math.round(qty * unit * 100) / 100 + Math.round(Math.round(qty * unit * 100) / 100 * (draft.taxTreatment === 'Gravado' ? 18 : 0)) / 100 : draft?.lineTotal ?? qty * unit : 0, page === 'purchases' ? purchaseCurrency : 'PEN')}</strong>
                           {isCatalogLine && checked && <button type="button" className="ws-icon-button" aria-label={`Quitar ${product.name}`} onClick={() => { toggleLine(uuid); setPurchaseRequestKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`) }}><Trash2 size={15} /></button>}
                         </span>
+                        {isCatalogLine && checked && (
+                          <div className="line-tax-row">
+                            <SegmentedControl name={`tax_${uuid}`} ariaLabel={`Tratamiento tributario de ${product.name}`} value={draft?.taxTreatment ?? ''} onChange={value => changeLine(uuid, { taxTreatment: (value || null) as TaxTreatment | null })} options={[{ value: '', label: 'Histórico' }, { value: 'Gravado', label: 'IGV 18%' }, { value: 'Exonerado', label: 'Exonerado 0%' }, { value: 'Inafecto', label: 'Inafecto 0%' }]} />
+                            {!draft?.taxTreatment && <small className="relation-hint">Importe histórico: no se recalcula impuesto.</small>}
+                          </div>
+                        )}
+                        {isNewArrival && checked && (
+                          <div className="line-master-link-row">
+                            <small className="relation-hint">
+                              {linkingCatalogId === uuid
+                                ? 'Creando ficha o vinculando con Inventario…'
+                                : 'Requiere una ficha SKU en Inventario (stock 0) para recibir luego en Kardex:'}
+                            </small>
+                            <div className="line-master-link-actions">
+                              {can('inventory', 'crear') && (
+                                <button
+                                  type="button"
+                                  className="ws-button ws-button-secondary"
+                                  disabled={Boolean(linkingCatalogId)}
+                                  onClick={() => void createAndLinkMasterProduct(product)}
+                                >
+                                  Crear ficha (stock 0) y vincular
+                                </button>
+                              )}
+                              <SearchablePicker
+                                ariaLabel={`Vincular ${product.name} a un producto maestro`}
+                                value=""
+                                disabled={Boolean(linkingCatalogId)}
+                                placeholder="O vincular existente…"
+                                searchPlaceholder="Buscar en Inventario…"
+                                options={records.inventory.filter(item => item.rowId).map(item => ({ id: item.rowId!, label: item.name, detail: `${item.id} · ${item.quantity ?? 0} und.` }))}
+                                onChange={productoId => void linkMasterProduct(uuid, productoId)}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -1193,20 +1345,44 @@ export default function RecordModal({ page, record, saving = false, onClose, onS
                 </>
               )}
               {page === 'customers' && (
-                <>
-                  <fieldset className="ec-form-group"><legend>02 · Identificación fiscal</legend>
-                  <div className="ec-master-field"><span>Tipo de documento</span><SegmentedControl name="tipo_doc" value={docKind} onChange={setDocKind} ariaLabel="Tipo de documento" options={[{value:'DNI',label:'DNI · RENIEC'},{value:'RUC',label:'RUC · SUNAT'}]} /></div>
-                  <label>{docKind} del cliente (opcional)
-                    <div className="ws-doc-row">
-                        <input name="documento" inputMode="numeric" maxLength={docKind === 'DNI' ? 8 : 11} value={docNumber} onChange={(event) => setDocNumber(event.target.value.replace(/\D/g, ''))} placeholder={docKind === 'DNI' ? '12345678' : '20123456789'} />
-                        <button ref={lookupButtonRef} className="ws-button ws-button-secondary" type="button" disabled={lookup.busy} onClick={(event) => void runLookup('customer', readDocNumber(event.currentTarget, 'customer'))} title={`Autocompletar nombre y detalle desde ${docKind === 'DNI' ? 'RENIEC' : 'SUNAT'}`}><GoogleIcon name="search" className="small" />{lookup.busy ? 'Buscando…' : docKind}</button>
-                    </div>
+                <fieldset className="ec-form-group">
+                  <legend>02 · Dirección y contacto (opcional al registrar)</legend>
+                  <div className="ws-form-grid">
+                    <label>
+                      Dirección de entrega / domicilio (opcional)
+                      <input
+                        name="direccion"
+                        value={direccionValue}
+                        onChange={(event) => setDireccionValue(event.target.value)}
+                        placeholder="Ej. Av. Arequipa 1450, Lince (obligatoria al realizar un pedido)"
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    Teléfono de contacto (opcional)
+                    <input
+                      name="telefono"
+                      inputMode="tel"
+                      value={telefonoValue}
+                      onChange={(event) => setTelefonoValue(event.target.value)}
+                      placeholder="987654321"
+                    />
                   </label>
-                  {lookup.message
-                    ? <small className={`relation-hint${lookup.ok ? ' linked' : ''}`}><GoogleIcon name={lookup.ok ? 'check_circle' : 'info'} className="small" />{lookup.message}</small>
-                    : <small className="relation-hint"><GoogleIcon name="badge" className="small" />La consulta se realiza mediante un servicio seguro de Supabase. También puedes ingresar los datos manualmente.</small>}
-                  </fieldset>
-                </>
+                  <label>
+                    Correo electrónico (opcional)
+                    <input
+                      name="correo"
+                      type="email"
+                      value={correoValue}
+                      onChange={(event) => setCorreoValue(event.target.value)}
+                      placeholder="cliente@correo.pe"
+                    />
+                  </label>
+                  <small className="relation-hint">
+                    <GoogleIcon name="local_shipping" className="small" />
+                    Opcional al registrar al cliente. Al crear un pedido o venta en Ventas, la dirección/ruta de entrega sí será obligatoria para despachar.
+                  </small>
+                </fieldset>
               )}
           <fieldset className={page === 'customers' ? 'ec-form-group' : 'ec-form-passthrough'}>
           {page === 'customers' && <legend>03 · Condiciones comerciales</legend>}

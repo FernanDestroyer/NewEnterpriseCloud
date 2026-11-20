@@ -8,6 +8,8 @@ import { convertQuoteToSale, deleteRecord, emptyRecords, enrichCatalog, fetchRec
 import { DATA_PAGES } from '../data/catalog'
 import { csvContent } from '../data/exports'
 import { useAuth } from './AuthContext'
+import { submittedMessage } from '../data/approvalRules'
+import { fetchApprovalOutcome } from '../services/approvals'
 import type { DataPage, ExportFormat, PendingDelete, RecordItem, RecordModalState, RecordStatus } from '../types'
 
 type RecordsContextValue = {
@@ -231,13 +233,13 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
     const correoInput = String(form.get('correo') ?? '').trim()
     const telefonoInput = String(form.get('telefono') ?? '').replace(/[^\d+\s-]/g, '').trim()
     const formaPagoInput = String(form.get('forma_pago') ?? '').trim()
-    if (page === 'suppliers') {
+    if (page === 'suppliers' || page === 'customers') {
       if (correoInput && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoInput)) {
-        notify('El correo del proveedor no es válido.')
+        notify(`El correo del ${page === 'suppliers' ? 'proveedor' : 'cliente'} no es válido.`)
         return
       }
       if (telefonoInput && telefonoInput.replace(/\D/g, '').length < 6) {
-        notify('El teléfono del proveedor debe tener al menos 6 dígitos.')
+        notify(`El teléfono del ${page === 'suppliers' ? 'proveedor' : 'cliente'} debe tener al menos 6 dígitos.`)
         return
       }
     }
@@ -297,6 +299,9 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
         const uuid = product.rowId
         if (!uuid) continue
         if (!form.get(`sel_${uuid}`)) continue
+        if (page === 'purchases' && !product.productoId) {
+          throw new Error(`"${product.name}" aún no está vinculado a un producto maestro de Inventario. Vincúlalo desde la misma línea (o desmárcalo si es un servicio) antes de guardar.`)
+        }
         const qty = Math.floor(Number(String(form.get(`qty_${uuid}`) ?? '')))
         const price = Number(String(form.get(`price_${uuid}`) ?? ''))
         if (!Number.isFinite(qty) || qty <= 0) throw new Error(`Cantidad inválida para ${product.name}.`)
@@ -367,7 +372,13 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
         telefono: telefonoInput || null,
         forma_pago: formaPagoInput || null,
       } : {}),
-      ...(page === 'customers' ? { tipo_doc: savedTipoDoc, documento: savedDocumento } : {}),
+      ...(page === 'customers' ? {
+        tipo_doc: savedTipoDoc,
+        documento: savedDocumento,
+        direccion: direccionInput || null,
+        telefono: telefonoInput || null,
+        correo: correoInput || null,
+      } : {}),
       ...((page === 'sales' || page === 'quotes') && relatedId !== undefined ? { cliente_id: relatedId } : {}),
       ...(page === 'purchases' && relatedId !== undefined ? { proveedor_id: relatedId } : {}),
     }
@@ -386,7 +397,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
         const approvalId = await requestPurchaseApproval(input, lines)
         await reload()
         setRecordModal(null)
-        notify(`Solicitud de orden enviada a la bandeja de aprobaciones (${approvalId.slice(0, 8)}). La orden se creará cuando la apruebe otra persona.`)
+        notify(submittedMessage('order', approvalId, await fetchApprovalOutcome(approvalId)))
         return
       }
       let saved: RecordItem

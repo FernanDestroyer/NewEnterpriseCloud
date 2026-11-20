@@ -91,7 +91,7 @@ export const pageMeta: Record<PageKey, PageMeta> = {
     description: 'Centraliza información comercial, crédito e historial de cada cliente.',
     detailLabel: 'Contacto, correo o segmento',
     eyebrow: 'RELACIONES COMERCIALES',
-    entityLabel: 'Razón social',
+    entityLabel: 'Nombre o razón social',
     icon: Users,
     kind: 'money',
     prefix: 'CLI',

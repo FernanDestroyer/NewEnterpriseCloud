@@ -3,12 +3,12 @@ import { requireSupabase } from '../lib/supabase'
 export type SaleLine = { producto_id: string; cantidad: number; precio: number; afectacion: '10' | '20' | '30'; base?: number; igv?: number; total?: number }
 export type SalesQuote = { id: string; cliente_id: string; version: number; estado: string; vence_el: string; moneda: 'PEN' | 'USD'; tipo_cambio: number; lineas: SaleLine[]; total: number }
 export type SalesQuoteVersion = { cotizacion_id: string; version: number; cliente_id: string; vence_el: string; moneda: 'PEN' | 'USD'; tipo_cambio: number; lineas: SaleLine[]; total: number; created_at: string }
-export type SalesOrder = { id: string; codigo: string; cliente_id: string; almacen_id: string; estado: string; moneda: 'PEN' | 'USD'; tipo_cambio: number; lineas: SaleLine[]; total: number; venta_id: string | null; cotizacion_id: string | null }
+export type SalesOrder = { id: string; codigo: string; cliente_id: string; almacen_id: string; estado: string; moneda: 'PEN' | 'USD'; tipo_cambio: number; lineas: SaleLine[]; total: number; venta_id: string | null; cotizacion_id: string | null; direccion_entrega?: string | null }
 export type SalesReceipt = { id: string; venta_id: string; tipo: string; serie: string; numero: number; moneda: string; tipo_cambio: number; base: number; igv: number; total: number; created_at: string; snapshot: { cliente: string; lineas: SaleLine[] }; estado_sunat: string }
 export type SalesGuide = { id: string; pedido_id: string; codigo: string; origen: string; destino: string; lineas: SaleLine[]; created_at: string }
 export type SalesCredit = { id: string; pedido_id: string; codigo: string; motivo: string; total: number; lineas: Array<{ producto_id: string; cantidad: number }> }
 export type SalesCatalog = { id: string; nombre: string; precio: number | null; stock: number }
-export type SalesCustomer = { id: string; razon_social: string; tipo_doc: string | null; documento: string | null }
+export type SalesCustomer = { id: string; razon_social: string; tipo_doc: string | null; documento: string | null; direccion: string | null; telefono: string | null }
 export type SalesWarehouse = { id: string; nombre: string; activo: boolean }
 export type WarehouseStock = { producto_id: string; almacen_id: string; cantidad: number }
 export type SalesReservation = { pedido_id: string; producto_id: string; cantidad: number; entregado: number }
@@ -32,7 +32,7 @@ export async function loadSalesOperations() {
   const [quotes, versions, orders, receipts, guides, credits, customers, products, warehouses, inventory, reservations, rate] = await Promise.all([
     list<SalesQuote>('ec_cotizaciones', '*'), list<SalesQuoteVersion>('ec_cotizacion_versiones', '*'), list<SalesOrder>('ec_pedidos', '*'),
     list<SalesReceipt>('ec_comprobantes', '*'), list<SalesGuide>('ec_guias', '*'),
-    list<SalesCredit>('ec_notas_credito', '*'), list<SalesCustomer>('clientes', 'id,razon_social,tipo_doc,documento'),
+    list<SalesCredit>('ec_notas_credito', '*'), list<SalesCustomer>('clientes', 'id,razon_social,tipo_doc,documento,direccion,telefono'),
     list<SalesCatalog>('productos', 'id,nombre,precio,stock'), list<SalesWarehouse>('almacenes', 'id,nombre,activo'),
     list<WarehouseStock>('inventarios', 'producto_id,almacen_id,cantidad'),
     list<SalesReservation>('ec_reservas', 'pedido_id,producto_id,cantidad,entregado'),
@@ -49,6 +49,11 @@ async function rpc(name: string, input: Record<string, unknown>): Promise<string
 }
 export const saveSalesQuote = (input: { id: string | null; cliente: string; vence: string; moneda: string; cambio: number; lineas: SaleLine[]; key: string }) => rpc('ec_guardar_cotizacion', { p_id: input.id, p_cliente_id: input.cliente, p_vence_el: input.vence, p_moneda: input.moneda, p_tipo_cambio: input.cambio, p_lineas: input.lineas, p_key: input.key })
 export const createSalesOrder = (input: { cliente: string; almacen: string; moneda: string; cambio: number; lineas: SaleLine[]; key: string }) => rpc('ec_crear_pedido', { p_cliente_id: input.cliente, p_almacen_id: input.almacen, p_moneda: input.moneda, p_tipo_cambio: input.cambio, p_lineas: input.lineas, p_key: input.key })
+/** Guarda la dirección/ruta de entrega en el cliente y, si se indica, en el pedido y su venta. */
+export async function saveOrderDeliveryAddress(input: { clienteId: string; direccion: string; orderId?: string | null }): Promise<void> {
+  const { error } = await requireSupabase().rpc('ec_guardar_direccion_entrega_v1', { p_cliente_id: input.clienteId, p_direccion: input.direccion, p_pedido_id: input.orderId ?? null })
+  if (error) throw error
+}
 export const convertSalesQuote = (input: { quote: string; almacen: string; tipo: string | null; serie: string | null; numero: number | null; key: string }) => rpc('ec_convertir_cotizacion', { p_cotizacion_id: input.quote, p_almacen_id: input.almacen, p_tipo: input.tipo, p_serie: input.serie, p_numero: input.numero, p_key: input.key })
 export type SalePayment = { method: string; cashShiftId: string | null }
 export const invoiceSalesOrder = (order: string, tipo: string, serie: string, numero: number, key: string, payment: SalePayment | null = null) =>

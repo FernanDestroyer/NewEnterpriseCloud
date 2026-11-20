@@ -1,6 +1,6 @@
 /* Block 2 · master data workspace. Theme tokens remain the source of color. */
 .ec-masters { display: grid; gap: 24px; min-width: 0; color: var(--ws-text); }
-.ec-masters .ws-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; min-height: 40px; }
+.ec-masters .ws-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9999px; min-height: 40px; }
 .ec-master-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .ec-master-metrics section { display: grid; gap: 10px; padding: 22px; }
 .ec-master-metrics span { color: var(--ws-muted); font-size: 12px; font-weight: 650; }
@@ -8,11 +8,11 @@
 .ec-master-metrics small { color: var(--ws-muted); font-size: 11px; }
 .ec-master-list { min-width: 0; overflow: hidden; }
 .ec-master-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--ws-border); }
-.ec-master-search { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; padding: 0 12px; border: 1px solid var(--ws-border); border-radius: 11px; background: var(--ws-surface); color: var(--ws-muted); }
+.ec-master-search { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; padding: 0 14px; border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 9999px; background: var(--surface-l2, var(--ws-surface)); color: var(--ws-muted); }
 .ec-master-search:focus-within { border-color: var(--ws-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-primary) 12%, transparent); }
 .workspace-shell .ec-master-search input { width: 100%; min-width: 0; min-height: 42px; border: 0; background: transparent; color: var(--ws-text); font: inherit; font-size: 12px; outline-offset: -2px; }
-.ec-master-view { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--ws-border); border-radius: 11px; background: var(--ws-raised); }
-.ec-master-view button { display: flex; align-items: center; gap: 7px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ws-muted); cursor: pointer; font: inherit; font-size: 12px; }
+.ec-master-view { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 9999px; background: var(--surface-l2, var(--ws-raised)); }
+.ec-master-view button { display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid transparent; border-radius: 9999px; background: transparent; color: var(--ws-muted); cursor: pointer; font: inherit; font-size: 12px; }
 .ec-master-view button[aria-pressed='true'] { background: var(--ws-surface); color: var(--ws-primary); box-shadow: 0 2px 6px #0000000a; }
 .ec-master-filter-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-right: 24px; }
 .ec-master-dates { display: flex; gap: 10px; padding: 12px 0; }
@@ -64,18 +64,18 @@
 .ec-master-modal .ec-form-group > .relation-hint, .ec-master-modal .ec-form-group > .ws-form-grid { grid-column: 1 / -1; }
 .ec-master-modal .ec-form-section-title { margin: 4px 0 0; font-size: 12px; color: var(--ws-primary); }
 .workspace-shell .ec-master-modal label:not(.ec-segment), .ec-master-field { display: grid; gap: 8px; min-width: 0; color: var(--ws-muted); font-size: 12px; font-weight: 600; }
-.workspace-shell.erp-shell .ec-master-modal input:not([type='radio']):not([type='checkbox']):not([type='hidden']):not(.ec-combobox-validation):not(.ws-table-search input):not(.ws-picker-search input) { width: 100%; box-sizing: border-box; min-height: 42px; padding: 10px 12px; border: 1px solid var(--ws-border); border-radius: 10px; background: var(--ws-surface); color: var(--ws-text); font-size: 13px; transition: border-color .18s, box-shadow .18s; }
+.workspace-shell.erp-shell .ec-master-modal input:not([type='radio']):not([type='checkbox']):not([type='hidden']):not(.ec-combobox-validation):not(.ws-table-search input):not(.ws-picker-search input) { width: 100%; box-sizing: border-box; min-height: 42px; padding: 10px 14px; border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 9999px; background: var(--surface-l2, var(--ws-surface)); color: var(--ws-text); font-size: 13px; transition: background-color 150ms var(--ease-out, ease), border-color 150ms var(--ease-out, ease), box-shadow 160ms var(--ease-out, ease); }
 .workspace-shell.erp-shell .ec-master-modal .ws-table-search input, .workspace-shell.erp-shell .ec-master-modal .ws-picker-search input { border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; outline: none !important; }
 .ec-master-modal .ws-table-search input:focus-visible, .ec-master-modal .ws-picker-search input:focus-visible { outline: none !important; }
 .workspace-shell .ec-master-modal input:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 2px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--ws-primary) 10%, transparent); }
 .workspace-shell .ec-master-modal input:user-invalid { border-color: var(--ws-red); }
 .ec-master-modal .ec-combobox:focus-within { z-index: 3; }
-.ec-master-modal .ws-picker-trigger { min-height: 42px; border-radius: 10px; }
+.ec-master-modal .ws-picker-trigger { min-height: 42px; border-radius: 9999px; }
 .workspace-shell.erp-shell .ec-master-modal .ec-combobox-search input { border: 0 !important; background: transparent !important; }
 .ec-master-modal .ec-segment input { min-height: 0 !important; }
 .ec-master-modal .ec-segment { display: flex; }
 .ec-master-modal .modal-actions { position: sticky; bottom: 0; padding: 18px 24px; border-top: 1px solid var(--ws-border); background: var(--ws-surface); z-index: 4; }
-.ec-master-modal .modal-actions button { min-height: 42px; border-radius: 11px; }
+.ec-master-modal .modal-actions button { min-height: 42px; border-radius: 9999px; }
 .ec-master-history .ws-summary-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .ec-master-history .ws-summary-list > div { display: grid; gap: 8px; padding: 18px; border: 1px solid var(--ws-border); border-radius: 12px; background: var(--ws-raised); }
 .ec-master-catalog .supplier-product-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }

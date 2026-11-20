@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, Route, ScanSearch, Settings, ShieldCheck, Ship, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
+import { ArrowLeftRight, Award, Banknote, BarChart3, Bell, Boxes, BrainCircuit, Building2, ClipboardCheck, ClipboardList, FileCheck2, FileText, KeyRound, Landmark, LayoutDashboard, MapPinned, Package, PackageCheck, Percent, ReceiptText, Route, ScanSearch, Settings, ShieldCheck, Ship, ShoppingCart, Target, TrendingUp, Truck, Users, Wallet, Workflow, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { DataPage, RecordItem } from '../types'
 import { businessDate } from './businessCalendar.ts'
@@ -41,6 +41,7 @@ export const workspaceEntries: WorkspaceEntry[] = [
   { label: 'Maestros', path: '/maestros', permission: 'settings', icon: Building2, group: 'MAESTROS' },
   { label: 'Caja', path: '/caja', page: 'finance', icon: Banknote, group: 'TESORERÍA' },
   { label: 'Reportes', path: '/reports', page: 'reports', icon: TrendingUp, group: 'REPORTES E INTELIGENCIA' },
+  { label: 'Red neuronal y recomendaciones IA', path: '/inteligencia/red-neuronal', permission: 'reports', icon: BrainCircuit, group: 'REPORTES E INTELIGENCIA' },
   { label: 'Centro de alertas', path: '/notificaciones', icon: Bell, group: 'NOTIFICACIONES Y APROBACIONES' },
   { label: 'Bandeja de aprobaciones', path: '/aprobaciones', permission: 'approvals', icon: ClipboardCheck, group: 'NOTIFICACIONES Y APROBACIONES' },
   { label: 'Mantenimiento', path: '/mantenimientos', page: 'settings', icon: Wrench, group: 'CONFIGURACIÓN' },
@@ -155,6 +156,7 @@ export const workspaceModules: WorkspaceModule[] = [
     children: [
       { label: 'Panel ejecutivo', path: '/dashboard', icon: LayoutDashboard, implemented: true },
       { label: 'Reportes operativos', path: '/reports', permission: 'reports', icon: BarChart3, implemented: true },
+      { label: 'Red neuronal y recomendaciones IA', path: '/inteligencia/red-neuronal', permission: 'reports', icon: BrainCircuit, implemented: true },
     ],
   },
   {

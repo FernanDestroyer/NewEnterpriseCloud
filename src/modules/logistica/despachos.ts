@@ -2,6 +2,7 @@
 import type { RecordItem } from '../../types'
 import { fechaReal, formatoFecha, type Errores } from './rules.ts'
 import type { Despacho, DespachoInput, EstadoDespacho, LineaParada, Parada, PrioridadDespacho, Vehiculo } from './types.ts'
+import { buscarDistritoPorNombre, resolverUbicacionParada } from './rutasGeo.ts'
 
 /** Estados de venta que pueden despacharse. Decisión de negocio: una venta a crédito (Pendiente) también se entrega. */
 export const ESTADOS_VENTA_DESPACHABLES: string[] = ['Completada', 'Pendiente', 'En curso']
@@ -65,10 +66,18 @@ export function ventasDespachables(ventas: RecordItem[], clientes: RecordItem[],
     if (ventasConGuia.has(venta.rowId)) continue
     const cliente = venta.cliente_id ? clientePorId.get(venta.cliente_id) : undefined
     const zona = venta.cliente_id ? zonaPorCliente[venta.cliente_id] : undefined
+    // La dirección de entrega del pedido manda; si no existe, se usa la del cliente.
+    const direccion = venta.direccion?.trim() || cliente?.direccion?.trim() || ''
+    // Sin zona de reparto asignada, se infiere del distrito escrito en la dirección (solo si se reconoce).
+    let zonaNombre = zona?.nombre ?? ''
+    if (!zonaNombre && direccion) {
+      const geo = resolverUbicacionParada({ direccion, semilla: venta.id })
+      if (buscarDistritoPorNombre(geo.distrito)) zonaNombre = `${geo.zonaNombre} · ${geo.distrito}`
+    }
     resultado.push({
       ventaId: venta.rowId, codigo: venta.id, clienteId: venta.cliente_id ?? null, clienteNombre: venta.name,
-      direccion: cliente?.direccion?.trim() ?? '', telefono: cliente?.telefono?.trim() ?? '',
-      zonaId: zona?.id ?? null, zonaNombre: zona?.nombre ?? '', fecha: venta.date, monto: venta.amount ?? 0, estado: venta.status,
+      direccion, telefono: cliente?.telefono?.trim() ?? '',
+      zonaId: zona?.id ?? null, zonaNombre, fecha: venta.date, monto: venta.amount ?? 0, estado: venta.status,
     })
   }
   return resultado

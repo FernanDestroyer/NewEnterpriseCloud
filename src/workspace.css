@@ -1,8 +1,21 @@
 .workspace-shell.erp-shell {
-  --ws-page: #f3f6fa;
+  --surface-l0: #eef3f7;
+  --surface-l1: rgba(255, 255, 255, 0.88);
+  --surface-l2: #f1f6f9;
+  --surface-l3: #ffffff;
+  --surface-l4: #f8fafc;
+  --border-tonal: #d6e1e9;
+  --border-tonal-strong: rgba(15, 23, 42, 0.11);
+  --divider-tonal: rgba(214, 225, 233, 0.9);
+  --pill-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  --pill-shadow: 0 2px 5px rgba(15, 23, 42, 0.06);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ws-radius: 22px;
+  --ws-page: var(--surface-l0);
   --ws-surface: #fff;
-  --ws-raised: #edf3f6;
-  --ws-border: #d6e1e9;
+  --ws-raised: var(--surface-l2);
+  --ws-border: var(--border-tonal);
   --ws-text: #12233b;
   --ws-muted: #536a80;
   --ws-subtle: #697f93;
@@ -17,7 +30,7 @@
   --ws-violet: #7654ad;
   --ws-violet-soft: #f1eafb;
   --ws-action: #087b80;
-  --ws-action-hover: #09676c;
+  --ws-action-hover: #066569;
   --ws-action-text: #faffff;
   --ws-sidebar-width: 252px;
   color: var(--ws-text);
@@ -29,10 +42,20 @@
   overflow-x: clip;
 }
 .workspace-shell.erp-shell[data-theme='dark'] {
-  --ws-page: #07090e;
+  --surface-l0: #060a10;
+  --surface-l1: rgba(13, 19, 29, 0.84);
+  --surface-l2: #131c29;
+  --surface-l3: #1a2636;
+  --surface-l4: #223146;
+  --border-tonal: #202e3e;
+  --border-tonal-strong: #2c3e54;
+  --divider-tonal: rgba(255, 255, 255, 0.055);
+  --pill-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --pill-shadow: 0 2px 5px rgba(0, 0, 0, 0.24);
+  --ws-page: var(--surface-l0);
   --ws-surface: #0e141e;
-  --ws-raised: #151e2b;
-  --ws-border: #24303f;
+  --ws-raised: var(--surface-l2);
+  --ws-border: var(--border-tonal);
   --ws-text: #f4f7fb;
   --ws-muted: #99a9bf;
   --ws-subtle: #7f91a9;
@@ -48,7 +71,7 @@
   --ws-violet-soft: #2c263e;
   --ws-action: #86f6f2;
   --ws-action-hover: #b4fff8;
-  --ws-action-text: #07181d;
+  --ws-action-text: #020617;
 }
 .workspace-shell button, .workspace-shell a, .workspace-shell input, .workspace-shell select, .workspace-shell textarea { -webkit-tap-highlight-color: transparent; }
 .workspace-shell button:disabled { opacity: .45; cursor: not-allowed; }
@@ -77,7 +100,7 @@
 .ws-navigation { flex: 1; overflow-y: auto; padding: 10px 12px 15px; scrollbar-width: thin; scrollbar-color: var(--ws-border) transparent; }
 .ws-nav-group { margin-bottom: 15px; }
 .ws-nav-label { display: block; padding: 0 12px 6px; font-size: 8px; font-weight: 700; letter-spacing: 1.1px; color: var(--ws-subtle); }
-.ws-module-group { margin: 2px 0 5px; }
+.ws-module-group { margin: 4px 0 8px; }
 .ws-module-trigger { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 10px; padding: 8px 10px; color: var(--ws-muted); background: transparent; border: 1px solid transparent; border-radius: 8px; font: inherit; font-size: 10px; font-weight: 650; text-align: left; cursor: pointer; transition: color .16s, background .16s, border-color .16s; }
 .ws-module-trigger:hover, .ws-module-trigger.is-open { color: var(--ws-text); background: var(--ws-raised); }
 .ws-module-trigger.has-active { color: var(--ws-primary); }
@@ -85,9 +108,10 @@
 .ws-module-label { flex: 1; min-width: 0; line-height: 1.35; }
 .ws-module-chevron { margin-left: auto; transition: transform .18s ease; }
 .ws-module-chevron.is-open { transform: rotate(180deg); }
-.ws-module-children { margin: 2px 0 8px 18px; padding: 3px 0 4px 11px; border-left: 1px solid var(--ws-border); }
+.ws-module-children { margin: 6px 0 12px 18px; padding: 4px 0 4px 12px; border-left: 1px solid var(--divider-tonal, var(--ws-border)); }
+.ws-module-children:not([hidden]) { display: grid; gap: 6px; }
 .ws-module-children[hidden] { display: none; }
-.ws-submodule-link, .ws-submodule-action, .ws-submodule-disabled { width: 100%; min-height: 34px; display: flex; align-items: center; gap: 8px; margin: 1px 0; padding: 7px 8px; color: var(--ws-muted); border: 0; border-radius: 6px; font-size: 10px; text-align: left; }
+.ws-submodule-link, .ws-submodule-action, .ws-submodule-disabled { width: 100%; min-height: 36px; display: flex; align-items: center; gap: 9px; margin: 0; padding: 8px 12px; color: var(--ws-muted); border: 1px solid transparent; border-radius: 9999px; font-size: 10px; text-align: left; }
 .ws-submodule-link { text-decoration: none; }
 .ws-submodule-link > span, .ws-submodule-action > span, .ws-submodule-disabled > span { flex: 1; min-width: 0; line-height: 1.35; }
 .ws-submodule-link:hover, .ws-submodule-action:hover { color: var(--ws-text); background: var(--ws-raised); }
@@ -819,7 +843,7 @@ label.ws-control > :is(select, input):focus-visible { outline: none !important; 
   .ws-collapsed .ws-brand { padding: 21px 16px; }
   .ws-collapsed .ws-nav-item { justify-content: flex-start; padding: 8px 11px; }
   .ws-collapsed .ws-module-label, .ws-collapsed .ws-module-chevron { display: revert; }
-  .ws-collapsed .ws-module-children:not([hidden]) { display: block; }
+  .ws-collapsed .ws-module-children:not([hidden]) { display: grid; gap: 6px; }
   .ws-collapsed .ws-module-trigger { justify-content: flex-start; padding: 8px 10px; }
   .ws-collapsed .ws-workspace { display: flex; }
   .ws-collapsed .ws-nav-label { display: block; }
@@ -2138,8 +2162,8 @@ label.ws-control > :is(select, input):focus-visible { outline: none !important; 
 
 .approval-page { display: grid; gap: 14px; min-width: 0; }
 .approval-tabs { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--ws-border); }
-.approval-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ws-muted); cursor: pointer; font: inherit; }
-.approval-tabs button.is-active { color: var(--ws-primary); border-color: var(--ws-primary); font-weight: 700; }
+.approval-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid transparent; border-radius: 9999px; background: transparent; color: var(--ws-muted); cursor: pointer; font: inherit; }
+.approval-tabs button.is-active { color: var(--ws-primary); background: var(--surface-l3); border-color: var(--border-tonal-strong); box-shadow: var(--pill-highlight), var(--pill-shadow); font-weight: 700; }
 .approval-tabs > span { margin-left: auto; color: var(--ws-subtle); font-size: 11px; }
 .approval-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 14px; align-items: start; }
 .approval-layout[hidden] { display: none; }
@@ -2204,3 +2228,694 @@ label.ws-control > :is(select, input):focus-visible { outline: none !important; 
 .approval-events article strong, .approval-events article small { display: block; }
 .approval-events article small, .approval-events article p { margin: 2px 0 0; color: var(--ws-muted); font-size: 10px; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .approval-layout { grid-template-columns: minmax(0, 1fr); } }
+.ws-neural-status { display: flex; align-items: center; gap: 6px; color: var(--ws-green); font-size: 10px; }
+.ws-neural-status i { width: 6px; height: 6px; background: var(--ws-green); border-radius: 50%; box-shadow: 0 0 0 3px var(--ws-green-soft); }
+
+.ec-approval-thresholds { display: grid; gap: 12px; padding: 0 0 6px; }
+.ec-approval-thresholds .ws-card-heading { padding: 0 20px; }
+.ec-approval-thresholds > .ws-notice, .ec-approval-thresholds > .ws-empty-compact { margin: 0 20px; }
+.ec-approval-threshold-card { gap: 10px; }
+.ec-rule-effect { font-size: 12px; line-height: 1.4; color: var(--ws-muted); }
+.ec-rule-effect.is-active { color: var(--ws-text); font-weight: 600; }
+.ec-rule-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.ec-rule-fields label { display: grid; gap: 4px; font-size: 12px; color: var(--ws-muted); }
+.ec-rule-fields .ws-control { min-width: 140px; }
+.ec-rule-toggle { display: flex !important; align-items: center; gap: 8px !important; padding-bottom: 8px; color: var(--ws-text) !important; }
+.ec-rule-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ec-rule-footer small { color: var(--ws-muted); }
+
+/* Resumen dentro del diálogo de confirmación de aprobaciones */
+.ec-approval-confirm-summary { display: grid; gap: .45rem; margin: .25rem 0 0; padding: .75rem .9rem; border: 1px solid var(--line, rgba(255,255,255,.12)); border-radius: 10px; }
+.ec-approval-confirm-summary > div { display: flex; justify-content: space-between; gap: 1rem; }
+.ec-approval-confirm-summary dt { opacity: .7; font-size: .85rem; }
+.ec-approval-confirm-summary dd { margin: 0; font-weight: 600; text-align: right; }
+
+
+/* ==========================================================================
+   Sistema de Diseño: Elevación Tonal Mate + Cápsulas Táctiles iOS
+   Derivado de la paleta marina/cian de EnterpriseCloud (L0 -> L4)
+   ========================================================================== */
+
+.workspace-shell.erp-shell :where(button, a, [role='button']) {
+  border-color: transparent;
+}
+
+.workspace-shell.erp-shell button:focus:not(:focus-visible),
+.workspace-shell.erp-shell a:focus:not(:focus-visible),
+.workspace-shell.erp-shell [role='button']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.workspace-shell.erp-shell :is(button, a, [role='button'], input, select, textarea):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ws-primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* Superficies L0 -> L1 Mate Translúcido + Radio 22px en contenedores y modales */
+.workspace-shell.erp-shell,
+.workspace-shell.erp-shell .ws-main {
+  background: var(--surface-l0);
+}
+
+.workspace-shell.erp-shell .ws-sidebar {
+  background: var(--surface-l1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-right: 1px solid var(--border-tonal);
+}
+
+.workspace-shell.erp-shell .ws-topbar {
+  background: var(--surface-l1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--border-tonal);
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-card,
+  .panel,
+  .ec-card,
+  .ws-metric,
+  .ws-footer-card,
+  .nn-metric,
+  .nn-network-card,
+  .nn-status-card,
+  .nn-recommendation,
+  .ec-log-metrics article,
+  .ec-purchase-metrics article,
+  .ec-finance-metrics article,
+  .inv-metrics article,
+  .ec-master-metrics section,
+  .ec-master-tile,
+  .ec-sales-metric,
+  .ec-rutas-parking-bar,
+  .ec-rutas-panel,
+  .ec-rutas-map-card,
+  .sourcing-card,
+  .inv-card,
+  .inventory-query-card,
+  .ws-sales-form,
+  .ws-sales-list,
+  .ws-sales-pending,
+  .approval-list,
+  .approval-detail
+) {
+  background: var(--surface-l1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-tonal);
+  border-radius: 22px;
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-dialog,
+  .record-modal,
+  .confirm-modal,
+  .voucher-modal,
+  .ec-master-modal,
+  .sales-print-dialog,
+  .ec-purchases.ws-receipt-modal
+) {
+  background: var(--surface-l1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-tonal-strong);
+  border-radius: 22px;
+}
+
+/* Cabeceras, pies y tablas con divisores finos tonales en lugar de cajas anidadas */
+.workspace-shell.erp-shell :is(
+  .ws-card-heading,
+  .ws-card-head,
+  .ec-treasury .ws-card-heading,
+  .inv-page .inv-card-heading,
+  .ws-sales-form-head,
+  .ws-sales-list > h2,
+  .ws-sales-pending > h2,
+  .ec-master-toolbar,
+  .ec-master-modal .modal-heading
+) {
+  background: transparent;
+  border-bottom: 1px solid var(--divider-tonal);
+}
+
+.workspace-shell.erp-shell :is(.ws-sales-form-footer, .ec-master-modal .modal-actions) {
+  background: color-mix(in srgb, var(--surface-l2) 55%, transparent);
+  border-top: 1px solid var(--divider-tonal);
+  border-radius: 0 0 22px 22px;
+}
+
+.workspace-shell.erp-shell .ec-workspace,
+.workspace-shell.erp-shell .ws-workspace {
+  background: var(--surface-l2);
+  border: 1px solid var(--border-tonal);
+  border-radius: 16px;
+}
+
+.workspace-shell.erp-shell :is(
+  .ec-approval-rule-card,
+  .approval-summary-grid > div,
+  .approval-decision,
+  .ec-log-assignment article,
+  .ec-purchases .sourcing-line,
+  .ec-purchases .purchase-totals,
+  .ec-purchases .ws-receipt-line,
+  .ec-purchases .ws-receipt-history-item,
+  .ec-treasury .cash-method,
+  .ec-treasury .cash-totals,
+  .ec-treasury .ec-match-box,
+  .inv-page .inv-inline-stat,
+  .inventory-query .inventory-query-filters,
+  .ws-sales-page .ws-payment-fields,
+  .ws-sales-page .ws-sales-history,
+  .ws-sales-page .ws-sales-sunat-provider,
+  .ec-rutas-order-card,
+  .ec-rutas-stop-item,
+  .ec-master-modal .ec-form-group,
+  .ec-approval-confirm-summary
+) {
+  background: var(--surface-l2);
+  border: 1px solid var(--border-tonal);
+  border-radius: 18px;
+}
+
+.workspace-shell.erp-shell :is(
+  .record-table,
+  .ws-fleet-table,
+  .inv-table,
+  .inventory-query-table,
+  .ws-sales-table
+) th {
+  background: var(--surface-l2);
+  border-bottom: 1px solid var(--divider-tonal);
+}
+
+.workspace-shell.erp-shell :is(
+  .record-table,
+  .ws-fleet-table,
+  .inv-table,
+  .inventory-query-table,
+  .ws-sales-table
+) td {
+  border-bottom: 1px solid var(--divider-tonal);
+}
+
+.workspace-shell.erp-shell :is(
+  .record-table,
+  .ws-fleet-table,
+  .inv-table,
+  .inventory-query-table,
+  .ws-sales-table
+) tbody tr:hover {
+  background: color-mix(in srgb, var(--surface-l2) 65%, transparent);
+}
+
+/* Inputs en L2: cápsula para 1 línea, 22px para textareas, elevación tonal en foco */
+.workspace-shell.erp-shell :where(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not(.ec-combobox-validation),
+  select,
+  .ws-control
+) {
+  border-radius: 9999px;
+  background: var(--surface-l2);
+  border: 1px solid var(--border-tonal);
+  color: var(--ws-text);
+  padding-inline: 14px;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.workspace-shell.erp-shell select option {
+  background: var(--ws-raised);
+  color: var(--ws-text);
+}
+
+.workspace-shell.erp-shell textarea,
+.workspace-shell.erp-shell textarea.ws-control {
+  border-radius: 22px;
+  background: var(--surface-l2);
+  border: 1px solid var(--border-tonal);
+  color: var(--ws-text);
+  padding: 12px 16px;
+  height: auto;
+  min-height: 86px;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.workspace-shell.erp-shell .ws-search {
+  background: transparent;
+  border: 0;
+  padding-inline: 0;
+}
+
+.workspace-shell.erp-shell .ws-search > svg {
+  left: 14px;
+}
+
+.workspace-shell.erp-shell .ws-search kbd {
+  right: 10px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  border-color: var(--border-tonal);
+  background: var(--surface-l3);
+}
+
+.workspace-shell.erp-shell .ws-search input {
+  height: 36px;
+  padding: 0 59px 0 38px;
+  border-radius: 9999px;
+  background: var(--surface-l2);
+  border: 1px solid var(--border-tonal);
+  color: var(--ws-text);
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.workspace-shell.erp-shell .ws-search input:focus,
+.workspace-shell.erp-shell .ws-search input:focus-visible {
+  background: color-mix(in srgb, var(--surface-l2) 70%, var(--surface-l3) 30%);
+  border-color: color-mix(in srgb, var(--ws-primary) 45%, var(--border-tonal));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-primary) 14%, transparent);
+  outline: none;
+}
+
+.workspace-shell.erp-shell .ws-search-results {
+  border-radius: 22px;
+  background: var(--surface-l1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-tonal-strong);
+}
+
+@media (max-width: 760px) {
+  .workspace-shell.erp-shell .ws-search input {
+    padding: 0;
+    color: transparent;
+    background: transparent;
+    border-color: transparent;
+  }
+  .workspace-shell.erp-shell .ws-search:focus-within input {
+    padding: 0 15px 0 38px;
+    background: var(--surface-l2);
+    border-color: color-mix(in srgb, var(--ws-primary) 45%, var(--border-tonal));
+    color: var(--ws-text);
+  }
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-table-search,
+  .toolbar-search,
+  .ec-master-search,
+  .ec-rutas-search-box,
+  .login-input
+) {
+  border-radius: 9999px;
+  background: var(--surface-l2);
+  border: 1px solid var(--border-tonal);
+  padding-inline: 14px;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-table-search input,
+  .toolbar-search input,
+  .ec-master-search input,
+  .ec-rutas-search-box input,
+  .ws-picker-search input,
+  .ec-combobox-search input,
+  .login-input input
+) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-inline: 0 !important;
+  outline: none !important;
+}
+
+.workspace-shell.erp-shell :where(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not(.ec-combobox-validation),
+  select,
+  textarea,
+  .ws-control
+):focus,
+.workspace-shell.erp-shell :where(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not(.ec-combobox-validation),
+  select,
+  textarea,
+  .ws-control
+):focus-visible,
+.workspace-shell.erp-shell :where(
+  .ws-table-search,
+  .toolbar-search,
+  .ec-master-search,
+  .ec-rutas-search-box,
+  .login-input
+):focus-within {
+  background: color-mix(in srgb, var(--surface-l2) 70%, var(--surface-l3) 30%);
+  border-color: color-mix(in srgb, var(--ws-primary) 45%, var(--border-tonal));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-primary) 14%, transparent);
+  outline: none;
+}
+
+/* Física táctil iOS en botones y pastillas (excluyendo elementos posicionados/fila) */
+.workspace-shell.erp-shell :is(
+  .ws-button,
+  .ws-button-secondary,
+  .ws-button-danger,
+  .primary-button,
+  .export-button,
+  .cancel-button,
+  .danger-button,
+  .ws-icon-button,
+  .row-action,
+  .nn-btn,
+  .nn-icon-button,
+  .dc-outline-button,
+  .dc-icon-button,
+  .ws-filter-chips button,
+  .ec-commission-chips button,
+  .ec-commission-tabs [role='tab'],
+  .ec-commission-subtabs button,
+  .ws-tabs button,
+  .ws-sales-tabs button,
+  .approval-tabs button,
+  .inventory-query-nav button,
+  .ec-master-view button,
+  .ec-master-actions button,
+  .ec-master-toggle,
+  .ws-module-trigger,
+  .ws-submodule-link,
+  .ws-submodule-action,
+  .ws-nav-item,
+  .ec-gmap-float-btn,
+  .login-submit,
+  .nn-rec-actions button
+) {
+  border-radius: 9999px;
+  transition: transform 160ms var(--ease-out), background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), color 150ms var(--ease-out), box-shadow 160ms var(--ease-out), filter 150ms var(--ease-out);
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-button,
+  .ws-button-secondary,
+  .ws-button-danger,
+  .primary-button,
+  .export-button,
+  .cancel-button,
+  .danger-button,
+  .ws-icon-button,
+  .row-action,
+  .nn-btn,
+  .nn-icon-button,
+  .dc-outline-button,
+  .dc-icon-button,
+  .ws-filter-chips button,
+  .ec-commission-chips button,
+  .ec-commission-tabs [role='tab'],
+  .ec-commission-subtabs button,
+  .ws-tabs button,
+  .ws-sales-tabs button,
+  .approval-tabs button,
+  .inventory-query-nav button,
+  .ec-master-view button,
+  .ec-master-actions button,
+  .ec-master-toggle,
+  .ws-module-trigger,
+  .ws-submodule-link,
+  .ws-submodule-action,
+  .ws-nav-item,
+  .ec-gmap-float-btn,
+  .login-submit,
+  .nn-rec-actions button
+):active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Navegación y rieles de tabs sin salto de borde 1px */
+.workspace-shell.erp-shell :is(
+  .ws-module-trigger,
+  .ws-submodule-link,
+  .ws-submodule-action,
+  .ws-nav-item,
+  .ec-commission-tabs [role='tab'],
+  .ec-commission-subtabs button,
+  .ws-tabs button,
+  .ws-sales-tabs button,
+  .ec-master-view button
+) {
+  border: 1px solid transparent;
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-tabs,
+  .ec-commission-tabs,
+  .ec-commission-subtabs,
+  .ws-sales-tabs,
+  .ec-master-view,
+  .dc-segments
+) {
+  background: var(--surface-l2);
+  border: 1px solid var(--border-tonal);
+  border-radius: 9999px;
+  padding: 4px;
+}
+
+.workspace-shell.erp-shell :is(.approval-tabs, .inventory-query-nav) {
+  border-bottom: 1px solid var(--divider-tonal);
+  padding-bottom: 10px;
+}
+
+.workspace-shell.erp-shell :is(.approval-tabs button, .inventory-query-nav button) {
+  min-height: 36px;
+  padding: 7px 14px;
+}
+
+.workspace-shell.erp-shell :is(.approval-tabs button:hover, .inventory-query-nav button:hover) {
+  background: var(--surface-l2);
+  color: var(--ws-text);
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-submodule-link.is-active,
+  .ws-nav-item.is-active,
+  .ec-commission-tabs [role='tab'][aria-selected='true'],
+  .ec-commission-subtabs button[aria-selected='true'],
+  .ws-tabs button.is-active,
+  .ws-tabs button[aria-selected='true'],
+  .ws-sales-tabs button[aria-selected='true'],
+  .ws-sales-tabs button[aria-current='page'],
+  .approval-tabs button.is-active,
+  .inventory-query-nav button.is-current,
+  .ec-master-view button[aria-pressed='true'],
+  .dc-segments button[aria-pressed='true']
+) {
+  background: var(--surface-l3);
+  border-color: var(--border-tonal-strong);
+  box-shadow: var(--pill-highlight), var(--pill-shadow);
+  color: var(--ws-primary);
+}
+
+.workspace-shell.erp-shell .ws-nav-item.is-active::before {
+  display: none;
+}
+
+/* Variante 1: Neutro / Pill L3 -> L4 */
+.workspace-shell.erp-shell :is(
+  .ws-button-secondary,
+  .export-button,
+  .cancel-button,
+  .ws-icon-button,
+  .row-action,
+  .nn-btn:not(.nn-btn-primary),
+  .nn-icon-button,
+  .dc-outline-button,
+  .dc-icon-button,
+  .ws-filter-chips button,
+  .ec-commission-chips button,
+  .ec-master-actions button,
+  .approval-pagination button,
+  .inventory-query-pagination button,
+  .nn-rec-actions button
+) {
+  background: var(--surface-l3);
+  border: 1px solid var(--border-tonal-strong);
+  box-shadow: var(--pill-highlight), var(--pill-shadow);
+  color: var(--ws-text);
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-button-secondary,
+  .export-button,
+  .cancel-button,
+  .ws-icon-button,
+  .row-action,
+  .nn-btn:not(.nn-btn-primary),
+  .nn-icon-button,
+  .dc-outline-button,
+  .dc-icon-button,
+  .ws-filter-chips button,
+  .ec-commission-chips button,
+  .ec-master-actions button,
+  .approval-pagination button,
+  .inventory-query-pagination button,
+  .nn-rec-actions button
+):hover:not(:disabled) {
+  background: var(--surface-l4);
+  border-color: var(--border-tonal-strong);
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-button-secondary,
+  .export-button,
+  .cancel-button,
+  .ws-icon-button,
+  .row-action,
+  .nn-btn:not(.nn-btn-primary),
+  .nn-icon-button,
+  .dc-outline-button,
+  .dc-icon-button,
+  .ws-filter-chips button,
+  .ec-commission-chips button,
+  .ec-master-actions button,
+  .approval-pagination button,
+  .inventory-query-pagination button,
+  .nn-rec-actions button
+):active:not(:disabled) {
+  background: var(--surface-l2);
+}
+
+/* Variante 2: CTA Primario (Accent) */
+.workspace-shell.erp-shell :is(
+  .ws-button:not(.ws-button-secondary):not(.ws-button-danger),
+  .primary-button,
+  .nn-btn-primary,
+  .login-submit
+) {
+  background: #087b80;
+  border: 1px solid #066569;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 5px rgba(8, 123, 128, 0.18);
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-button:not(.ws-button-secondary):not(.ws-button-danger),
+  .primary-button,
+  .nn-btn-primary,
+  .login-submit
+):hover:not(:disabled) {
+  background: #066569;
+}
+
+.workspace-shell.erp-shell[data-theme='dark'] :is(
+  .ws-button:not(.ws-button-secondary):not(.ws-button-danger),
+  .primary-button,
+  .nn-btn-primary,
+  .login-submit
+) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #b8fff9 28%, var(--ws-primary)) 0%,
+    var(--ws-primary) 100%
+  );
+  border: 1px solid color-mix(in srgb, #d8fffc 40%, var(--ws-primary));
+  color: #020617;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.workspace-shell.erp-shell[data-theme='dark'] :is(
+  .ws-button:not(.ws-button-secondary):not(.ws-button-danger),
+  .primary-button,
+  .nn-btn-primary,
+  .login-submit
+):hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.workspace-shell.erp-shell[data-theme='dark'] :is(
+  .ws-button:not(.ws-button-secondary):not(.ws-button-danger),
+  .primary-button,
+  .nn-btn-primary,
+  .login-submit
+):active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+/* Variante 3: Acento suave / Badges en cápsula */
+.workspace-shell.erp-shell :is(
+  .ws-badge,
+  .status-pill,
+  .linked-badge,
+  .record-id,
+  .nn-count,
+  .nn-state,
+  .approval-state
+) {
+  border-radius: 9999px;
+}
+
+.workspace-shell.erp-shell :is(
+  .ws-filter-chips button[aria-pressed='true'],
+  .ec-commission-chips button.is-active,
+  .nn-rec-actions button.is-selected:not(.danger),
+  .ec-logistica .ws-filter-chips button[aria-pressed='true']
+) {
+  background: color-mix(in srgb, var(--ws-primary) 16%, var(--surface-l2));
+  border-color: color-mix(in srgb, var(--ws-primary) 28%, var(--border-tonal));
+  color: var(--ws-primary);
+}
+
+/* Variante 4: Destructivo */
+.workspace-shell.erp-shell :is(
+  .ws-button-danger,
+  .danger-button,
+  .row-action.delete:hover,
+  .ec-master-actions .ec-danger-action:hover,
+  .ws-sales-line .ws-sales-remove:hover,
+  .nn-rec-actions button.is-selected.danger
+) {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+}
+
+.workspace-shell.erp-shell[data-theme='dark'] :is(
+  .ws-button-danger,
+  .danger-button,
+  .row-action.delete:hover,
+  .ec-master-actions .ec-danger-action:hover,
+  .ws-sales-line .ws-sales-remove:hover,
+  .nn-rec-actions button.is-selected.danger
+) {
+  background: color-mix(in srgb, #f43f5e 16%, var(--surface-l2));
+  border: 1px solid color-mix(in srgb, #f43f5e 32%, var(--border-tonal));
+  color: #fda4af;
+}
+
+/* Entrada suave de vistas */
+@keyframes ws-view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.workspace-shell.erp-shell .ws-content > * {
+  animation: ws-view-enter 240ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-shell.erp-shell .ws-content > *,
+  .workspace-shell.erp-shell *::before,
+  .workspace-shell.erp-shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .workspace-shell.erp-shell * {
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -135,7 +135,10 @@ function toRecord(page: DataPage, row: Row): RecordItem {
   // Medio de pago de la venta (si su migración ya se ejecutó).
   if (page === 'sales') {
     item.almacenId = typeof row.almacen_id === 'string' ? row.almacen_id : null
-    item.medio = typeof row.medio_pago === 'string' && row.medio_pago ? row.medio_pago : null
+    if (typeof row.medio_pago === 'string' && row.medio_pago) item.medio = row.medio_pago
+    else if ('medio_pago' in row) item.medio = null
+    if (typeof row.direccion_entrega === 'string') item.direccion = row.direccion_entrega
+    else if ('direccion_entrega' in row) item.direccion = (row.direccion_entrega as string | null) ?? null
   }
   // Descuento de la venta (si su migración ya se ejecutó).
   if (page === 'sales') {
@@ -180,6 +183,12 @@ function toRecord(page: DataPage, row: Row): RecordItem {
     else if ('tipo_doc' in row) item.tipoDoc = (row.tipo_doc as 'DNI' | 'RUC' | null) ?? null
     if (typeof row.documento === 'string') item.documento = row.documento
     else if ('documento' in row) item.documento = (row.documento as string | null) ?? null
+    if (typeof row.direccion === 'string') item.direccion = row.direccion
+    else if ('direccion' in row) item.direccion = (row.direccion as string | null) ?? null
+    if (typeof row.correo === 'string') item.correo = row.correo
+    else if ('correo' in row) item.correo = (row.correo as string | null) ?? null
+    if (typeof row.telefono === 'string') item.telefono = row.telefono
+    else if ('telefono' in row) item.telefono = (row.telefono as string | null) ?? null
   }
   // FKs en crudo (pueden venir null o no existir si la migración aún no se ejecutó).
   if (typeof row.cliente_id === 'string' || row.cliente_id === null) item.cliente_id = row.cliente_id as string | null
@@ -231,6 +240,9 @@ function toRow(page: DataPage, input: RecordInput): Row {
   if (page === 'customers') {
     if (input.tipo_doc !== undefined) row.tipo_doc = input.tipo_doc
     if (input.documento !== undefined) row.documento = input.documento || null
+    if (input.direccion !== undefined) row.direccion = input.direccion || null
+    if (input.telefono !== undefined) row.telefono = input.telefono || null
+    if (input.correo !== undefined) row.correo = input.correo || null
   }
   // Solo se envía la FK si el formulario la definió (incluye null para desvincular).
   if (config.relationColumn === 'cliente_id' && input.cliente_id !== undefined) row.cliente_id = input.cliente_id
@@ -335,7 +347,7 @@ export function friendlyError(error: unknown): string {
 // inventario. La compra lo trae y al completarse ingresa a inventario.
 // -----------------------------------------------------------------------------
 
-export type CatalogInput = { nombre: string; detalle: string; costo: number }
+export type CatalogInput = { nombre: string; detalle: string; costo: number; producto_id?: string | null }
 
 /** Lee el catálogo completo (sin enriquecer stock: lo hace enrichCatalog). */
 export async function fetchSupplierCatalogRaw(): Promise<RecordItem[]> {
@@ -376,7 +388,7 @@ export async function insertCatalogItem(proveedor_id: string, input: CatalogInpu
   if (!Number.isFinite(input.costo) || input.costo < 0) throw new Error('El costo debe ser cero o mayor.')
   const { data, error } = await requireSupabase()
     .from('proveedor_productos')
-    .insert({ proveedor_id, nombre: name, detalle: input.detalle.trim(), costo: input.costo })
+    .insert({ proveedor_id, nombre: name, detalle: input.detalle.trim(), costo: input.costo, ...(input.producto_id !== undefined ? { producto_id: input.producto_id || null } : {}) })
     .select('*')
     .single()
   if (error) throw error
@@ -400,7 +412,7 @@ export async function updateCatalogItem(id: string, input: CatalogInput): Promis
   if (!Number.isFinite(input.costo) || input.costo < 0) throw new Error('El costo debe ser cero o mayor.')
   const { data, error } = await requireSupabase()
     .from('proveedor_productos')
-    .update({ nombre: name, detalle: input.detalle.trim(), costo: input.costo })
+    .update({ nombre: name, detalle: input.detalle.trim(), costo: input.costo, ...(input.producto_id !== undefined ? { producto_id: input.producto_id || null } : {}) })
     .eq('id', id)
     .select('*')
     .single()
@@ -417,6 +429,17 @@ export async function updateCatalogItem(id: string, input: CatalogInput): Promis
     productoId: (row.producto_id as string | null) ?? null,
     amount: Number(row.costo ?? 0),
   }
+}
+
+/** Vincula o desvincula un ítem del catálogo de proveedor a un producto maestro de Inventario. */
+export async function linkCatalogItemToProduct(id: string, productoId: string | null): Promise<void> {
+  const { data, error } = await requireSupabase()
+    .from('proveedor_productos')
+    .update({ producto_id: productoId || null })
+    .eq('id', id)
+    .select('id')
+  if (error) throw error
+  if (!data || data.length === 0) throw { code: '42501', message: 'Tu rol no tiene permiso para vincular este producto del catálogo.' }
 }
 
 export async function deleteCatalogItem(id: string): Promise<void> {

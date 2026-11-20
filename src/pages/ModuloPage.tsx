@@ -26,6 +26,7 @@ import { SearchablePicker } from '../components/SearchablePicker'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import FinanceMetrics, { FinanceDueBadge, financeDueDays, financeCurrencyTotals } from '../components/FinanceMetrics'
 import '../treasury-ui.css'
+import { APPROVAL_QUEUE_CHANGED_EVENT, fetchPendingPurchaseApprovals, type ApprovalRequest } from '../services/approvals'
 
 export type ModuleView = 'records' | 'receipts' | 'billing' | 'accounts' | 'kardex'
 
@@ -80,6 +81,25 @@ function ModuleContent({ page, view, embedded, allowCreate = true, applyDateRang
   const [accountRequestKey, setAccountRequestKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`)
   // Solo los cobros en efectivo requieren turno; el servidor valida el medio final.
   const [cashGate, setCashGate] = useState<boolean | null>(null)
+  const [pendingPurchaseApprovals, setPendingPurchaseApprovals] = useState<{ rows: ApprovalRequest[]; total: number }>({ rows: [], total: 0 })
+  useEffect(() => {
+    if (page !== 'purchases' || !can('approvals')) {
+      setPendingPurchaseApprovals({ rows: [], total: 0 })
+      return
+    }
+    let active = true
+    const loadApprovals = () => {
+      void fetchPendingPurchaseApprovals()
+        .then(result => { if (active) setPendingPurchaseApprovals(result) })
+        .catch(() => { if (active) setPendingPurchaseApprovals({ rows: [], total: 0 }) })
+    }
+    loadApprovals()
+    window.addEventListener(APPROVAL_QUEUE_CHANGED_EVENT, loadApprovals)
+    return () => {
+      active = false
+      window.removeEventListener(APPROVAL_QUEUE_CHANGED_EVENT, loadApprovals)
+    }
+  }, [page, can, lastSyncedAt])
   useEffect(() => {
     const anchor = location.hash.slice(1)
     if (!anchor) return
@@ -216,7 +236,19 @@ function ModuleContent({ page, view, embedded, allowCreate = true, applyDateRang
 
   return <div className={page === 'purchases' ? 'ec-purchases' : page === 'finance' ? 'ec-treasury' : undefined}>
     {page === 'finance' && <><PageHeader section="Tesorería" title="Cuentas por cobrar y pagar" description="Consulta saldos, vencimientos y registra amortizaciones parciales." icon={Wallet} actions={<>{can(page, 'crear') && allowCreate && <button className="ws-button" disabled={loading || Boolean(errors.finance)} onClick={() => openComposer(page)}><Plus size={16} />Nueva cuenta</button>}<button className="ws-button ws-button-secondary" onClick={() => navigate('/caja')}>Apertura / cierre de turno</button><button className="ws-button ws-button-secondary" disabled={loading || Boolean(errors.finance)} onClick={() => chooseFormat('csv')}><Download size={16} />Exportar consulta</button></>} /><FinanceMetrics items={records.finance} loading={loading} error={errors.finance} /></>}
-    {page === 'purchases' && <><PageHeader section="Compras" title={view === 'receipts' ? 'Recepciones de compra' : 'Órdenes de compra'} description={description} icon={ShoppingCart} actions={<>{view !== 'receipts' && can(page, 'crear') && <button className="ws-button" disabled={loading || Boolean(errors[page])} onClick={() => openComposer(page)}><Plus size={17} />Nueva orden</button>}<button className="ws-button ws-button-secondary" disabled={loading || Boolean(errors[page])} onClick={() => chooseFormat('csv')}><Download size={16} />Exportar consulta</button></>} /><PurchaseMetrics orders={records.purchases} loading={loading} error={errors.purchases} /></>}
+    {page === 'purchases' && <><PageHeader section="Compras" title={view === 'receipts' ? 'Recepciones de compra' : 'Órdenes de compra'} description={description} icon={ShoppingCart} actions={<>{view !== 'receipts' && can(page, 'crear') && <button className="ws-button" disabled={loading || Boolean(errors[page])} onClick={() => openComposer(page)}><Plus size={17} />Nueva orden</button>}<button className="ws-button ws-button-secondary" disabled={loading || Boolean(errors[page])} onClick={() => chooseFormat('csv')}><Download size={16} />Exportar consulta</button></>} /><PurchaseMetrics orders={records.purchases} loading={loading} error={errors.purchases} pendingApprovalQueueCount={pendingPurchaseApprovals.total} /></>}
+    {page === 'purchases' && pendingPurchaseApprovals.total > 0 && (
+      <div className="ws-notice ws-notice-info" role="status">
+        <ClipboardList size={17} />
+        <span>
+          {pendingPurchaseApprovals.total === 1
+            ? 'Hay 1 orden enviada esperando aprobación antes de emitirse como OC-'
+            : `Hay ${pendingPurchaseApprovals.total} órdenes enviadas esperando aprobación antes de emitirse como OC-`}{' '}
+          ({pendingPurchaseApprovals.rows.slice(0, 3).map(row => `${String(row.snapshot.proveedor_nombre ?? 'Proveedor')}${row.snapshot.detalle ? `: ${String(row.snapshot.detalle)}` : ''}`).join(' · ')}).
+        </span>
+        <button type="button" className="ws-text-button" onClick={() => navigate('/aprobaciones')}>Ir a Aprobaciones</button>
+      </div>
+    )}
     {!embedded && page !== 'purchases' && page !== 'finance' && <section id={inventoryContext || salesContext || undefined} className="module-header ws-maintenance-anchor"><div><span className="section-kicker">{view === 'records' ? meta.eyebrow : 'OPERACIÓN CONECTADA'}</span><h1>{title}</h1><p>{description}</p></div>{view !== 'receipts' && view !== 'kardex' && can(page, 'crear') && <button className="primary-button" disabled={loading || Boolean(errors[page])} onClick={() => openComposer(page)}><Plus size={17} />{meta.action}</button>}</section>}
     {page === 'sales' && cashGate && <div className="ws-notice ws-notice-warning" role="status"><Lock size={17} /><span>Las ventas con cobro en efectivo requieren un turno abierto. Puedes registrar ventas a crédito u otros medios sin abrir caja.</span><button className="ws-text-button" onClick={() => navigate('/caja')}>Ir a Caja</button></div>}
     {invalidRange && <div className="ws-notice ws-notice-warning" role="alert"><AlertTriangle size={17} />La fecha inicial debe ser anterior o igual a la fecha final.</div>}

@@ -1,18 +1,18 @@
 .ec-logistica { color: var(--ws-text); min-width: 0; }
 .ec-logistica > .ec-page-header { margin-bottom: 24px; }
 .ec-log-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
-.ec-log-metrics article { display: grid; gap: 14px; padding: 22px; border: 1px solid var(--ws-border); border-radius: 16px; background: var(--ws-surface); }
+.ec-log-metrics article { display: grid; gap: 14px; padding: 22px; border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 22px; background: var(--surface-l1, var(--ws-surface)); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
 .ec-log-metrics span, .ec-log-metrics small { color: var(--ws-muted); font-size: 12px; line-height: 1.6; }
 .ec-log-metrics strong { font-size: 28px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.ec-logistica .ws-card { border-radius: 16px; border: 1px solid var(--ws-border); background: var(--ws-surface); box-shadow: 0 4px 16px #00000006; }
-.ec-logistica .ws-button, .ws-fleet-dialog .ws-button { border-radius: 10px; min-height: 40px; gap: 8px; }
+.ec-logistica .ws-card { border-radius: 22px; border: 1px solid var(--border-tonal, var(--ws-border)); background: var(--surface-l1, var(--ws-surface)); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 4px 16px #00000008; }
+.ec-logistica .ws-button, .ws-fleet-dialog .ws-button { border-radius: 9999px; min-height: 40px; gap: 8px; }
 .ec-logistica .ws-fleet-tabs, .ec-logistica .ws-filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .ec-logistica .ws-filter-chips { padding: 18px; }
-.ec-logistica .ws-filter-chips button { border-radius: 999px; transition: background .15s, color .15s; }
-.ec-logistica .ws-filter-chips button[aria-pressed='true'] { color: var(--ws-primary); background: var(--ws-primary-soft); border-color: var(--ws-primary); }
-.workspace-shell.erp-shell .ec-logistica :is(.record-table, .ws-fleet-table) th { padding: 16px 20px; color: var(--ws-muted); background: var(--ws-raised); font-size: 11px; border-bottom: 1px solid var(--ws-border); }
-.workspace-shell.erp-shell .ec-logistica :is(.record-table, .ws-fleet-table) td { padding: 18px 20px; color: var(--ws-text); background: transparent; border-bottom: 1px solid var(--ws-border); }
-.ec-logistica tbody tr:hover { background: var(--ws-raised); }
+.ec-logistica .ws-filter-chips button { border-radius: 9999px; transition: transform 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), background-color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), border-color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)); }
+.ec-logistica .ws-filter-chips button[aria-pressed='true'] { color: var(--ws-primary); background: color-mix(in srgb, var(--ws-primary) 16%, var(--surface-l2, var(--ws-raised))); border-color: color-mix(in srgb, var(--ws-primary) 28%, var(--border-tonal, var(--ws-border))); }
+.workspace-shell.erp-shell .ec-logistica :is(.record-table, .ws-fleet-table) th { padding: 16px 20px; color: var(--ws-muted); background: var(--surface-l2, var(--ws-raised)); font-size: 11px; border-bottom: 1px solid var(--divider-tonal, var(--ws-border)); }
+.workspace-shell.erp-shell .ec-logistica :is(.record-table, .ws-fleet-table) td { padding: 18px 20px; color: var(--ws-text); background: transparent; border-bottom: 1px solid var(--divider-tonal, var(--ws-border)); }
+.ec-logistica tbody tr:hover { background: color-mix(in srgb, var(--surface-l2, var(--ws-raised)) 65%, transparent); }
 .ec-logistica td small { display: block; margin-top: 6px; color: var(--ws-muted); font-size: 11px; line-height: 1.6; }
 .ec-logistica .status-pill, .ws-fleet-dialog .status-pill { border-radius: 999px; }
 .ec-logistica .status-pill::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; margin-right: 6px; }
@@ -121,25 +121,41 @@
   min-width: 0;
   align-content: start;
 }
-.ec-rutas-form :is(input:not([type='checkbox']), textarea, select) {
+.ec-rutas-form :is(input:not([type='checkbox']), select) {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
   height: 38px;
-  padding: 0 11px;
-  border: 1px solid var(--ws-border);
-  border-radius: 8px;
-  background: var(--ws-raised);
+  padding: 0 14px;
+  border: 1px solid var(--border-tonal, var(--ws-border));
+  border-radius: 9999px;
+  background: var(--surface-l2, var(--ws-raised));
   color: var(--ws-text);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
-  transition: border-color .16s, box-shadow .16s;
+  transition: background-color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), border-color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), box-shadow 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.ec-rutas-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 82px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-tonal, var(--ws-border));
+  border-radius: 22px;
+  background: var(--surface-l2, var(--ws-raised));
+  color: var(--ws-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background-color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), border-color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), box-shadow 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 .ec-rutas-form :is(input:not([type='checkbox']), textarea, select):focus-visible {
   outline: none;
-  border-color: var(--ws-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ws-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--surface-l2, var(--ws-raised)) 70%, var(--surface-l3, var(--ws-surface)) 30%);
+  border-color: color-mix(in srgb, var(--ws-primary) 45%, var(--border-tonal, var(--ws-border)));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-primary) 14%, transparent);
 }
 .ec-rutas-form input[type='checkbox'] {
   width: 16px;
@@ -153,9 +169,9 @@
 }
 .ec-rutas-form .ws-picker-trigger {
   min-height: 38px;
-  background: var(--ws-raised);
-  border-radius: 8px;
-  padding: 6px 10px;
+  background: var(--surface-l2, var(--ws-raised));
+  border-radius: 9999px;
+  padding: 6px 14px;
 }
 .ec-rutas-form .ws-form-grid {
   gap: 12px;
@@ -218,11 +234,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 14px;
   min-height: 38px;
-  border: 1px solid var(--ws-border);
-  border-radius: 8px;
-  background: var(--ws-raised);
+  border: 1px solid var(--border-tonal, var(--ws-border));
+  border-radius: 9999px;
+  background: var(--surface-l2, var(--ws-raised));
   color: var(--ws-muted);
 }
 .ec-rutas-search-box:focus-within {
@@ -321,8 +337,8 @@
   position: relative;
   height: 550px;
   min-height: 440px;
-  border-radius: 14px;
-  border: 1px solid var(--ws-border);
+  border-radius: 22px;
+  border: 1px solid var(--border-tonal, var(--ws-border));
   overflow: hidden;
   user-select: none;
   touch-action: none;
@@ -359,6 +375,12 @@
   max-width: none;
   pointer-events: none;
 }
+.ec-gmap-viewport[data-style='voyager'] .ec-gmap-tile {
+  filter: saturate(0.84) contrast(0.97) brightness(1.03);
+}
+.ec-gmap-viewport[data-style='dark'] .ec-gmap-tile {
+  filter: invert(0.92) hue-rotate(185deg) saturate(0.75) brightness(0.88) contrast(1.08);
+}
 .ec-gmap-overlay-svg {
   position: absolute;
   inset: 0;
@@ -373,10 +395,11 @@
   left: 12px;
   z-index: 6;
   display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  border-radius: 10px;
+  padding: 4px;
+  gap: 3px;
+  border-radius: 9999px;
   background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(18px);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
@@ -385,9 +408,9 @@
   border-color: rgba(148, 163, 184, 0.22);
 }
 .ec-gmap-style-switch button {
-  padding: 6px 11px;
+  padding: 6px 12px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 9999px;
   background: transparent;
   color: #334155;
   font: inherit;
@@ -416,9 +439,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
+  padding: 7px 14px;
   border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 10px;
+  border-radius: 9999px;
   background: rgba(255, 255, 255, 0.95);
   color: #1e293b;
   font: inherit;

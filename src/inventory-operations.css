@@ -1,6 +1,6 @@
 .inv-page { color: var(--ws-text); display: grid; gap: 22px; }
 .inv-heading { margin-bottom: 0; }
-.inv-card { min-width: 0; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 16px; box-shadow: 0 4px 16px #00000006; overflow: visible; }
+.inv-card { min-width: 0; background: var(--surface-l1, var(--ws-surface)); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 22px; box-shadow: 0 4px 16px #00000008; overflow: visible; }
 .inv-fieldset { display: block; min-width: 0; padding: 0; margin: 0; border: 0; }
 .inv-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--ws-border); color: var(--ws-muted); font-size: 11px; }
 .inv-pagination > div { display: flex; gap: 8px; }

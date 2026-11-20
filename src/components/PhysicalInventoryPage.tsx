@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ClipboardCheck, Plus, Trash2 } from 'lucide-react'
 import { inventoryQueryError } from '../services/inventoryQueries'
-import { findApprovalByKey, requestPhysicalCountApproval } from '../services/approvals'
+import { fetchApprovalOutcome, findApprovalByKey, requestPhysicalCountApproval } from '../services/approvals'
+import { submittedMessage, type ApprovalOutcome } from '../data/approvalRules'
 import { closePhysicalCount, findClosedCountByKey, findOpenCountByKey, inventoryKey, loadPhysicalCountLines, loadPhysicalCounts, openPhysicalCount, type PhysicalCount, type PhysicalCountLine } from '../services/inventoryOperations'
 import { InventoryGate, InventoryHeader, InventoryMessage, localDateTime, units, useInventoryReference, useInventorySubmission } from './inventoryShared'
 import { SearchablePicker } from './SearchablePicker'
@@ -27,6 +28,7 @@ export default function PhysicalInventoryPage() {
   const [lines, setLines] = useState<PhysicalCountLine[]>([])
   const openWrite = useInventorySubmission()
   const closeWrite = useInventorySubmission()
+  const approvalOutcome = useRef<ApprovalOutcome | null>(null)
   const busy = openWrite.busy || closeWrite.busy
   const [loadingLines, setLoadingLines] = useState(false)
   const [listLoading, setListLoading] = useState(true)
@@ -77,6 +79,7 @@ export default function PhysicalInventoryPage() {
     event.preventDefault()
     if (busy || (!openWrite.unresolved && (loading || error))) return
     setValidationError('')
+    approvalOutcome.current = null
     const parsed = draft.map(row => ({ ...row, quantity: Number(row.counted), unitCost: row.cost.trim() === '' ? null : Number(row.cost) }))
     if (!openWrite.unresolved) {
       if (!activeWarehouses.some(item => item.id === warehouseId) || reason.trim().length < 3 || reason.trim().length > 1000) return setValidationError('Selecciona un almacén activo y un motivo de 3 a 1000 caracteres.')
@@ -105,17 +108,18 @@ export default function PhysicalInventoryPage() {
   const close = async () => {
     if ((!selected && !closeWrite.unresolved) || (selected && selected.estado !== 'abierto' && !closeWrite.unresolved) || !selectedId || busy || (!closeWrite.unresolved && (loadingLines || lineError))) return
     setValidationError('')
+    approvalOutcome.current = null
     const hasDifferences = lines.some(line => line.stock_contado !== line.stock_sistema)
     await closeWrite.run({
       find: async () => hasDifferences
         ? findApprovalByKey(closeKey)
         : await findClosedCountByKey(selectedId, closeKey) ? selectedId : null,
       write: () => hasDifferences
-        ? requestPhysicalCountApproval(selectedId, closeKey)
+        ? requestPhysicalCountApproval(selectedId, closeKey).then(async id => { approvalOutcome.current = await fetchApprovalOutcome(id); return id })
         : closePhysicalCount(selectedId, closeKey),
       saved: () => { setConfirmClose(false); setListVersion(value => value + 1) },
       success: id => hasDifferences
-        ? `Conteo enviado a aprobación (${id.slice(0, 8)}). Los ajustes se aplicarán cuando lo apruebe otra persona.`
+        ? submittedMessage('count', id, approvalOutcome.current)
         : 'Conteo sin diferencias cerrado. No se generaron ajustes de conciliación.',
       reload: async () => {
         await reloadReferences()

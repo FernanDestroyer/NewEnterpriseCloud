@@ -96,15 +96,7 @@ function worldPxToLatLng(wx: number, wy: number, zoom: number): { lat: number; l
   return { lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) }
 }
 
-function tileUrl(style: EstiloMapa, z: number, x: number, y: number): string {
-  if (style === 'voyager') {
-    const sub = ['a', 'b', 'c', 'd'][(x + y) & 3]
-    return `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}@2x.png`
-  }
-  if (style === 'dark') {
-    const sub = ['a', 'b', 'c', 'd'][(x + y) & 3]
-    return `https://${sub}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}@2x.png`
-  }
+function tileUrl(_style: EstiloMapa, z: number, x: number, y: number): string {
   const subOsm = ['a', 'b', 'c'][(x + y) % 3]
   return `https://${subOsm}.tile.openstreetmap.org/${z}/${x}/${y}.png`
 }
@@ -691,7 +683,7 @@ function MapaGoogleStyleLima({
           </div>
         )}
 
-        <span className="ec-gmap-attribution">{`Zoom ${zoom} · © OpenStreetMap · CARTO`}</span>
+        <span className="ec-gmap-attribution">{`Zoom ${zoom} · © OpenStreetMap`}</span>
       </div>
 
       <div className="ec-rutas-map-legend">

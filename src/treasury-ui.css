@@ -2,7 +2,7 @@
 .ec-treasury { color: var(--ws-text); min-width: 0; }
 .ec-treasury > .ec-page-header { margin-bottom: 24px; }
 .ec-treasury > .ws-card { margin-block: 20px; }
-.ec-treasury .ws-card, .ec-treasury .ec-inline-form { border: 1px solid var(--ws-border); border-radius: 16px; background: var(--ws-surface); box-shadow: 0 4px 16px #00000006; }
+.ec-treasury .ws-card, .ec-treasury .ec-inline-form { border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 22px; background: var(--surface-l1, var(--ws-surface)); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 4px 16px #00000008; }
 .ec-treasury .ws-card:has(.ec-combobox-popover), .ec-treasury .ec-module-card { overflow: visible; }
 .ec-treasury .ws-card-heading { padding: 22px 24px; border-bottom: 1px solid var(--ws-border); border-radius: 16px 16px 0 0; background: var(--ws-raised); }
 .ec-treasury .ws-card-heading h2 { color: var(--ws-text); font-size: 17px; letter-spacing: -.025em; }
@@ -17,7 +17,7 @@
 .ec-treasury .ec-segments, .ec-finance-field .ec-segments { flex-wrap: wrap; }
 .ec-treasury .ec-segment, .ec-finance-field .ec-segment { display: flex; }
 .ec-treasury .ec-reconcile-picker > .ec-finance-field { flex: 1; }
-.ec-treasury .ws-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border-radius: 10px; text-decoration: none; }
+.ec-treasury .ws-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border-radius: 9999px; text-decoration: none; }
 .ec-treasury .export-button { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; }
 .ec-finance-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-block: 24px; }
 .ec-finance-metrics article { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
@@ -38,7 +38,8 @@
 .ec-money-direction { display: inline-flex; align-items: center; gap: 8px; }
 .ec-treasury .status-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 10px; padding: 6px 10px; }
 .ec-treasury .status-pill::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.workspace-shell.erp-shell .ec-treasury input:not([type='radio']):not([type='checkbox']):not([type='hidden']):not(.ec-combobox-validation):not(.ws-table-search input):not(.ws-picker-search input), .workspace-shell.erp-shell .ec-treasury textarea { color: var(--ws-text); background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 10px; padding: 10px 12px; min-height: 40px; }
+.workspace-shell.erp-shell .ec-treasury input:not([type='radio']):not([type='checkbox']):not([type='hidden']):not(.ec-combobox-validation):not(.ws-table-search input):not(.ws-picker-search input) { color: var(--ws-text); background: var(--surface-l2, var(--ws-surface)); border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 9999px; padding: 10px 14px; min-height: 40px; }
+.workspace-shell.erp-shell .ec-treasury textarea { color: var(--ws-text); background: var(--surface-l2, var(--ws-surface)); border: 1px solid var(--border-tonal, var(--ws-border)); border-radius: 22px; padding: 12px 16px; min-height: 86px; }
 .workspace-shell.erp-shell .ec-treasury .ws-table-search input, .workspace-shell.erp-shell .ec-treasury .ws-picker-search input { border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; outline: none !important; }
 .ec-treasury .ws-table-search input:focus-visible, .ec-treasury .ws-picker-search input:focus-visible { outline: none !important; }
 .ec-treasury input:focus-visible, .ec-treasury button:focus-visible, .ec-treasury textarea:focus-visible { outline: 2px solid var(--ws-primary); outline-offset: 3px; }

@@ -22,6 +22,7 @@ const PermisosPage = lazy(() => import('../components/PermisosPage'))
 const AuditPage = lazy(() => import('../components/AuditPage'))
 const ModuloPage = lazy(() => import('../pages/ModuloPage'))
 const ReportsPage = lazy(() => import('../components/ReportsPage'))
+const NeuralNetworkPage = lazy(() => import('../components/NeuralNetworkPage'))
 const NotificationsPage = lazy(() => import('../components/NotificationsPage'))
 const ApprovalsPage = lazy(() => import('../components/ApprovalsPage'))
 const ProfilePage = lazy(() => import('../components/ProfilePage'))
@@ -122,6 +123,7 @@ export default function AppRouter() {
         <Route path="/documents" element={<Navigate to="/dashboard" replace />} />
         <Route path="/perfil" element={<ProfilePage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/inteligencia/red-neuronal" element={<NeuralNetworkPage />} />
         <Route path="/notificaciones" element={<NotificationsPage />} />
         <Route path="/aprobaciones" element={<ApprovalsPage />} />
         <Route path="/orden-compra" element={<Navigate to="/purchases" replace />} />

@@ -417,17 +417,23 @@ export function resolverUbicacionParada(input: {
   let mejorLongitud = explicito ? explicito.nombre.length : -1
 
   if (!encontrado && textoBusqueda) {
+    // 1) Prioriza coincidencia explícita con el nombre del distrito antes que keywords de vías compartidas.
     for (const distrito of DISTRITOS_LIMA) {
       const nombreNorm = normalizarTextoGeo(distrito.nombre)
       if (contieneKeyword(textoBusqueda, nombreNorm) && nombreNorm.length > mejorLongitud) {
         encontrado = distrito
         mejorLongitud = nombreNorm.length
       }
-      for (const kw of distrito.keywords) {
-        const kwNorm = normalizarTextoGeo(kw)
-        if (contieneKeyword(textoBusqueda, kwNorm) && kwNorm.length > mejorLongitud) {
-          encontrado = distrito
-          mejorLongitud = kwNorm.length
+    }
+    // 2) Si ningún nombre de distrito apareció, infiere por avenidas o puntos clave.
+    if (!encontrado) {
+      for (const distrito of DISTRITOS_LIMA) {
+        for (const kw of distrito.keywords) {
+          const kwNorm = normalizarTextoGeo(kw)
+          if (contieneKeyword(textoBusqueda, kwNorm) && kwNorm.length > mejorLongitud) {
+            encontrado = distrito
+            mejorLongitud = kwNorm.length
+          }
         }
       }
     }

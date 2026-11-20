@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { businessDate, shiftDate } from '../data/workspace'
-import { cancelSalesOrder, collectSalesOrder, createSalesOrder, creditSalesOrder, fetchSalesCreditBalance, guideSalesOrder, invoiceSalesOrder, loadSalesOperations, saveSalesQuote, convertSalesQuote, type SaleLine, type SalesOrder, type SalesQuote, type SalesReceipt } from '../services/salesOperations'
+import { cancelSalesOrder, collectSalesOrder, createSalesOrder, saveOrderDeliveryAddress, creditSalesOrder, fetchSalesCreditBalance, guideSalesOrder, invoiceSalesOrder, loadSalesOperations, saveSalesQuote, convertSalesQuote, type SaleLine, type SalesOrder, type SalesQuote, type SalesReceipt } from '../services/salesOperations'
 import { SalesReceiptPrint } from './SalesReceiptPrint'
 import PaymentCollectionFields from './PaymentCollectionFields'
 import { SearchablePicker, type PickerOption } from './SearchablePicker'
@@ -62,6 +62,7 @@ export default function SalesOperationsPage({ initialTab = 'orders' }: { initial
   const [collectPendingError, setCollectPendingError] = useState('')
   const [origin, setOrigin] = useState('')
   const [destination, setDestination] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
   const [reason, setReason] = useState('')
   const [returnStock, setReturnStock] = useState(false)
   const [creditBalance, setCreditBalance] = useState<number | null>(null)
@@ -120,6 +121,7 @@ export default function SalesOperationsPage({ initialTab = 'orders' }: { initial
   }
   const changeCustomer = (customerId: string) => {
     setCustomer(customerId)
+    setDeliveryAddress(data?.customers.find(item => item.id === customerId)?.direccion?.trim() ?? '')
     if (saleNow) applyCustomerDocDefault(customerId)
   }
   const startDirectSale = () => {
@@ -140,6 +142,11 @@ export default function SalesOperationsPage({ initialTab = 'orders' }: { initial
       setDocType(defaultType)
       setSeries(defaultSeries)
       setNumber(nextSaleNumber(defaultType, defaultSeries))
+    }
+    if (next.kind === 'guide' && next.order) {
+      const order = next.order
+      setOrigin(data?.warehouses.find(item => item.id === order.almacen_id)?.nombre ?? '')
+      setDestination(order.direccion_entrega?.trim() || data?.customers.find(item => item.id === order.cliente_id)?.direccion?.trim() || '')
     }
     setLines(next.order?.lineas.map(line => ({ ...line, cantidad: 0 })) ?? [initialLine()])
     setReason(''); setReturnStock(false)
@@ -171,6 +178,8 @@ export default function SalesOperationsPage({ initialTab = 'orders' }: { initial
     if (new Set(selected.map(line => line.producto_id)).size !== selected.length) return setError('Cada producto debe aparecer solo una vez.')
     if (!customer) return setError('Selecciona un cliente.')
     if (tab === 'orders' && !warehouse) return setError('Selecciona el almacén de reserva.')
+    const address = deliveryAddress.trim()
+    if (tab === 'orders' && address.length < 4) return setError('Ingresa la dirección o ruta de entrega del cliente (mínimo 4 caracteres) para realizar el pedido.')
     if (currency === 'USD' && !exchangeReady) return setError('El tipo de cambio USD no está configurado. Defínelo en Maestros → Catálogos.')
     if (tab === 'quotes' && expiry < businessDate(new Date())) return setError('La fecha de vencimiento no puede estar en el pasado.')
     if (tab === 'quotes') void run(() => saveSalesQuote({ id: editing?.id ?? null, cliente: customer, vence: expiry, moneda: currency, cambio: currency === 'PEN' ? 1 : exchangeRate, lineas: selected, key: requestKey }))
@@ -191,6 +200,7 @@ export default function SalesOperationsPage({ initialTab = 'orders' }: { initial
       if (saleCash && !salePayShift) return setError('Selecciona un turno de caja abierto para cobrar en efectivo.')
       void run(async () => {
         const orderId = await createSalesOrder({ cliente: customer, almacen: warehouse, moneda: currency, cambio: currency === 'PEN' ? 1 : exchangeRate, lineas: selected, key: requestKey })
+        await saveOrderDeliveryAddress({ clienteId: customer, orderId, direccion: address })
         try {
           await invoiceSalesOrder(orderId, saleDocType, normalizedSeries, invoiceNumber, `${requestKey}:factura`, salePayMethod ? { method: salePayMethod, cashShiftId: saleCash ? salePayShift : null } : null)
         } catch (cause) {
@@ -202,7 +212,10 @@ export default function SalesOperationsPage({ initialTab = 'orders' }: { initial
         }
         setSaleNumber(String(invoiceNumber + 1))
       })
-    } else void run(() => createSalesOrder({ cliente: customer, almacen: warehouse, moneda: currency, cambio: currency === 'PEN' ? 1 : exchangeRate, lineas: selected, key: requestKey }))
+    } else void run(async () => {
+      const orderId = await createSalesOrder({ cliente: customer, almacen: warehouse, moneda: currency, cambio: currency === 'PEN' ? 1 : exchangeRate, lineas: selected, key: requestKey })
+      await saveOrderDeliveryAddress({ clienteId: customer, orderId, direccion: address })
+    })
   }
   const submitAction = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -338,6 +351,12 @@ export default function SalesOperationsPage({ initialTab = 'orders' }: { initial
       <div className="ws-form-grid ws-sales-fields"><div className="ec-field ws-sales-client-field"><span>Cliente</span><SearchablePicker required mode="modal" ariaLabel="Cliente" value={customer} onChange={changeCustomer} options={customerOptions} placeholder="Buscar cliente…" searchPlaceholder="Buscar por razón social o documento…" emptyMessage="Ningún cliente coincide con la búsqueda." /></div>
       {tab === 'orders' ? <div className="ec-field"><span>Almacén de reserva</span><SearchablePicker required mode="modal" ariaLabel="Almacén de reserva" value={warehouse} onChange={setWarehouse} options={(data?.warehouses ?? []).map(item => ({ id: item.id, label: item.nombre }))} placeholder="Buscar almacén…" searchPlaceholder="Buscar almacén…" /></div> : <label>Vigente hasta<input required min={businessDate(new Date())} type="date" value={expiry} onChange={event => setExpiry(event.target.value)} /></label>}
       <div className="ec-field ws-sales-currency-field"><span>Moneda</span><SegmentedControl value={currency} onChange={changeCurrency} ariaLabel="Moneda" options={[{value:'PEN',label:'S/ PEN'},{value:'USD',label:'$ USD',disabled:!exchangeReady}]} /><small className="ws-sales-rate"><span>{currency === 'USD' ? exchangeReady ? `1 USD = S/ ${exchangeRate.toFixed(4)}` : 'TC USD sin configurar' : 'Moneda base PEN'}</span><Link to="/maestros#catalogos">Maestros</Link></small></div></div>
+      {tab === 'orders' && <div className="ws-sales-delivery">
+        <label>Dirección / ruta de entrega
+          <input required minLength={4} value={deliveryAddress} onChange={event => setDeliveryAddress(event.target.value)} placeholder="Ej. Av. Arequipa 1450, Lince" />
+        </label>
+        <small className="relation-hint">{!customer ? 'Obligatoria: se usa en la guía de remisión, la planificación de despachos y el mapa de rutas.' : data?.customers.find(item => item.id === customer)?.direccion ? 'Prellenada desde la ficha del cliente. Si la cambias, también se actualiza en su ficha.' : 'Este cliente aún no tiene dirección registrada: ingrésala para realizar el pedido; quedará guardada en su ficha.'}</small>
+      </div>}
       {tab === 'orders' && saleNow && <div className="ws-sales-voucher">
         <div className="ws-sales-voucher-head"><div><span className="ws-sales-kicker">COMPROBANTE</span><h3>Datos de emisión</h3></div><small>Se emite al confirmar la venta.</small></div>
         <div className="ws-form-grid ws-sales-voucher-fields">

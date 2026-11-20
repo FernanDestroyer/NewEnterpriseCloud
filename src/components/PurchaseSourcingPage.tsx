@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { moneyCurrency } from '../data/helpers'
-import { fetchPendingApprovalOrigins } from '../services/approvals'
+import { fetchApprovalOutcome, fetchPendingApprovalOrigins } from '../services/approvals'
+import { submittedMessage } from '../data/approvalRules'
 import {
   cancelPurchaseRequest, requestSelectedPurchaseApproval, fetchPurchaseSourcing, fetchPurchaseSourcingDetail,
   fetchPurchaseSuppliers, fetchSourcingCurrencies, openPurchaseRequest, registerPurchaseOffer,
@@ -255,11 +256,16 @@ export default function PurchaseSourcingPage() {
       const key = transitionKeys.current.get(keyId) ?? newIdempotencyKey()
       transitionKeys.current.set(keyId, key)
       const approvalId = await requestSelectedPurchaseApproval(request.id, key)
+      const outcome = await fetchApprovalOutcome(approvalId)
       transitionKeys.current.delete(keyId)
       setDetails(current => { const next = { ...current }; delete next[request.id]; return next })
-      setPendingApprovalIds(current => current.includes(request.id) ? current : [...current, request.id])
+      if (!outcome || outcome.estado === 'pending') {
+        setPendingApprovalIds(current => current.includes(request.id) ? current : [...current, request.id])
+      } else {
+        setPendingApprovalIds(current => current.filter(id => id !== request.id))
+      }
       await load(); await openDetail(request.id, true)
-      notify(`Oferta enviada a aprobación (${approvalId.slice(0, 8)}). La orden se creará cuando la apruebe otra persona.`)
+      notify(submittedMessage('order', approvalId, outcome))
     } catch (cause) { notify(readableError(cause)) }
     finally { setBusy(false) }
   }

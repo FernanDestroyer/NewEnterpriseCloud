@@ -10,6 +10,7 @@ import {
   optimizarParadasPorCercania,
   resolverUbicacionParada,
 } from '../src/modules/logistica/rutasGeo.ts'
+import { ventasDespachables } from '../src/modules/logistica/despachos.ts'
 
 const record = (id, amount, createdAt, extra = {}) => ({ id, name: id, detail: '', date: 'Texto de presentación', status: 'Pendiente', amount, createdAt, ...extra })
 
@@ -223,4 +224,39 @@ test('rutasGeo resuelve distritos de Lima, optimiza por cercanía y consolida de
   assert.equal(analitica.destinoTop?.clienteNombre, 'Cliente Norte')
   assert.equal(analitica.destinoTop?.repeticiones, 2)
   assert.equal(analitica.distritoTop?.distrito, 'Los Olivos')
+})
+
+test('inteligencia expone el submódulo de red neuronal y recomendaciones IA en /inteligencia/red-neuronal', () => {
+  const inteligencia = workspaceModules.find(module => module.id === 'inteligencia')
+  assert.ok(inteligencia)
+  const child = inteligencia.children.find(item => item.path === '/inteligencia/red-neuronal')
+  assert.ok(child)
+  assert.equal(child.permission, 'reports')
+  assert.equal(child.implemented, true)
+  assert.ok(workspaceEntries.some(entry => entry.path === '/inteligencia/red-neuronal' && entry.permission === 'reports'))
+  assert.equal(submoduleMatchesLocation('/inteligencia/red-neuronal', '/inteligencia/red-neuronal', ''), true)
+})
+
+test('resolverUbicacionParada prioriza el distrito explícito sobre vías compartidas y ventasDespachables infiere zona', () => {
+  const lince = resolverUbicacionParada({ direccion: 'Av. Arequipa 1450, Lince' })
+  assert.equal(lince.distrito, 'Lince')
+  assert.equal(lince.zonaNombre, 'Lima Moderna')
+
+  const ventas = [
+    { id: 'V-1', rowId: 'v-1', name: 'Camila Torres', detail: 'Boleta B001-1', date: 'Hoy', status: 'Completada', amount: 80, cliente_id: 'c-1', direccion: 'Av. Arequipa 1450, Lince' },
+    { id: 'V-2', rowId: 'v-2', name: 'Cliente Sin Dir', detail: 'Boleta B001-2', date: 'Hoy', status: 'Completada', amount: 50, cliente_id: 'c-2' },
+    { id: 'V-3', rowId: 'v-3', name: 'Cliente Texto Raro', detail: 'Boleta B001-3', date: 'Hoy', status: 'Completada', amount: 40, cliente_id: 'c-3' },
+  ]
+  const clientes = [
+    { id: 'CLI-1', rowId: 'c-1', name: 'Camila Torres', detail: '', date: 'Hoy', status: 'Activo', direccion: '' },
+    { id: 'CLI-2', rowId: 'c-2', name: 'Cliente Sin Dir', detail: '', date: 'Hoy', status: 'Activo', direccion: '' },
+    { id: 'CLI-3', rowId: 'c-3', name: 'Cliente Texto Raro', detail: '', date: 'Hoy', status: 'Activo', direccion: 'asasas' },
+  ]
+  const desp = ventasDespachables(ventas, clientes, {})
+  assert.equal(desp[0].direccion, 'Av. Arequipa 1450, Lince')
+  assert.equal(desp[0].zonaNombre, 'Lima Moderna · Lince')
+  assert.equal(desp[1].direccion, '')
+  assert.equal(desp[1].zonaNombre, '')
+  assert.equal(desp[2].direccion, 'asasas')
+  assert.equal(desp[2].zonaNombre, '')
 })
