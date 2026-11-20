@@ -8,6 +8,8 @@ import { convertQuoteToSale, deleteRecord, emptyRecords, enrichCatalog, fetchRec
 import { DATA_PAGES } from '../data/catalog'
 import { csvContent } from '../data/exports'
 import { useAuth } from './AuthContext'
+import { submittedMessage } from '../data/approvalRules'
+import { fetchApprovalOutcome } from '../services/approvals'
 import type { DataPage, ExportFormat, PendingDelete, RecordItem, RecordModalState, RecordStatus } from '../types'
 
 type RecordsContextValue = {
@@ -386,7 +388,7 @@ export function RecordsProvider({ children }: { children: ReactNode }) {
         const approvalId = await requestPurchaseApproval(input, lines)
         await reload()
         setRecordModal(null)
-        notify(`Solicitud de orden enviada a la bandeja de aprobaciones (${approvalId.slice(0, 8)}). La orden se creará cuando la apruebe otra persona.`)
+        notify(submittedMessage('order', approvalId, await fetchApprovalOutcome(approvalId)))
         return
       }
       let saved: RecordItem

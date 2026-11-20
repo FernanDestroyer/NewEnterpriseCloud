@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
 import { decideApproval, fetchApprovalEvents, fetchApprovals, type ApprovalEvent, type ApprovalFilter, type ApprovalRequest } from '../services/approvals'
 import { PageHeader } from './ui/PageHeader'
+import ApprovalRulesPanel from './ApprovalRulesPanel'
+import ConfirmModal from './ConfirmModal'
 
 const PAGE_SIZE = 25
 type JsonObject = Record<string, unknown>
@@ -78,6 +80,7 @@ export default function ApprovalsPage() {
   const [error, setError] = useState('')
   const [eventError, setEventError] = useState('')
   const [notice, setNotice] = useState('')
+  const [confirmingApproval, setConfirmingApproval] = useState(false)
   const selected = useMemo(() => rows.find(row => row.id === selectedId) ?? null, [rows, selectedId])
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -105,11 +108,11 @@ export default function ApprovalsPage() {
     return () => { active = false }
   }, [selectedId])
 
-  const decide = async (approve: boolean) => {
+  const decide = async (approve: boolean, confirmed = false) => {
     if (!selected || selected.estado !== 'pending' || busy || !canReview) return
     if (selected.solicitante_id === profile?.id) return setError('La persona solicitante no puede aprobar su propia solicitud.')
     if (!approve && reason.trim().length < 3) return setError('Escribe un motivo de rechazo de al menos 3 caracteres.')
-    if (approve && !window.confirm('Al aprobar se creará la orden de compra o se aplicarán los ajustes del conteo en una sola transacción. ¿Continuar?')) return
+    if (approve && !confirmed) { setError(''); setConfirmingApproval(true); return }
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await decideApproval(selected.id, approve, reason)
@@ -129,6 +132,22 @@ export default function ApprovalsPage() {
   if (!canView) return <section className="ws-card ws-empty-compact"><ShieldCheck size={28} /><strong>Acceso restringido</strong><span>Tu rol no puede consultar la bandeja de aprobaciones.</span></section>
 
   return <section className="approval-page">
+    {confirmingApproval && selected && selected.estado === 'pending' && <ConfirmModal
+      tone="primary"
+      title="Aprobar solicitud"
+      message={selected.tipo === 'physical_count'
+        ? 'Se aplicarán los ajustes del conteo al stock y quedarán trazados en el Kardex. Todo ocurre en una sola operación.'
+        : 'Se emitirá la orden de compra con estos datos. Todo ocurre en una sola operación y la decisión queda registrada con tu nombre.'}
+      confirmLabel="Sí, aprobar"
+      busy={busy}
+      onCancel={() => setConfirmingApproval(false)}
+      onConfirm={async () => { setConfirmingApproval(false); await decide(true, true) }}
+    >
+      <dl className="ec-approval-confirm-summary">
+        <div><dt>Tipo</dt><dd>{kindLabel(selected.tipo)}</dd></div>
+        {summary(selected).filter(([label]) => label !== 'Detalle').slice(0, 4).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+      </dl>
+    </ConfirmModal>}
     <PageHeader
       icon={ClipboardCheck}
       section="Notificaciones y aprobaciones"
@@ -156,6 +175,7 @@ export default function ApprovalsPage() {
           </div>
           <span className="status-pill green">Activos</span>
         </div>
+        <ApprovalRulesPanel canEdit={canReview} />
         <div className="ec-approval-rules-grid">
           <article className="ec-approval-rule-card">
             <strong>Segregación de funciones</strong>
@@ -164,7 +184,7 @@ export default function ApprovalsPage() {
           </article>
           <article className="ec-approval-rule-card">
             <strong>Órdenes de compra</strong>
-            <p>Las órdenes que requieren validación quedan en estado Pendiente antes de su recepción o pago.</p>
+            <p>Las órdenes que requieren validación quedan en estado Pendiente antes de su recepción o pago. Las que quedan bajo el umbral configurado arriba se emiten directamente y se registran en el historial.</p>
             <small>Estado inicial: Pendiente · Decisión obligatoria con motivo en rechazos.</small>
           </article>
           <article className="ec-approval-rule-card">

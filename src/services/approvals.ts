@@ -1,4 +1,5 @@
 import { requireSupabase } from '../lib/supabase'
+import type { ApprovalOutcome, ApprovalRule, ApprovalRuleKey } from '../data/approvalRules'
 
 export type ApprovalKind = 'purchase_manual' | 'purchase_sourcing' | 'purchase_contract' | 'physical_count'
 export type ApprovalState = 'pending' | 'approved' | 'rejected' | 'stale'
@@ -44,7 +45,7 @@ export function approvalFailure(error: unknown): Error {
   const message = detail?.message ?? 'No se pudo completar la aprobación.'
   if (['PGRST202', 'PGRST205', '42P01', '42883'].includes(detail?.code ?? '')
     || message.includes('ec_solicitudes_aprobacion') || message.includes('ec_decidir_aprobacion_v1')
-    || message.includes('ec_solicitar_aprobacion_') || message.includes('Could not find the function')) {
+    || message.includes('ec_solicitar_aprobacion_') || message.includes('ec_reglas_aprobacion') || message.includes('ec_actualizar_regla_aprobacion_v1') || message.includes('Could not find the function')) {
     return new Error('Falta aplicar en Supabase la migración de aprobaciones V1 antes de usar este flujo.')
   }
   return error instanceof Error ? error : new Error(message)
@@ -139,4 +140,29 @@ export async function requestPhysicalCountApproval(countId: string, idempotencyK
   if (error) throw approvalFailure(error)
   notifyApprovalQueueChanged()
   return String(data)
+}
+
+export type { ApprovalOutcome, ApprovalRule, ApprovalRuleKey } from '../data/approvalRules'
+
+export async function fetchApprovalRules(): Promise<ApprovalRule[]> {
+  const { data, error } = await requireSupabase().from('ec_reglas_aprobacion')
+    .select('clave,titulo,descripcion,unidad,valor,activa,actualizado_por,actualizado_en')
+    .order('clave')
+  if (error) throw approvalFailure(error)
+  return (data ?? []).map(row => ({ ...row, valor: Number(row.valor) })) as ApprovalRule[]
+}
+
+export async function updateApprovalRule(key: ApprovalRuleKey, value: number, active: boolean): Promise<void> {
+  const { error } = await requireSupabase().rpc('ec_actualizar_regla_aprobacion_v1', {
+    p_clave: key, p_valor: value, p_activa: active,
+  })
+  if (error) throw approvalFailure(error)
+}
+
+/** Estado de una solicitud recién enviada: permite saber si un umbral la emitió sin aprobación manual. */
+export async function fetchApprovalOutcome(id: string): Promise<ApprovalOutcome | null> {
+  const { data, error } = await requireSupabase().from('ec_solicitudes_aprobacion')
+    .select('estado,solicitante_id,decision_por').eq('id', id).maybeSingle()
+  if (error || !data) return null
+  return { estado: data.estado as ApprovalOutcome['estado'], auto: data.estado === 'approved' && data.decision_por === data.solicitante_id }
 }

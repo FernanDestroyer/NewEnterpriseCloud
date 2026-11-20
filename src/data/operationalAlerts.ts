@@ -1,7 +1,7 @@
 import type { DataPage, RecordItem } from '../types'
 
 export type OperationalNotificationSource = 'inventory' | 'finance' | 'purchases'
-export type NotificationSource = OperationalNotificationSource | 'approvals'
+export type NotificationSource = OperationalNotificationSource | 'approvals' | 'predictive'
 export type NotificationSeverity = 'critical' | 'warning' | 'info'
 export type OperationalAlertInput = {
   fuente: OperationalNotificationSource

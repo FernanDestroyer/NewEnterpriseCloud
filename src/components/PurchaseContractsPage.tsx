@@ -3,7 +3,8 @@ import { AlertTriangle, ArrowDownToLine, Ban, ChevronDown, ChevronLeft, ChevronR
 import '../purchases-ui.css'
 import { useAuth } from '../context/AuthContext'
 import { useRecords } from '../context/RecordsContext'
-import { fetchPendingApprovalOrigins, requestContractOrderApproval } from '../services/approvals'
+import { fetchApprovalOutcome, fetchPendingApprovalOrigins, requestContractOrderApproval } from '../services/approvals'
+import { submittedMessage } from '../data/approvalRules'
 import { moneyCurrency } from '../data/helpers'
 import {
   activatePurchaseContract, closePurchaseContract, createPurchaseContract, createPurchaseContractVersion,
@@ -162,7 +163,7 @@ function ContractEditor({ mode, suppliers, responsibleId, onClose, onSaved }: {
 function OrderFromContractDialog({ contract, onClose, onCreated }: {
   contract: PurchaseContractSummary
   onClose: () => void
-  onCreated: () => void
+  onCreated: (message: string) => void
 }) {
   const [quantities, setQuantities] = useState<Record<string,string>>({})
   const [dueDate, setDueDate] = useState('')
@@ -190,7 +191,7 @@ function OrderFromContractDialog({ contract, onClose, onCreated }: {
     if (!Number.isFinite(rate) || rate <= 0) return setError('El tipo de cambio debe ser positivo para órdenes en USD.')
     setBusy(true)
     try {
-      await requestContractOrderApproval({
+      const approvalId = await requestContractOrderApproval({
         contractId: contract.id, versionId: contract.version!.id, detail: `Liberación del contrato ${contract.codigo}`,
         dueDate: dueDate || null,
         lines: selected.map(({line,qty}) => ({ producto_id: line.proveedor_producto_id, cantidad: qty,
@@ -198,7 +199,8 @@ function OrderFromContractDialog({ contract, onClose, onCreated }: {
           tasa_tributaria: Number(line.tasa_tributaria) })),
         idempotencyKey: key.current, exchangeRate: rate, currency: currencyCode,
       })
-      onCreated()
+      const outcome = await fetchApprovalOutcome(approvalId)
+      onCreated(outcome?.estado === 'approved' && outcome.auto ? submittedMessage('order', approvalId, outcome) : 'Solicitud enviada a aprobación. El cupo se comprometerá al crearse la orden aprobada.')
     } catch (cause) { setError(errorMessage(cause)) }
     finally { setBusy(false) }
   }
@@ -285,7 +287,7 @@ export default function PurchaseContractsPage() {
     finally { setBusyId(null) }
   }
   const saved = () => { setEditor(null); void refreshAfterAction('Contrato actualizado; sus snapshots se conservaron por versión.') }
-  const orderCreated = () => { setOrderContract(null); void refreshAfterAction('Solicitud enviada a aprobación. El cupo se comprometerá al crearse la orden aprobada.') }
+  const orderCreated = (message: string) => { setOrderContract(null); void refreshAfterAction(message) }
   const canCreate = can('purchases','crear')
   const canEdit = can('purchases','editar')
 
