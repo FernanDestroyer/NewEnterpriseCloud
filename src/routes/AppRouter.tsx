@@ -22,7 +22,9 @@ const PermisosPage = lazy(() => import('../components/PermisosPage'))
 const AuditPage = lazy(() => import('../components/AuditPage'))
 const ModuloPage = lazy(() => import('../pages/ModuloPage'))
 const ReportsPage = lazy(() => import('../components/ReportsPage'))
-const NeuralNetworkPage = lazy(() => import('../components/NeuralNetworkPage'))
+const EnterpriseAiPage = lazy(() => import('../components/EnterpriseAiPage'))
+const EnterpriseAiModelsPage = lazy(() => import('../components/EnterpriseAiModelsPage'))
+const CommunityGroupsPage = lazy(() => import('../components/CommunityGroupsPage'))
 const NotificationsPage = lazy(() => import('../components/NotificationsPage'))
 const ApprovalsPage = lazy(() => import('../components/ApprovalsPage'))
 const ProfilePage = lazy(() => import('../components/ProfilePage'))
@@ -123,7 +125,11 @@ export default function AppRouter() {
         <Route path="/documents" element={<Navigate to="/dashboard" replace />} />
         <Route path="/perfil" element={<ProfilePage />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/inteligencia/red-neuronal" element={<NeuralNetworkPage />} />
+        <Route path="/ia-empresarial" element={<EnterpriseAiPage />} />
+        <Route path="/ia-empresarial/modelos" element={<EnterpriseAiModelsPage />} />
+        <Route path="/comunidad/grupos" element={<CommunityGroupsPage />} />
+        <Route path="/comunidad" element={<Navigate to="/comunidad/grupos" replace />} />
+        <Route path="/inteligencia/red-neuronal" element={<Navigate to="/ia-empresarial" replace />} />
         <Route path="/notificaciones" element={<NotificationsPage />} />
         <Route path="/aprobaciones" element={<ApprovalsPage />} />
         <Route path="/orden-compra" element={<Navigate to="/purchases" replace />} />

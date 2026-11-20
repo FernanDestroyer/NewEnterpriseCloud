@@ -3,6 +3,8 @@ import test from 'node:test'
 import { businessDate, customerCredit, dailyOperations, inDateRange, matchesSearch, periodRange, submoduleMatchesLocation, workspaceEntries, workspaceModules } from '../src/data/workspace.ts'
 import { financialSnapshot, totalAmount } from '../src/data/dashboard.ts'
 import { csvContent } from '../src/data/exports.ts'
+import { createAiDraft, MAX_AI_LAYERS, reviewAiDraft } from '../src/data/enterpriseAi.ts'
+import { createSavedAiModel, readAiModels, runAiExample, saveAiModel } from '../src/data/enterpriseAiModels.ts'
 import {
   ESTACIONAMIENTO_BASE_DEFAULT,
   calcularMetricasRuta,
@@ -226,15 +228,81 @@ test('rutasGeo resuelve distritos de Lima, optimiza por cercanía y consolida de
   assert.equal(analitica.distritoTop?.distrito, 'Los Olivos')
 })
 
-test('inteligencia expone el submódulo de red neuronal y recomendaciones IA en /inteligencia/red-neuronal', () => {
+test('IA empresarial ofrece un estudio propio fuera de Reportes', () => {
   const inteligencia = workspaceModules.find(module => module.id === 'inteligencia')
-  assert.ok(inteligencia)
-  const child = inteligencia.children.find(item => item.path === '/inteligencia/red-neuronal')
+  const ai = workspaceModules.find(module => module.id === 'ia-empresarial')
+  assert.ok(ai)
+  assert.ok(!inteligencia.children.some(item => item.path === '/inteligencia/red-neuronal' || item.path === '/ia-empresarial'))
+  const child = ai.children.find(item => item.path === '/ia-empresarial')
   assert.ok(child)
   assert.equal(child.permission, 'reports')
   assert.equal(child.implemented, true)
-  assert.ok(workspaceEntries.some(entry => entry.path === '/inteligencia/red-neuronal' && entry.permission === 'reports'))
-  assert.equal(submoduleMatchesLocation('/inteligencia/red-neuronal', '/inteligencia/red-neuronal', ''), true)
+  assert.ok(workspaceEntries.some(entry => entry.path === '/ia-empresarial' && entry.permission === 'reports'))
+  assert.equal(submoduleMatchesLocation('/ia-empresarial', '/ia-empresarial', ''), true)
+  assert.ok(ai.children.some(item => item.path === '/ia-empresarial/modelos' && item.permission === 'reports'))
+  assert.ok(workspaceEntries.some(item => item.path === '/ia-empresarial/modelos' && item.permission === 'reports'))
+})
+
+test('Comunidad incluye Grupos sin depender de permisos de los módulos operativos', () => {
+  const community = workspaceModules.find(module => module.id === 'comunidad')
+  assert.ok(community)
+  assert.equal(community.children[0].path, '/comunidad/grupos')
+  assert.equal(community.children[0].permission, undefined)
+  assert.ok(workspaceEntries.some(entry => entry.path === '/comunidad/grupos'))
+})
+
+test('el estudio genera un plano por área con fuentes ERP, web y CSV sin incluir sus datos', () => {
+  const draft = createAiDraft('sales')
+  const { plan, errors } = reviewAiDraft('sales', {
+    ...draft, layers: ['96', '24'], sources: ['sales', 'web', 'csv'],
+    webUrl: 'https://example.org/trends.csv', fileName: 'historico.csv',
+  })
+  assert.deepEqual(errors, [])
+  assert.equal(plan.modo, 'diseño')
+  assert.deepEqual(plan.capasOcultas, [96, 24])
+  assert.deepEqual(plan.fuentes.map(source => source.tipo), ['Base de datos ERP', 'Web', 'Archivo'])
+  assert.equal(plan.fuentes[2].archivo, 'historico.csv')
+  assert.deepEqual(createAiDraft('sales'), draft)
+  assert.deepEqual(createAiDraft('marketing').sources, ['web'])
+})
+
+test('el estudio bloquea un plano con fuentes incompletas o capas fuera de rango', () => {
+  const draft = createAiDraft('marketing')
+  assert.equal(reviewAiDraft('marketing', draft).plan, null)
+  assert.equal(reviewAiDraft('marketing', { ...draft, webUrl: 'https://a:b@example.org' }).plan, null)
+  assert.equal(reviewAiDraft('marketing', { ...draft, sources: ['csv'], fileName: 'informe.pdf' }).plan, null)
+  assert.equal(reviewAiDraft('marketing', { ...draft, sources: [] }).plan, null)
+  for (const layers of [[], ['0'], ['2.5'], ['1025'], Array(MAX_AI_LAYERS + 1).fill('5')]) {
+    assert.equal(reviewAiDraft('sales', { ...createAiDraft('sales'), layers }).plan, null)
+  }
+})
+
+test('el estudio conserva las neuronas desactivadas por capa y requiere al menos una activa', () => {
+  const draft = { ...createAiDraft('sales'), layers: ['3', '2'], disabledNeurons: [[2, 4], [1]] }
+  assert.deepEqual(reviewAiDraft('sales', draft).plan.neuronasDesactivadas, [[2], [1]])
+  const blocked = reviewAiDraft('sales', { ...draft, disabledNeurons: [[1, 2, 3], []] })
+  assert.equal(blocked.plan, null)
+  assert.ok(blocked.errors.includes('Deja al menos una neurona activa por capa.'))
+})
+
+test('la biblioteca guarda diseños por usuario sin URLs, archivos ni métricas ficticias', () => {
+  const values = new Map()
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
+  const draft = { ...createAiDraft('marketing'), webUrl: 'https://example.org/tendencias', sources: ['web', 'csv'], fileName: 'referencia.csv' }
+  const model = createSavedAiModel('marketing', draft, 'design-1', '2026-11-20T00:00:00Z')
+  saveAiModel('user-a', model, storage)
+  saveAiModel('user-a', model, storage)
+  assert.deepEqual(readAiModels('user-a', storage), [model])
+  assert.deepEqual(readAiModels('user-b', storage), [])
+  assert.doesNotMatch([...values.values()][0], /example\.org|referencia\.csv|metrics/)
+})
+
+test('el banco de pruebas valida borradores sin inventar predicciones y acota la salida de ejemplo', () => {
+  assert.deepEqual(runAiExample('sales', '1000', '10', false), { result: null })
+  assert.equal(runAiExample('sales', '1000', '10', true).result.estimate, 1100)
+  assert.equal(runAiExample('marketing', '90', '100', true).result.estimate, 100)
+  assert.ok(runAiExample('inventory', '1.5', '0', true).error)
+  assert.ok(runAiExample('sales', '1000', '-101', true).error)
 })
 
 test('resolverUbicacionParada prioriza el distrito explícito sobre vías compartidas y ventasDespachables infiere zona', () => {

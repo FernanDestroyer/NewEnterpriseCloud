@@ -1,6 +1,6 @@
 # EnterpriseCloud · Panel empresarial conectado a Supabase
 
-React, TypeScript y Vite. La autenticación, los perfiles, los permisos y los registros empresariales se consultan en Supabase. El panel, los reportes y las tablas utilizan el mismo estado de datos; no existe un modo de demostración ni una carga de registros de ejemplo en la aplicación.
+React, TypeScript y Vite. La autenticación, los perfiles, los permisos y los registros empresariales se consultan en Supabase. El panel, los reportes y las tablas operativas utilizan registros reales; el estudio de IA es un prototipo de diseño separado de esos flujos.
 
 ## Ejecutar
 
@@ -27,6 +27,9 @@ En PowerShell con restricciones de ejecución puedes utilizar `npm.cmd`.
 - Maestros (`/maestros`): transportistas y vendedores con activar/desactivar sin borrar historial, y catálogos comerciales/tributarios (`catalogos_negocio`).
 - Comisiones de vendedores (`/comisiones`): reglas, escalas, excepciones, asignación venta–vendedor, cálculo por período, liquidación, ajustes y pagos con asiento bancario opcional.
 - Reportes: cálculos sobre registros reales, intervalos de fechas y exportación del resultado filtrado.
+- IA empresarial (`/ia-empresarial`): prototipo para diseñar modelos de marketing, pronóstico de ventas e inventario. Permite elegir fuentes ERP/web/CSV, cambiar capas y activar neuronas desde el diagrama, simular visualmente el entrenamiento y descargar el diseño como JSON. No entrena modelos ni extrae datos.
+- Modelos (`/ia-empresarial/modelos`): catálogo de diseños guardados en este navegador y de ejemplos simulados con métricas, ficha del conjunto de entrenamiento y banco de pruebas. Los diseños sin entrenar no muestran métricas ni generan predicciones.
+- Comunidad → Grupos (`/comunidad/grupos`): chats con historial persistente. El administrador puede crear grupos por rol o seleccionar cuentas concretas de distintos roles. Solo Administrador puede conversar en todos los grupos y crearlos o retirarlos. Consulta el [orden de migraciones de Comunidad](supabase/README.md#comunidad--grupos).
 - Mantenimientos: los mismos clientes, productos, proveedores y parámetros utilizados en los módulos operativos.
 - Clientes y proveedores con documento: DNI (RENIEC) o RUC (SUNAT) con autocompletado de nombre y dirección desde el formulario.
 - Perfil: nombre persistente, correo de la cuenta y permisos del rol.

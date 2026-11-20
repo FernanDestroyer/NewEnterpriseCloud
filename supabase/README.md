@@ -37,6 +37,14 @@ Las migraciones recientes de PEPS, notificaciones, aprobaciones, Caja/Tesorería
 - `npm install` instala dependencias; `npm run dev` inicia Vite.
 - La copia local tiene Auth simulado y vacío; no es adecuada para probar identidad real. Las pruebas con cuenta autorizada deben hacerse mediante la aplicación y una sesión de usuario existente, sin borrar ni recrear cuentas.
 
+## Comunidad → Grupos
+
+`20261120000300_comunidad_grupos.sql` prepara cuatro chats: Usuarios (`Usuario`, o `Básico` si no existe `Usuario`), Vendedores, Administradores y Supervisores. Antes de desplegar, confirmar los roles y las dependencias de seguridad y auditoría en el proyecto correcto. La migración se detiene si falta un rol requerido y no cambia cuentas ni asignaciones. Después, `20261120000400_comunidad_acceso_administrador.sql` permite que las cuentas activas con rol Administrador lean y escriban en todos los grupos activos. Los demás roles solo pueden conversar en los grupos de su rol. Eliminar archiva la conversación y bloquea su lectura y escritura para todos los roles de la aplicación. Los cuerpos de mensajes no se copian a la bitácora.
+
+`20261120000500_comunidad_grupos_miembros.sql` se aplica después de las dos anteriores. Añade grupos por usuarios específicos: sus miembros conservan el acceso aunque cambien de rol, siempre que su cuenta siga activa. Compartir rol con una persona invitada no concede acceso. El buscador de cuentas activas y la creación siguen siendo exclusivos de Administrador.
+
+Las pruebas aisladas están en `supabase/tests/comunidad/`: se puede ejecutar `00_fixture.sql`, las tres migraciones y los escenarios `10_scenarios.sql` y `20_members.sql`, en ese orden, **solo contra PostgreSQL desechable**, o usar `run.mjs` con PGlite instalado fuera del repositorio.
+
 ## Documentos de trabajo
 
 - [Estado actual de módulos pendientes](../docs/ESTADO_ACTUAL_MODULOS_PENDIENTES.md)
